@@ -29,6 +29,7 @@ export const preferencesSchema = z.object({
   recapTime: z.string().regex(TIME).default("09:05"),
   standupEnabled: z.boolean().default(true),
   teamStaleDays: z.number().int().min(1).max(90).default(7),
+  reviewSlaHours: z.number().int().min(1).max(240).default(24),
 })
 
 export type Preferences = z.infer<typeof preferencesSchema>
@@ -53,6 +54,7 @@ export const preferencesPatchSchema = z.object({
   recapTime: z.string().regex(TIME).optional(),
   standupEnabled: z.boolean().optional(),
   teamStaleDays: z.number().int().min(1).max(90).optional(),
+  reviewSlaHours: z.number().int().min(1).max(240).optional(),
 })
 
 const KEY = "preferences"

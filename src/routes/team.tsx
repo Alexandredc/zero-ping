@@ -19,7 +19,7 @@ import { Spinner } from "@/components/ui/spinner"
 import { teamQuery, useTakeReview } from "@/hooks/use-inbox"
 import { avatarUrl, pullSize, timeAgo } from "@/lib/format"
 import type { TeamProblem, TeamPull } from "@/server/db/schema"
-import { TEAM_PROBLEM_LABEL } from "@/server/team/labels"
+import { TEAM_PROBLEM_LABEL, reviewerLabel } from "@/server/team/labels"
 
 export const Route = createFileRoute("/team")({
   loader: ({ context }) => context.queryClient.ensureQueryData(teamQuery()),
@@ -101,8 +101,7 @@ function TeamRow({
           </Hint>
           {pull.reviewers.length > 0 && (
             <span>
-              · reviewers :{" "}
-              {pull.reviewers.map((reviewer) => `@${reviewer}`).join(", ")}
+              · reviewers : {pull.reviewers.map(reviewerLabel).join(", ")}
             </span>
           )}
         </p>

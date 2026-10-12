@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as RecapRouteImport } from './routes/recap'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as TeamRouteImport } from './routes/team'
@@ -18,6 +19,11 @@ import { Route as ApiPingsRouteImport } from './routes/api/pings'
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DashboardRoute = DashboardRouteImport.update({
+  id: '/dashboard',
+  path: '/dashboard',
   getParentRoute: () => rootRouteImport,
 } as any)
 const RecapRoute = RecapRouteImport.update({
@@ -43,6 +49,7 @@ const ApiPingsRoute = ApiPingsRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/dashboard': typeof DashboardRoute
   '/recap': typeof RecapRoute
   '/settings': typeof SettingsRoute
   '/team': typeof TeamRoute
@@ -50,6 +57,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/dashboard': typeof DashboardRoute
   '/recap': typeof RecapRoute
   '/settings': typeof SettingsRoute
   '/team': typeof TeamRoute
@@ -58,6 +66,7 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/dashboard': typeof DashboardRoute
   '/recap': typeof RecapRoute
   '/settings': typeof SettingsRoute
   '/team': typeof TeamRoute
@@ -65,14 +74,23 @@ export interface FileRoutesById {
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/recap' | '/settings' | '/team' | '/api/pings'
+  fullPaths:
+    '/' | '/dashboard' | '/recap' | '/settings' | '/team' | '/api/pings'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/recap' | '/settings' | '/team' | '/api/pings'
-  id: '__root__' | '/' | '/recap' | '/settings' | '/team' | '/api/pings'
+  to: '/' | '/dashboard' | '/recap' | '/settings' | '/team' | '/api/pings'
+  id:
+    | '__root__'
+    | '/'
+    | '/dashboard'
+    | '/recap'
+    | '/settings'
+    | '/team'
+    | '/api/pings'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  DashboardRoute: typeof DashboardRoute
   RecapRoute: typeof RecapRoute
   SettingsRoute: typeof SettingsRoute
   TeamRoute: typeof TeamRoute
@@ -86,6 +104,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/dashboard': {
+      id: '/dashboard'
+      path: '/dashboard'
+      fullPath: '/dashboard'
+      preLoaderRoute: typeof DashboardRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/recap': {
@@ -121,6 +146,7 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  DashboardRoute: DashboardRoute,
   RecapRoute: RecapRoute,
   SettingsRoute: SettingsRoute,
   TeamRoute: TeamRoute,

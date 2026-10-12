@@ -12,6 +12,7 @@ import {
   TriangleAlertIcon,
   UsersIcon,
   SunriseIcon,
+  GaugeIcon,
 } from "lucide-react"
 import { FOLDER_META, PRIMARY_FOLDERS, SECONDARY_FOLDERS } from "./folders"
 import type { Folder } from "@/server/inbox/actions"
@@ -36,7 +37,7 @@ import type { Theme } from "@/lib/theme"
 
 type SidebarProps = {
   folder?: Folder
-  page?: "team" | "recap"
+  page?: "dashboard" | "team" | "recap"
   counts?: Record<Folder, number>
   sync?: SyncStatus
   onSync?: () => void
@@ -105,7 +106,7 @@ function PageLink({
   count,
   collapsed,
 }: {
-  to: "/team" | "/recap"
+  to: "/dashboard" | "/team" | "/recap"
   label: string
   hint: string
   icon: React.ComponentType<{ className?: string }>
@@ -312,6 +313,14 @@ export function Sidebar({
           />
         ))}
         <SectionTitle collapsed={collapsed}>Lead</SectionTitle>
+        <PageLink
+          to="/dashboard"
+          label="Vue d'ensemble"
+          hint="Ta charge du jour, tes prochaines actions, la météo de l'équipe et les tendances"
+          icon={GaugeIcon}
+          active={page === "dashboard"}
+          collapsed={collapsed}
+        />
         <PageLink
           to="/team"
           label="Équipe"

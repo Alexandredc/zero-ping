@@ -44,6 +44,7 @@ describe("preferences", () => {
       recapTime: "09:05",
       standupEnabled: true,
       teamStaleDays: 7,
+      reviewSlaHours: 24,
     })
   })
 

@@ -14,20 +14,27 @@ export function Hint({
   className,
   side,
   instant,
+  style,
 }: {
   content: React.ReactNode
   children: React.ReactNode
   className?: string
+  style?: React.CSSProperties
   side?: "top" | "right" | "bottom" | "left"
   /** Opens without the hover delay, for small icons read at a glance. */
   instant?: boolean
 }) {
-  if (!content) return <span className={className}>{children}</span>
+  if (!content)
+    return (
+      <span className={className} style={style}>
+        {children}
+      </span>
+    )
   return (
     <Tooltip>
       <TooltipTrigger
         delay={instant ? 0 : undefined}
-        render={<span className={className} />}
+        render={<span className={className} style={style} />}
       >
         {children}
       </TooltipTrigger>

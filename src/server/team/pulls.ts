@@ -3,6 +3,7 @@ import type { Database } from "@/server/db/client"
 import { teamPulls } from "@/server/db/schema"
 import type { TeamProblem } from "@/server/db/schema"
 import { isBot } from "@/server/inbox/auto-done"
+import { TEAM_PREFIX } from "./labels"
 
 export type RawTeamPull = {
   number: number
@@ -129,9 +130,12 @@ export async function syncTeamPulls(
       updatedAt: new Date(pull.updatedAt),
       additions: pull.additions,
       deletions: pull.deletions,
+      // Teams are prefixed so that people and teams can be told apart.
       reviewers: pull.reviewRequests.nodes.flatMap(({ requestedReviewer }) => {
-        const name = requestedReviewer?.login ?? requestedReviewer?.slug
-        return name ? [name] : []
+        if (requestedReviewer?.login) return [requestedReviewer.login]
+        if (requestedReviewer?.slug)
+          return [`${TEAM_PREFIX}${requestedReviewer.slug}`]
+        return []
       }),
       reviewDecision: pull.reviewDecision,
       ciState: pull.commits.nodes[0]?.commit.statusCheckRollup?.state ?? null,

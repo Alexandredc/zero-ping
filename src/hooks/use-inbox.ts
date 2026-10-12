@@ -7,12 +7,14 @@ import {
   getAccessibleRepos,
   getAppSettings,
   getDailyRecap,
+  getDashboardData,
   getItemChecks,
   getItemMergeInfo,
   getTeam,
   postMerge,
   postRerunChecks,
   postRunStandup,
+  postStandupToSlack,
   postTakeReview,
   getInbox,
   getItemConversation,
@@ -423,6 +425,31 @@ export function useRunStandup() {
     onError: (error) =>
       toast.add({
         title: "Standup non lancé",
+        description: error.message,
+        type: "error",
+      }),
+  })
+}
+
+export const dashboardQuery = () =>
+  queryOptions({
+    queryKey: ["dashboard"],
+    queryFn: () => getDashboardData(),
+    refetchInterval: 15_000,
+    refetchOnWindowFocus: true,
+  })
+
+export function usePublishStandup() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: () => postStandupToSlack(),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["recap"] })
+      toast.add({ title: "Standup publié dans Slack", type: "success" })
+    },
+    onError: (error) =>
+      toast.add({
+        title: "Standup non publié",
         description: error.message,
         type: "error",
       }),

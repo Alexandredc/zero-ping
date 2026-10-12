@@ -1,5 +1,6 @@
 import {
   boolean,
+  index,
   integer,
   jsonb,
   primaryKey,
@@ -186,3 +187,23 @@ export const teamPulls = snakeCase.table("team_pulls", {
 })
 
 export type TeamPull = typeof teamPulls.$inferSelect
+
+/** Items entering or leaving a folder that waits for the viewer, for the trends. */
+export const activity = snakeCase.table(
+  "activity",
+  {
+    id: integer().primaryKey().generatedAlwaysAsIdentity(),
+    at: timestamp({ withTimezone: true }).notNull(),
+    kind: text().$type<"entered" | "left">().notNull(),
+    view: text().$type<View>().notNull(),
+    itemKey: text().notNull(),
+  },
+  (table) => [index().on(table.at)]
+)
+
+/** Lowest and highest ping count of each local day, for the Zéro Ping streak. */
+export const dailyStats = snakeCase.table("daily_stats", {
+  date: text().primaryKey(),
+  minPings: integer().notNull(),
+  maxPings: integer().notNull(),
+})

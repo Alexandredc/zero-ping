@@ -15,6 +15,9 @@ import { runDailyRecap } from "@/server/recap/recap"
 import { syncTeamPulls } from "@/server/team/pulls"
 import { repos } from "@/server/db/schema"
 import { eq } from "drizzle-orm"
+import { recordDailyPings } from "@/server/dashboard/activity"
+import { countPings } from "@/server/inbox/actions"
+import { localDate } from "@/server/recap/schedule"
 
 export type SyncStatus = {
   running: boolean
@@ -79,6 +82,7 @@ async function runOnce(forceSearch: boolean): Promise<number> {
     loop.lastTeamSyncAt = Date.now()
   }
   await runDailyRecap(db)
+  await recordDailyPings(db, localDate(new Date()), await countPings())
   // Agent sessions are slow: they run after the sync instead of delaying it.
   void prefetchLookups(db).catch((error: unknown) =>
     console.error("[slack]", error)

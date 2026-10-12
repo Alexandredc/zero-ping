@@ -29,9 +29,16 @@ import { fetchMergeInfo, mergePull } from "@/server/github/merge"
 import type { MergeMethod } from "@/server/github/merge"
 import { fetchChecks, rerunFailedJobs } from "@/server/github/checks"
 import { buildRecap } from "@/server/recap/recap"
-import { readStandup, startStandup } from "@/server/recap/standup"
+import {
+  publishBlocker,
+  publishStandup,
+  readStandup,
+  startStandup,
+} from "@/server/recap/standup"
 import { localDate } from "@/server/recap/schedule"
 import { syncNow } from "@/server/inbox/loop"
+import { recordActivity, viewTransitions } from "@/server/dashboard/activity"
+import { buildDashboard } from "@/server/dashboard/dashboard"
 import { parseSubjectKey } from "@/server/inbox/notifications"
 import { enrichItems } from "@/server/inbox/sync"
 import { readAttention } from "@/server/inbox/attention"
@@ -205,6 +212,13 @@ export async function markDone(keys: string[], done: boolean) {
     })
     .where(inArray(items.key, keys))
   if (!done) return
+  const now = new Date()
+  await recordActivity(
+    db,
+    rows.flatMap((item) =>
+      item.doneAt ? [] : viewTransitions(item.key, item.view, "other", now)
+    )
+  )
   const octokit = await getOctokit()
   const threads = rows.flatMap((item) => (item.threadId ? [item.threadId] : []))
   for (let start = 0; start < threads.length; start += 8) {
@@ -642,9 +656,14 @@ export async function getRecap() {
   return {
     ...recap,
     standup,
+    publishBlocker: publishBlocker(standup),
     recapTime: preferences.recapTime,
     standupEnabled: preferences.standupEnabled,
   }
+}
+
+export async function postStandup() {
+  return publishStandup(await getDb())
 }
 
 export async function runStandup() {
@@ -659,4 +678,15 @@ export async function markFileViewed(
   viewed: boolean
 ) {
   await setFileViewed(await getOctokit(), pullRequestId, path, viewed)
+}
+
+export async function getDashboard() {
+  const db = await getDb()
+  const [viewer, preferences] = await Promise.all([
+    getViewer(),
+    getPreferences(db),
+  ])
+  return buildDashboard(db, viewer, {
+    reviewSlaHours: preferences.reviewSlaHours,
+  })
 }

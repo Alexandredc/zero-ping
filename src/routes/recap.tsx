@@ -1,12 +1,29 @@
 import { useQuery } from "@tanstack/react-query"
 import { Link, createFileRoute } from "@tanstack/react-router"
-import { ExternalLinkIcon, PlayIcon, RotateCwIcon } from "lucide-react"
+import { useState } from "react"
+import {
+  CheckIcon,
+  ExternalLinkIcon,
+  PlayIcon,
+  RotateCwIcon,
+  SendIcon,
+} from "lucide-react"
 import { Sidebar } from "@/components/inbox/sidebar"
 import { Markdown } from "@/components/inbox/markdown"
 import { FOLDER_META } from "@/components/inbox/folders"
 import { SlackIcon } from "@/components/brand-icons"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog"
 import {
   Card,
   CardAction,
@@ -18,7 +35,7 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Spinner } from "@/components/ui/spinner"
-import { recapQuery, useRunStandup } from "@/hooks/use-inbox"
+import { recapQuery, usePublishStandup, useRunStandup } from "@/hooks/use-inbox"
 import { timeAgo } from "@/lib/format"
 import type { Item } from "@/server/db/schema"
 
@@ -88,6 +105,86 @@ function TopList({
   )
 }
 
+/**
+ * Posts the standup in today's "Daily standup reminder" thread. Posting
+ * notifies everyone mentioned, so it asks once before sending.
+ */
+function PublishStandup({
+  blocker,
+  posted,
+  postedLink,
+}: {
+  blocker: string | null
+  posted: boolean
+  postedLink: string | null
+}) {
+  const [open, setOpen] = useState(false)
+  const publish = usePublishStandup()
+
+  if (posted)
+    return (
+      <p className="flex items-center gap-2 text-sm text-muted-foreground">
+        <CheckIcon className="size-4 text-diff-add-strong" />
+        Publié dans le fil du Daily standup.
+        {postedLink && (
+          <a
+            href={postedLink}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-1 text-primary hover:underline"
+          >
+            Voir dans Slack
+            <ExternalLinkIcon className="size-3" />
+          </a>
+        )}
+      </p>
+    )
+
+  return (
+    <div className="flex flex-wrap items-center gap-3">
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogTrigger
+          render={<Button size="sm" disabled={blocker !== null} />}
+        >
+          <SendIcon data-icon="inline-start" />
+          Publier dans #tech-team-general
+        </DialogTrigger>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Publier le standup ?</DialogTitle>
+            <DialogDescription>
+              Le message part en ton nom dans le fil du « Daily standup reminder
+              » d'aujourd'hui, sur #tech-team-general. Chaque personne citée
+              reçoit une notification Slack.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <DialogClose render={<Button variant="outline" />}>
+              Annuler
+            </DialogClose>
+            <Button
+              onClick={() =>
+                publish.mutate(undefined, { onSuccess: () => setOpen(false) })
+              }
+              disabled={publish.isPending}
+            >
+              {publish.isPending ? (
+                <Spinner data-icon="inline-start" />
+              ) : (
+                <SendIcon data-icon="inline-start" />
+              )}
+              Publier
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      {blocker && (
+        <span className="text-xs text-muted-foreground">{blocker}</span>
+      )}
+    </div>
+  )
+}
+
 function StandupCard() {
   const { data } = useQuery(recapQuery())
   const run = useRunStandup()
@@ -149,18 +246,12 @@ function StandupCard() {
             </p>
           )
         )}
-        {standup.draftLink && (
-          <Button
-            className="self-start"
-            size="sm"
-            nativeButton={false}
-            render={
-              <a href={standup.draftLink} target="_blank" rel="noreferrer" />
-            }
-          >
-            Relire le brouillon dans Slack
-            <ExternalLinkIcon data-icon="inline-end" />
-          </Button>
+        {standup.message && !running && (
+          <PublishStandup
+            blocker={data.publishBlocker}
+            postedLink={standup.postedLink}
+            posted={standup.postedAt !== null}
+          />
         )}
       </CardContent>
     </Card>

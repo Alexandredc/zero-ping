@@ -14,6 +14,8 @@ import { detectAttention, recordAttention } from "@/server/inbox/attention"
 import type { AttentionDraft } from "@/server/inbox/attention"
 import { fetchStates, fetchSubjects } from "@/server/github/subjects"
 import type { SubjectRef } from "@/server/github/subjects"
+import { recordActivity, viewTransitions } from "@/server/dashboard/activity"
+import type { ActivityRow } from "@/server/dashboard/activity"
 
 const INITIAL_LOOKBACK_MS = 30 * 24 * 60 * 60 * 1000
 const MAX_NOTIFICATION_PAGES = 10
@@ -214,6 +216,7 @@ export async function enrichItems(
 ): Promise<number> {
   const pending = candidates ?? (await itemsToEnrich(db))
   const attention: AttentionDraft[] = []
+  const transitions: ActivityRow[] = []
   const refs: SubjectRef[] = pending.flatMap((item) => {
     const parsed = parseSubjectKey(item.key)
     return parsed && (item.kind === "PullRequest" || item.kind === "Issue")
@@ -245,6 +248,7 @@ export async function enrichItems(
             enrichedAt: now,
           })
           .where(eq(items.key, item.key))
+        transitions.push(...viewTransitions(item.key, item.view, "other", now))
         return
       }
       const analysis = analyze(details, viewer)
@@ -320,6 +324,17 @@ export async function enrichItems(
           needsCheck: priority.needsCheck,
         })
         .where(eq(items.key, item.key))
+      transitions.push(
+        ...viewTransitions(
+          item.key,
+          item.view,
+          analysis.view,
+          now,
+          analysis.view === "review"
+            ? analysis.requestedAt
+            : (analysis.awaiting?.since ?? null)
+        )
+      )
       if (options.notify) {
         const draft = detectAttention(item, enriched, now)
         if (draft) attention.push(draft)
@@ -327,6 +342,7 @@ export async function enrichItems(
     })
   )
   await recordAttention(db, attention)
+  await recordActivity(db, transitions)
   return pending.length
 }
 

@@ -4,6 +4,7 @@ import {
   countFolders,
   countPings,
   countTeamProblems,
+  getDashboard,
   getChecks,
   getMergeInfo,
   getRecap,
@@ -11,6 +12,7 @@ import {
   merge,
   rerunChecks,
   runStandup,
+  postStandup,
   takeReview,
   getConversation,
   getPullFiles,
@@ -226,4 +228,15 @@ export const getDailyRecap = createServerFn({ method: "GET" }).handler(() => {
 
 export const postRunStandup = createServerFn({ method: "POST" }).handler(() =>
   runStandup()
+)
+
+export const getDashboardData = createServerFn({ method: "GET" }).handler(
+  () => {
+    ensureSyncLoop()
+    return getDashboard()
+  }
+)
+
+export const postStandupToSlack = createServerFn({ method: "POST" }).handler(
+  () => postStandup()
 )

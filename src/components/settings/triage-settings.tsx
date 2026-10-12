@@ -279,7 +279,7 @@ export function RecapSettings({ settings }: { settings: Settings }) {
           <SwitchField
             id="standup-enabled"
             label="Lancer /standup:team avec le récap"
-            description="Claude Code exporte le board, rédige le standup et le dépose en brouillon dans le fil du jour de #tech-team-general. Rien n'est envoyé sans toi."
+            description="Claude Code exporte le board et rédige le standup. Tu le relis dans le récap du jour, puis tu le publies d'un clic dans le fil du jour de #tech-team-general."
             checked={preferences.standupEnabled}
             onChange={(checked) => save.mutate({ standupEnabled: checked })}
           />
