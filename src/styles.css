@@ -1,0 +1,166 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+@import "@fontsource-variable/geist";
+@import "@fontsource-variable/geist-mono";
+@import "@fontsource-variable/bricolage-grotesque";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+    --font-heading: 'Bricolage Grotesque Variable', var(--font-sans);
+    --font-sans: 'Geist Variable', sans-serif;
+    --font-mono: 'Geist Mono Variable', ui-monospace, monospace;
+    --color-heat: var(--heat);
+    --color-heat-foreground: var(--heat-foreground);
+    --color-signal: var(--signal);
+    --color-strip: var(--strip);
+    --color-sidebar-ring: var(--sidebar-ring);
+    --color-sidebar-border: var(--sidebar-border);
+    --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+    --color-sidebar-accent: var(--sidebar-accent);
+    --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+    --color-sidebar-primary: var(--sidebar-primary);
+    --color-sidebar-foreground: var(--sidebar-foreground);
+    --color-sidebar: var(--sidebar);
+    --color-chart-5: var(--chart-5);
+    --color-chart-4: var(--chart-4);
+    --color-chart-3: var(--chart-3);
+    --color-chart-2: var(--chart-2);
+    --color-chart-1: var(--chart-1);
+    --color-ring: var(--ring);
+    --color-input: var(--input);
+    --color-border: var(--border);
+    --color-destructive: var(--destructive);
+    --color-accent-foreground: var(--accent-foreground);
+    --color-accent: var(--accent);
+    --color-muted-foreground: var(--muted-foreground);
+    --color-muted: var(--muted);
+    --color-secondary-foreground: var(--secondary-foreground);
+    --color-secondary: var(--secondary);
+    --color-primary-foreground: var(--primary-foreground);
+    --color-primary: var(--primary);
+    --color-popover-foreground: var(--popover-foreground);
+    --color-popover: var(--popover);
+    --color-card-foreground: var(--card-foreground);
+    --color-card: var(--card);
+    --color-foreground: var(--foreground);
+    --color-background: var(--background);
+    --radius-sm: calc(var(--radius) * 0.6);
+    --radius-md: calc(var(--radius) * 0.8);
+    --radius-lg: var(--radius);
+    --radius-xl: calc(var(--radius) * 1.4);
+    --radius-2xl: calc(var(--radius) * 1.8);
+    --radius-3xl: calc(var(--radius) * 2.2);
+    --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+:root {
+    /* Cool slate paper, indigo for actions, orange reserved for urgency. */
+    --background: oklch(0.972 0.006 255);
+    --foreground: oklch(0.24 0.035 262);
+    --card: oklch(1 0 0);
+    --card-foreground: oklch(0.24 0.035 262);
+    --popover: oklch(1 0 0);
+    --popover-foreground: oklch(0.24 0.035 262);
+    --primary: oklch(0.5 0.19 268);
+    --primary-foreground: oklch(0.985 0.005 268);
+    --secondary: oklch(0.935 0.012 258);
+    --secondary-foreground: oklch(0.3 0.04 262);
+    --muted: oklch(0.945 0.009 258);
+    --muted-foreground: oklch(0.5 0.03 262);
+    --accent: oklch(0.93 0.025 268);
+    --accent-foreground: oklch(0.3 0.08 268);
+    --destructive: oklch(0.577 0.215 27);
+    --border: oklch(0.9 0.012 258);
+    --input: oklch(0.88 0.014 258);
+    --ring: oklch(0.6 0.16 268);
+    --heat: oklch(0.66 0.19 45);
+    --heat-foreground: oklch(0.42 0.13 45);
+    --signal: oklch(0.5 0.19 268);
+    --strip: oklch(0.89 0.012 258);
+    --chart-1: oklch(0.66 0.19 45);
+    --chart-2: oklch(0.5 0.19 268);
+    --chart-3: oklch(0.62 0.12 200);
+    --chart-4: oklch(0.7 0.13 150);
+    --chart-5: oklch(0.55 0.03 262);
+    --radius: 0.5rem;
+    --sidebar: oklch(0.955 0.008 258);
+    --sidebar-foreground: oklch(0.24 0.035 262);
+    --sidebar-primary: oklch(0.5 0.19 268);
+    --sidebar-primary-foreground: oklch(0.985 0.005 268);
+    --sidebar-accent: oklch(0.92 0.02 264);
+    --sidebar-accent-foreground: oklch(0.24 0.035 262);
+    --sidebar-border: oklch(0.9 0.012 258);
+    --sidebar-ring: oklch(0.6 0.16 268);
+}
+
+.dark {
+    --background: oklch(0.17 0.02 264);
+    --foreground: oklch(0.93 0.01 258);
+    --card: oklch(0.21 0.024 264);
+    --card-foreground: oklch(0.93 0.01 258);
+    --popover: oklch(0.23 0.026 264);
+    --popover-foreground: oklch(0.93 0.01 258);
+    --primary: oklch(0.7 0.14 270);
+    --primary-foreground: oklch(0.17 0.03 268);
+    --secondary: oklch(0.26 0.026 264);
+    --secondary-foreground: oklch(0.9 0.01 258);
+    --muted: oklch(0.24 0.024 264);
+    --muted-foreground: oklch(0.68 0.025 260);
+    --accent: oklch(0.28 0.045 268);
+    --accent-foreground: oklch(0.92 0.02 268);
+    --destructive: oklch(0.7 0.18 24);
+    --border: oklch(1 0 0 / 9%);
+    --input: oklch(1 0 0 / 14%);
+    --ring: oklch(0.7 0.14 270);
+    --heat: oklch(0.74 0.16 50);
+    --heat-foreground: oklch(0.82 0.12 55);
+    --signal: oklch(0.7 0.14 270);
+    --strip: oklch(0.3 0.025 264);
+    --chart-1: oklch(0.74 0.16 50);
+    --chart-2: oklch(0.7 0.14 270);
+    --chart-3: oklch(0.72 0.11 200);
+    --chart-4: oklch(0.76 0.13 150);
+    --chart-5: oklch(0.6 0.03 260);
+    --sidebar: oklch(0.15 0.02 264);
+    --sidebar-foreground: oklch(0.93 0.01 258);
+    --sidebar-primary: oklch(0.7 0.14 270);
+    --sidebar-primary-foreground: oklch(0.17 0.03 268);
+    --sidebar-accent: oklch(0.24 0.03 266);
+    --sidebar-accent-foreground: oklch(0.93 0.01 258);
+    --sidebar-border: oklch(1 0 0 / 8%);
+    --sidebar-ring: oklch(0.7 0.14 270);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+    }
+  body {
+    @apply bg-background text-foreground;
+    }
+  html {
+    @apply font-sans;
+    }
+}
+@layer components {
+  /* Rendered GitHub Markdown inside conversations. */
+  .prose-comment {
+    @apply text-sm leading-relaxed break-words;
+  }
+  .prose-comment :where(p, ul, ol, pre, blockquote, table) {
+    @apply my-2 first:mt-0 last:mb-0;
+  }
+  .prose-comment :where(ul) { @apply list-disc pl-5; }
+  .prose-comment :where(ol) { @apply list-decimal pl-5; }
+  .prose-comment :where(a) { @apply text-primary underline underline-offset-2; }
+  .prose-comment :where(code) { @apply rounded bg-muted px-1 py-0.5 font-mono text-[0.85em]; }
+  .prose-comment :where(pre) { @apply overflow-x-auto rounded-md bg-muted p-3; }
+  .prose-comment :where(pre code) { @apply bg-transparent p-0; }
+  .prose-comment :where(blockquote) { @apply border-l-2 pl-3 text-muted-foreground; }
+  .prose-comment :where(img) { @apply max-w-full rounded; }
+  .prose-comment :where(table) { @apply block overflow-x-auto text-xs; }
+  .prose-comment :where(th, td) { @apply border px-2 py-1; }
+  .prose-comment :where(h1, h2, h3, h4) { @apply mt-3 mb-1 font-semibold; }
+}
