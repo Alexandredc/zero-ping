@@ -30,6 +30,9 @@ function pr(overrides: Partial<SubjectDetails> = {}): SubjectDetails {
     labels: [],
     additions: 10,
     deletions: 2,
+    changedFiles: 1,
+    headOid: "head",
+    reviews: [],
     ciState: "SUCCESS",
     reviewDecision: null,
     reviewRequests: [],
@@ -180,5 +183,72 @@ describe("analyze", () => {
 
   it("files the viewer's own open PR under mine", () => {
     expect(analyze(pr({ author: "lead" }), viewer).view).toBe("mine")
+  })
+})
+
+describe("re-review", () => {
+  const review = (state: string, commitOid: string) => ({
+    author: "lead",
+    state,
+    submittedAt: "2026-10-03T10:00:00Z",
+    commitOid,
+  })
+
+  it("brings back a PR whose requested changes got new commits", () => {
+    const analysis = analyze(
+      pr({ headOid: "new", reviews: [review("CHANGES_REQUESTED", "old")] }),
+      viewer
+    )
+    expect(analysis.view).toBe("review")
+    expect(analysis.lastReview).toMatchObject({ oid: "old", newCommits: true })
+  })
+
+  it("only flags new commits after an approval", () => {
+    const analysis = analyze(
+      pr({ headOid: "new", reviews: [review("APPROVED", "old")] }),
+      viewer
+    )
+    expect(analysis.view).toBe("other")
+    expect(analysis.lastReview?.newCommits).toBe(true)
+  })
+
+  it("keeps the latest of the viewer's reviews and ignores others", () => {
+    const analysis = analyze(
+      pr({
+        headOid: "head",
+        reviews: [
+          review("CHANGES_REQUESTED", "old"),
+          {
+            ...review("APPROVED", "head"),
+            submittedAt: "2026-10-04T10:00:00Z",
+          },
+          { ...review("CHANGES_REQUESTED", "x"), author: "someone" },
+        ],
+      }),
+      viewer
+    )
+    expect(analysis.lastReview).toMatchObject({
+      state: "APPROVED",
+      newCommits: false,
+    })
+    expect(analysis.view).toBe("other")
+  })
+
+  it("keeps a change request behind a later thread reply", () => {
+    const analysis = analyze(
+      pr({
+        headOid: "new",
+        reviews: [
+          review("CHANGES_REQUESTED", "old"),
+          {
+            ...review("COMMENTED", "old"),
+            submittedAt: "2026-10-04T10:00:00Z",
+          },
+        ],
+      }),
+      viewer
+    )
+    expect(analysis.lastReview?.state).toBe("CHANGES_REQUESTED")
+    expect(analysis.view).toBe("review")
   })
 })

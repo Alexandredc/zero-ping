@@ -1,6 +1,12 @@
 import { useQuery } from "@tanstack/react-query"
 import { Link, createFileRoute, useNavigate } from "@tanstack/react-router"
-import { ArrowLeftIcon, BellIcon, SparklesIcon } from "lucide-react"
+import {
+  ArchiveIcon,
+  ArrowLeftIcon,
+  BellIcon,
+  SparklesIcon,
+  SunriseIcon,
+} from "lucide-react"
 import { z } from "zod"
 import { GitHubIcon, SlackIcon } from "@/components/brand-icons"
 import { Sidebar } from "@/components/inbox/sidebar"
@@ -8,13 +14,24 @@ import { AgentSettings } from "@/components/settings/agent-settings"
 import { NotificationSettings } from "@/components/settings/notification-settings"
 import { ReposSettings } from "@/components/settings/repos-settings"
 import { SlackSettings } from "@/components/settings/slack-settings"
+import {
+  RecapSettings,
+  TriageSettings,
+} from "@/components/settings/triage-settings"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { reposQuery, settingsQuery } from "@/hooks/use-inbox"
 
-const SECTIONS = ["repos", "slack", "agent", "notifications"] as const
+const SECTIONS = [
+  "repos",
+  "triage",
+  "recap",
+  "slack",
+  "agent",
+  "notifications",
+] as const
 type Section = (typeof SECTIONS)[number]
 
 export const Route = createFileRoute("/settings")({
@@ -73,6 +90,14 @@ function SettingsPage() {
                 <GitHubIcon />
                 Repos
               </TabsTrigger>
+              <TabsTrigger value="triage">
+                <ArchiveIcon />
+                Classement
+              </TabsTrigger>
+              <TabsTrigger value="recap">
+                <SunriseIcon />
+                Récap
+              </TabsTrigger>
               <TabsTrigger value="slack">
                 <SlackIcon />
                 Slack
@@ -91,6 +116,20 @@ function SettingsPage() {
             <div className="mx-auto w-full max-w-3xl px-6 py-6">
               <TabsContent value="repos">
                 <ReposSettings />
+              </TabsContent>
+              <TabsContent value="triage">
+                {settings ? (
+                  <TriageSettings settings={settings} />
+                ) : (
+                  <Skeleton className="h-64" />
+                )}
+              </TabsContent>
+              <TabsContent value="recap">
+                {settings ? (
+                  <RecapSettings settings={settings} />
+                ) : (
+                  <Skeleton className="h-64" />
+                )}
               </TabsContent>
               <TabsContent value="slack">
                 {settings ? (

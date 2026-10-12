@@ -10,11 +10,19 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as RecapRouteImport } from './routes/recap'
 import { Route as SettingsRouteImport } from './routes/settings'
+import { Route as TeamRouteImport } from './routes/team'
+import { Route as ApiPingsRouteImport } from './routes/api/pings'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const RecapRoute = RecapRouteImport.update({
+  id: '/recap',
+  path: '/recap',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SettingsRoute = SettingsRouteImport.update({
@@ -22,31 +30,53 @@ const SettingsRoute = SettingsRouteImport.update({
   path: '/settings',
   getParentRoute: () => rootRouteImport,
 } as any)
+const TeamRoute = TeamRouteImport.update({
+  id: '/team',
+  path: '/team',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiPingsRoute = ApiPingsRouteImport.update({
+  id: '/api/pings',
+  path: '/api/pings',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/recap': typeof RecapRoute
   '/settings': typeof SettingsRoute
+  '/team': typeof TeamRoute
+  '/api/pings': typeof ApiPingsRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/recap': typeof RecapRoute
   '/settings': typeof SettingsRoute
+  '/team': typeof TeamRoute
+  '/api/pings': typeof ApiPingsRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/recap': typeof RecapRoute
   '/settings': typeof SettingsRoute
+  '/team': typeof TeamRoute
+  '/api/pings': typeof ApiPingsRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/settings'
+  fullPaths: '/' | '/recap' | '/settings' | '/team' | '/api/pings'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/settings'
-  id: '__root__' | '/' | '/settings'
+  to: '/' | '/recap' | '/settings' | '/team' | '/api/pings'
+  id: '__root__' | '/' | '/recap' | '/settings' | '/team' | '/api/pings'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  RecapRoute: typeof RecapRoute
   SettingsRoute: typeof SettingsRoute
+  TeamRoute: typeof TeamRoute
+  ApiPingsRoute: typeof ApiPingsRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -58,6 +88,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/recap': {
+      id: '/recap'
+      path: '/recap'
+      fullPath: '/recap'
+      preLoaderRoute: typeof RecapRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/settings': {
       id: '/settings'
       path: '/settings'
@@ -65,12 +102,29 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SettingsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/team': {
+      id: '/team'
+      path: '/team'
+      fullPath: '/team'
+      preLoaderRoute: typeof TeamRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/pings': {
+      id: '/api/pings'
+      path: '/api/pings'
+      fullPath: '/api/pings'
+      preLoaderRoute: typeof ApiPingsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  RecapRoute: RecapRoute,
   SettingsRoute: SettingsRoute,
+  TeamRoute: TeamRoute,
+  ApiPingsRoute: ApiPingsRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

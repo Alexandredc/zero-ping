@@ -1,5 +1,17 @@
 import type { z } from "zod"
-import { and, desc, eq, gt, isNotNull, isNull, lte, or, sql } from "drizzle-orm"
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  gt,
+  inArray,
+  isNotNull,
+  isNull,
+  lte,
+  or,
+  sql,
+} from "drizzle-orm"
 import { getDb } from "@/server/db/client"
 import {
   SUMMARY_LENGTHS,
@@ -7,11 +19,19 @@ import {
   repos,
   slackLookups,
   summaries,
+  teamPulls,
 } from "@/server/db/schema"
 import type { Item, Summary, SummaryLength, View } from "@/server/db/schema"
 import { getOctokit, getViewer } from "@/server/github/client"
 import { fetchConversation } from "@/server/github/conversation"
 import { fetchPullFiles, setFileViewed } from "@/server/github/pull-files"
+import { fetchMergeInfo, mergePull } from "@/server/github/merge"
+import type { MergeMethod } from "@/server/github/merge"
+import { fetchChecks, rerunFailedJobs } from "@/server/github/checks"
+import { buildRecap } from "@/server/recap/recap"
+import { readStandup, startStandup } from "@/server/recap/standup"
+import { localDate } from "@/server/recap/schedule"
+import { syncNow } from "@/server/inbox/loop"
 import { parseSubjectKey } from "@/server/inbox/notifications"
 import { enrichItems } from "@/server/inbox/sync"
 import { readAttention } from "@/server/inbox/attention"
@@ -75,9 +95,12 @@ export type InboxItem = Item & {
   slackDiscussions: number | null
 }
 
+export type SortOrder = "priority" | "size"
+
 export async function listInbox(
   folder: Folder,
-  repo?: string
+  repo?: string,
+  sort: SortOrder = "priority"
 ): Promise<InboxItem[]> {
   const db = await getDb()
   const now = new Date()
@@ -99,7 +122,13 @@ export async function listInbox(
     .orderBy(
       ...(folder === "done"
         ? [desc(items.doneAt)]
-        : [desc(items.priority), desc(items.updatedAt)])
+        : sort === "size"
+          ? [
+              // Smallest first, so quick reviews unblock people fast; unknown sizes last.
+              sql`${items.additions} + coalesce(${items.deletions}, 0) asc nulls last`,
+              desc(items.priority),
+            ]
+          : [desc(items.priority), desc(items.updatedAt)])
     )
     .limit(200)
   const { slackExcludedChannels } = await getPreferences(db)
@@ -163,24 +192,39 @@ export async function getConversation(key: string) {
   return { item, conversation }
 }
 
-export async function markDone(key: string, done: boolean) {
+export async function markDone(keys: string[], done: boolean) {
+  if (keys.length === 0) return
   const db = await getDb()
-  const item = await getItem(key)
+  const rows = await db.select().from(items).where(inArray(items.key, keys))
   await db
     .update(items)
-    .set({ doneAt: done ? new Date() : null, snoozedUntil: null })
-    .where(eq(items.key, key))
-  if (done && item.threadId) {
-    const octokit = await getOctokit()
-    await octokit.rest.activity.markThreadAsDone({
-      thread_id: Number(item.threadId),
+    .set({
+      doneAt: done ? new Date() : null,
+      snoozedUntil: null,
+      autoDoneReason: null,
     })
+    .where(inArray(items.key, keys))
+  if (!done) return
+  const octokit = await getOctokit()
+  const threads = rows.flatMap((item) => (item.threadId ? [item.threadId] : []))
+  for (let start = 0; start < threads.length; start += 8) {
+    await Promise.all(
+      threads.slice(start, start + 8).map((threadId) =>
+        octokit.rest.activity.markThreadAsDone({
+          thread_id: Number(threadId),
+        })
+      )
+    )
   }
 }
 
-export async function snooze(key: string, until: Date | null) {
+export async function snooze(keys: string[], until: Date | null) {
+  if (keys.length === 0) return
   const db = await getDb()
-  await db.update(items).set({ snoozedUntil: until }).where(eq(items.key, key))
+  await db
+    .update(items)
+    .set({ snoozedUntil: until })
+    .where(inArray(items.key, keys))
 }
 
 async function refreshItem(key: string) {
@@ -495,20 +539,118 @@ export async function generateSummary(key: string, length: SummaryLength) {
 export async function getAttention(afterId: number | null) {
   const db = await getDb()
   const preferences = await getPreferences(db)
-  return readAttention(
-    db,
-    afterId,
-    preferences.notifyEnabled ? preferences.notifyKinds : []
-  )
+  // The daily recap has its own switch, so older saved kinds still get it.
+  const kinds = [
+    ...(preferences.notifyEnabled
+      ? preferences.notifyKinds.filter((kind) => kind !== "recap")
+      : []),
+    ...(preferences.recapEnabled ? (["recap"] as const) : []),
+  ]
+  return readAttention(db, afterId, kinds)
 }
 
-export async function getPullFiles(key: string) {
+export async function getPullFiles(key: string, sinceReview = false) {
   const ref = parseSubjectKey(key)
   const item = await getItem(key)
   if (!ref || item.kind !== "PullRequest") {
     throw new Error("Seules les PR ont des fichiers modifiés.")
   }
-  return fetchPullFiles(await getOctokit(), ref)
+  const since =
+    sinceReview && item.reviewedOid && item.headOid
+      ? { base: item.reviewedOid, head: item.headOid }
+      : undefined
+  return fetchPullFiles(await getOctokit(), ref, since)
+}
+
+function pullRef(key: string) {
+  const ref = parseSubjectKey(key)
+  if (!ref) throw new Error("Cet élément n'est pas une PR.")
+  return ref
+}
+
+export async function getMergeInfo(key: string) {
+  return fetchMergeInfo(await getOctokit(), pullRef(key))
+}
+
+export async function merge(
+  key: string,
+  method: MergeMethod,
+  deleteBranch: boolean
+) {
+  const result = await mergePull(await getOctokit(), pullRef(key), {
+    method,
+    deleteBranch,
+  })
+  await refreshItem(key)
+  return result
+}
+
+export async function getChecks(key: string) {
+  return fetchChecks(await getOctokit(), pullRef(key))
+}
+
+export async function rerunChecks(key: string) {
+  const runs = await rerunFailedJobs(await getOctokit(), pullRef(key))
+  // The new runs take a few seconds to replace the failed status.
+  setTimeout(() => void refreshItem(key).catch(() => undefined), 15_000)
+  return { runs }
+}
+
+export async function listTeam() {
+  const db = await getDb()
+  const rows = await db
+    .select()
+    .from(teamPulls)
+    .where(sql`cardinality(${teamPulls.problems}) > 0`)
+    .orderBy(asc(teamPulls.createdAt))
+  const [[{ total }], viewer] = await Promise.all([
+    db.select({ total: sql<number>`count(*)::int` }).from(teamPulls),
+    getViewer(),
+  ])
+  return { pulls: rows, total, viewerLogin: viewer.login }
+}
+
+export async function countTeamProblems(): Promise<number> {
+  const db = await getDb()
+  const [row] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(teamPulls)
+    .where(sql`cardinality(${teamPulls.problems}) > 0`)
+  return row.count
+}
+
+/** Adds the viewer as reviewer; the next sync brings the PR into « À reviewer ». */
+export async function takeReview(key: string) {
+  const ref = pullRef(key)
+  const [octokit, viewer] = await Promise.all([getOctokit(), getViewer()])
+  await octokit.rest.pulls.requestReviewers({
+    owner: ref.owner,
+    repo: ref.repo,
+    pull_number: ref.number,
+    reviewers: [viewer.login],
+  })
+  void syncNow({ forceSearch: true })
+}
+
+export async function getRecap() {
+  const db = await getDb()
+  const [recap, standup, preferences] = await Promise.all([
+    buildRecap(db),
+    readStandup(db),
+    getPreferences(db),
+  ])
+  return {
+    ...recap,
+    standup,
+    recapTime: preferences.recapTime,
+    standupEnabled: preferences.standupEnabled,
+  }
+}
+
+export async function runStandup() {
+  const db = await getDb()
+  void startStandup(db, localDate(new Date()))
+  return readStandup(db)
 }
 
 export async function markFileViewed(

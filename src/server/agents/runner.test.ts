@@ -59,6 +59,14 @@ describe("agent arguments", () => {
     ])
   })
 
+  it("appends system instructions after the tools", () => {
+    const args = buildClaudeArgs(
+      { ...task, appendSystemPrompt: "Answer in JSON" },
+      undefined
+    )
+    expect(args.slice(-2)).toEqual(["--append-system-prompt", "Answer in JSON"])
+  })
+
   it("runs Codex read-only with an output schema file", () => {
     expect(
       buildCodexArgs(task, undefined, {

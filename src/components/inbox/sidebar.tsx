@@ -10,6 +10,8 @@ import {
   SettingsIcon,
   SunIcon,
   TriangleAlertIcon,
+  UsersIcon,
+  SunriseIcon,
 } from "lucide-react"
 import { FOLDER_META, PRIMARY_FOLDERS, SECONDARY_FOLDERS } from "./folders"
 import type { Folder } from "@/server/inbox/actions"
@@ -26,7 +28,7 @@ import { cn } from "@/lib/utils"
 import { timeAgo } from "@/lib/format"
 import { useTheme } from "@/lib/theme"
 import { LOGO_URL, formatPings } from "@/lib/pings"
-import { pingCountQuery } from "@/hooks/use-inbox"
+import { pingCountQuery, teamQuery } from "@/hooks/use-inbox"
 import { useNotificationPermission } from "@/hooks/use-notification-permission"
 import { useHotkeys } from "@/hooks/use-hotkeys"
 import { useSidebarCollapsed } from "@/hooks/use-sidebar-collapsed"
@@ -34,6 +36,7 @@ import type { Theme } from "@/lib/theme"
 
 type SidebarProps = {
   folder?: Folder
+  page?: "team" | "recap"
   counts?: Record<Folder, number>
   sync?: SyncStatus
   onSync?: () => void
@@ -87,6 +90,60 @@ function FolderLink({
         {collapsed
           ? `${meta.label}${hasCount ? ` · ${count}` : ""}`
           : meta.hint}
+      </TooltipContent>
+    </Tooltip>
+  )
+}
+
+/** A link to a page outside the inbox folders, styled like a folder. */
+function PageLink({
+  to,
+  label,
+  hint,
+  icon: Icon,
+  active,
+  count,
+  collapsed,
+}: {
+  to: "/team" | "/recap"
+  label: string
+  hint: string
+  icon: React.ComponentType<{ className?: string }>
+  active: boolean
+  count?: number
+  collapsed: boolean
+}) {
+  const hasCount = count !== undefined && count > 0
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <Link
+            to={to}
+            aria-label={collapsed ? label : undefined}
+            className={cn(
+              "relative flex items-center gap-2.5 rounded-md py-1.5 text-sm text-sidebar-foreground/80 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground",
+              collapsed ? "justify-center px-0" : "px-2.5",
+              active && "bg-sidebar-accent font-medium text-sidebar-foreground"
+            )}
+          />
+        }
+      >
+        <Icon className="size-4 shrink-0 opacity-70" />
+        {!collapsed && <span className="flex-1 truncate">{label}</span>}
+        {hasCount &&
+          (collapsed ? (
+            <span className="absolute top-0.5 right-1 font-mono text-[0.6rem] leading-none text-muted-foreground tabular-nums">
+              {count}
+            </span>
+          ) : (
+            <span className="font-mono text-xs text-muted-foreground tabular-nums">
+              {count}
+            </span>
+          ))}
+      </TooltipTrigger>
+      <TooltipContent side="right">
+        {collapsed ? `${label}${hasCount ? ` · ${count}` : ""}` : hint}
       </TooltipContent>
     </Tooltip>
   )
@@ -187,6 +244,7 @@ function LogoWithPings() {
 
 export function Sidebar({
   folder,
+  page,
   counts,
   sync,
   onSync,
@@ -197,6 +255,7 @@ export function Sidebar({
   const { theme, setTheme } = useTheme()
   const { permission, request } = useNotificationPermission()
   const navigate = useNavigate()
+  const { data: team } = useQuery(teamQuery())
   useHotkeys({ "[": toggle })
 
   const nextTheme =
@@ -252,6 +311,24 @@ export function Sidebar({
             collapsed={collapsed}
           />
         ))}
+        <SectionTitle collapsed={collapsed}>Lead</SectionTitle>
+        <PageLink
+          to="/team"
+          label="Équipe"
+          hint="PR des repos suivis sans reviewer, bloquées ou trop anciennes"
+          icon={UsersIcon}
+          active={page === "team"}
+          count={team?.pulls.length}
+          collapsed={collapsed}
+        />
+        <PageLink
+          to="/recap"
+          label="Récap du jour"
+          hint="Ce qui t'attend ce matin et le standup de l'équipe"
+          icon={SunriseIcon}
+          active={page === "recap"}
+          collapsed={collapsed}
+        />
       </nav>
 
       <nav className="mt-auto flex flex-col gap-0.5" aria-label="Application">
@@ -289,7 +366,7 @@ export function Sidebar({
         {onSync && (
           <MenuRow
             icon={RefreshCwIcon}
-            label="Synchroniser"
+            label="Sync"
             detail={syncDetail}
             hint={
               running
@@ -313,7 +390,7 @@ export function Sidebar({
         <MenuRow
           icon={SettingsIcon}
           label="Réglages"
-          hint="Repos, Slack, agent IA et notifications"
+          hint="Repos, classement, récap, Slack, agent IA et notifications"
           collapsed={collapsed}
           onClick={() => void navigate({ to: "/settings" })}
         />

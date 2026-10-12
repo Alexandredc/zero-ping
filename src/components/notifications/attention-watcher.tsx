@@ -6,7 +6,7 @@ import { getAttentionEvents } from "@/functions/inbox"
 
 const POLL_MS = 10_000
 
-const FOLDER_FOR: Record<AttentionKind, Folder> = {
+const FOLDER_FOR: Record<Exclude<AttentionKind, "recap">, Folder> = {
   review: "review",
   awaiting: "awaiting",
   changes: "mine",
@@ -57,10 +57,15 @@ export function AttentionWatcher() {
             // The tag collapses the same item across several open tabs.
             { body: event.body, tag: `${event.itemKey}:${event.kind}` },
             () =>
-              void router.navigate({
-                to: "/",
-                search: { folder: FOLDER_FOR[event.kind], item: event.itemKey },
-              })
+              void (event.kind === "recap"
+                ? router.navigate({ to: "/recap" })
+                : router.navigate({
+                    to: "/",
+                    search: {
+                      folder: FOLDER_FOR[event.kind],
+                      item: event.itemKey,
+                    },
+                  }))
           )
         }
         lastId.current = Math.max(latestId, lastId.current ?? 0)

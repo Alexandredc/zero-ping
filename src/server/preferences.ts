@@ -4,6 +4,9 @@ import type { Database } from "@/server/db/client"
 import { ATTENTION_KINDS, SUMMARY_LENGTHS, settings } from "@/server/db/schema"
 import type { SlackDiscussion } from "@/server/db/schema"
 
+/** A local time of day, `HH:MM`. */
+const TIME = /^([01]\d|2[0-3]):[0-5]\d$/
+
 /** Options edited in the settings page. `null` falls back to the `.env` value. */
 export const preferencesSchema = z.object({
   slackExcludedChannels: z.array(z.string()).default([]),
@@ -17,6 +20,15 @@ export const preferencesSchema = z.object({
   reviewCommands: z
     .array(z.string().trim().min(1))
     .default(["@codex review", "@claude review", "/gemini review"]),
+  autoDoneClosed: z.boolean().default(true),
+  autoDoneBots: z.boolean().default(true),
+  autoDoneCi: z.boolean().default(true),
+  autoDoneReleases: z.boolean().default(true),
+  autoDoneAuthors: z.array(z.string().trim().min(1)).default([]),
+  recapEnabled: z.boolean().default(true),
+  recapTime: z.string().regex(TIME).default("09:05"),
+  standupEnabled: z.boolean().default(true),
+  teamStaleDays: z.number().int().min(1).max(90).default(7),
 })
 
 export type Preferences = z.infer<typeof preferencesSchema>
@@ -32,6 +44,15 @@ export const preferencesPatchSchema = z.object({
   notifyEnabled: z.boolean().optional(),
   notifyKinds: z.array(z.enum(ATTENTION_KINDS)).optional(),
   reviewCommands: z.array(z.string().trim().min(1)).optional(),
+  autoDoneClosed: z.boolean().optional(),
+  autoDoneBots: z.boolean().optional(),
+  autoDoneCi: z.boolean().optional(),
+  autoDoneReleases: z.boolean().optional(),
+  autoDoneAuthors: z.array(z.string().trim().min(1)).optional(),
+  recapEnabled: z.boolean().optional(),
+  recapTime: z.string().regex(TIME).optional(),
+  standupEnabled: z.boolean().optional(),
+  teamStaleDays: z.number().int().min(1).max(90).optional(),
 })
 
 const KEY = "preferences"
@@ -65,6 +86,11 @@ export async function updatePreferences(
   next.slackExcludedChannels = [
     ...new Set(
       next.slackExcludedChannels.map(normalizeChannel).filter(Boolean)
+    ),
+  ].sort()
+  next.autoDoneAuthors = [
+    ...new Set(
+      next.autoDoneAuthors.map((login) => login.replace(/^@/, "").toLowerCase())
     ),
   ].sort()
   await db

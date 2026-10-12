@@ -48,6 +48,7 @@ export function toItem(notification: RawNotification): NewItem {
     repoFullName: notification.repository.full_name,
     number: location.number,
     kind: location.kind,
+    subjectType: notification.subject.type,
     title: notification.subject.title,
     htmlUrl: location.htmlUrl,
     threadId: notification.id,

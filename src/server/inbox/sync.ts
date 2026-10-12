@@ -67,12 +67,14 @@ async function upsertNotifications(
         target: items.key,
         set: {
           title: item.title,
+          subjectType: item.subjectType,
           threadId: item.threadId,
           reason: item.reason,
           unread: item.unread,
           updatedAt: item.updatedAt,
           // New activity on a subject marked done brings it back, like GitHub does.
           doneAt: sql`case when ${items.doneAt} < ${item.updatedAt} then null else ${items.doneAt} end`,
+          autoDoneReason: sql`case when ${items.doneAt} < ${item.updatedAt} then null else ${items.autoDoneReason} end`,
         },
       })
   }
@@ -286,6 +288,11 @@ export async function enrichItems(
         labels: details.labels,
         additions: details.additions,
         deletions: details.deletions,
+        changedFiles: details.changedFiles,
+        headOid: details.headOid,
+        reviewedOid: analysis.lastReview?.oid ?? null,
+        reviewedAt: analysis.lastReview?.at ?? null,
+        reviewedState: analysis.lastReview?.state ?? null,
         ciState: details.ciState,
         reviewDecision: details.reviewDecision,
         reviewRequest: analysis.reviewRequest,

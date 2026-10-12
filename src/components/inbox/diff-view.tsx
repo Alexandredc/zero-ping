@@ -10,6 +10,10 @@ import {
 } from "lucide-react"
 import { Hint } from "./hint"
 import type { PullFile } from "@/server/github/pull-files"
+import type { Item } from "@/server/db/schema"
+import { hasNewCommitsSinceReview } from "@/server/inbox/priority"
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
+import { timeAgo } from "@/lib/format"
 import { filesQuery, useFileViewed } from "@/hooks/use-inbox"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
@@ -307,21 +311,66 @@ function FileDiff({
   )
 }
 
-export function DiffView({
-  itemKey,
-  htmlUrl,
+/** Lets a re-review read only what changed since the viewer's last review. */
+function RangeToggle({
+  item,
+  sinceReview,
+  onChange,
 }: {
-  itemKey: string
-  htmlUrl: string
+  item: Item
+  sinceReview: boolean
+  onChange: (sinceReview: boolean) => void
 }) {
-  const { data, isPending, error } = useQuery(filesQuery(itemKey))
-  const viewedMutation = useFileViewed(itemKey)
+  return (
+    <div className="flex flex-wrap items-center gap-2 rounded-lg border bg-muted/40 px-3 py-2 text-xs">
+      <ToggleGroup
+        size="sm"
+        value={[sinceReview ? "since" : "all"]}
+        onValueChange={(value) => {
+          if (value[0]) onChange(value[0] === "since")
+        }}
+        aria-label="Étendue du diff"
+      >
+        <ToggleGroupItem value="since">Depuis ma review</ToggleGroupItem>
+        <ToggleGroupItem value="all">Toute la PR</ToggleGroupItem>
+      </ToggleGroup>
+      <span className="text-muted-foreground">
+        Ta dernière review date de {timeAgo(item.reviewedAt)}
+        {item.reviewedOid && (
+          <>
+            {" "}
+            (<span className="font-mono">{item.reviewedOid.slice(0, 7)}</span>)
+          </>
+        )}
+        . Après un force-push, le diff inclut aussi ce que le rebase a apporté.
+      </span>
+    </div>
+  )
+}
+
+export function DiffView({ item }: { item: Item }) {
+  const itemKey = item.key
+  const htmlUrl = item.htmlUrl
+  const canNarrow = hasNewCommitsSinceReview(item)
+  const [sinceReview, setSinceReview] = useState(canNarrow)
+  const { data, isPending, error } = useQuery(
+    filesQuery(itemKey, canNarrow && sinceReview)
+  )
+  const viewedMutation = useFileViewed(itemKey, canNarrow && sinceReview)
   const [overrides, setOverrides] = useState<Record<string, boolean>>({})
   const sections = useRef(new Map<string, HTMLElement>())
+  const range = canNarrow && (
+    <RangeToggle
+      item={item}
+      sinceReview={sinceReview}
+      onChange={setSinceReview}
+    />
+  )
 
   if (isPending) {
     return (
       <div className="flex flex-col gap-3">
+        {range}
         <Skeleton className="h-8 w-full" />
         <Skeleton className="h-40 w-full" />
         <Skeleton className="h-24 w-full" />
@@ -330,10 +379,17 @@ export function DiffView({
   }
   if (error) {
     return (
-      <Alert variant="destructive">
-        <AlertTitle>Diff indisponible</AlertTitle>
-        <AlertDescription>{error.message}</AlertDescription>
-      </Alert>
+      <div className="flex flex-col gap-3">
+        {range}
+        <Alert variant="destructive">
+          <AlertTitle>Diff indisponible</AlertTitle>
+          <AlertDescription>
+            {error.message}
+            {sinceReview &&
+              " Le commit de ta review a peut-être disparu après un force-push : affiche toute la PR."}
+          </AlertDescription>
+        </Alert>
+      </div>
     )
   }
 
@@ -367,7 +423,14 @@ export function DiffView({
 
   return (
     <div className="@container flex flex-col gap-3">
+      {range}
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+        {data.sinceReview && (
+          <span className="font-medium text-foreground">
+            {data.sinceReview.commits} commit
+            {data.sinceReview.commits > 1 ? "s" : ""} depuis ta review ·
+          </span>
+        )}
         <span>
           {data.files.length} fichier{data.files.length > 1 ? "s" : ""}
         </span>

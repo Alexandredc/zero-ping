@@ -15,6 +15,8 @@ export type AgentTask = {
   timeoutMs?: number
   /** Long material for the agent, sent on stdin rather than in the arguments. */
   input?: string
+  /** Extra instructions for Claude Code, kept out of the prompt (a slash command must stay alone there). */
+  appendSystemPrompt?: string
 }
 
 export type AgentConfig = {
@@ -68,6 +70,9 @@ export function buildClaudeArgs(
     "--no-session-persistence",
     ...(task.allowedTools?.length
       ? ["--allowedTools", task.allowedTools.join(" ")]
+      : []),
+    ...(task.appendSystemPrompt
+      ? ["--append-system-prompt", task.appendSystemPrompt]
       : []),
     ...(model ? ["--model", model] : []),
   ]

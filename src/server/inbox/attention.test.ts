@@ -39,6 +39,13 @@ describe("detectAttention", () => {
     expect(detectAttention({ ...before, ...after }, after, NOW)).toBeNull()
   })
 
+  it("announces fixes pushed after the viewer's requested changes", () => {
+    const after = { ...before, view: "review" as const }
+    expect(detectAttention(before, after, NOW)?.title).toBe(
+      "Corrections poussées après ta review"
+    )
+  })
+
   it("announces each new message waiting for the viewer", () => {
     const after = {
       ...before,

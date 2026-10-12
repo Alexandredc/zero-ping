@@ -3,6 +3,15 @@ import { z } from "zod"
 import {
   countFolders,
   countPings,
+  countTeamProblems,
+  getChecks,
+  getMergeInfo,
+  getRecap,
+  listTeam,
+  merge,
+  rerunChecks,
+  runStandup,
+  takeReview,
   getConversation,
   getPullFiles,
   generateSummary,
@@ -35,14 +44,21 @@ const folderSchema = z.enum([
 ])
 
 export const getInbox = createServerFn({ method: "GET" })
-  .validator(z.object({ folder: folderSchema, repo: z.string().optional() }))
+  .validator(
+    z.object({
+      folder: folderSchema,
+      repo: z.string().optional(),
+      sort: z.enum(["priority", "size"]).optional(),
+    })
+  )
   .handler(async ({ data }) => {
     ensureSyncLoop()
-    const [items, counts] = await Promise.all([
-      listInbox(data.folder, data.repo),
+    const [items, counts, team] = await Promise.all([
+      listInbox(data.folder, data.repo, data.sort),
       countFolders(),
+      countTeamProblems(),
     ])
-    return { items, counts, sync: getSyncStatus() }
+    return { items, counts, team, sync: getSyncStatus() }
   })
 
 export const getItemConversation = createServerFn({ method: "GET" })
@@ -56,14 +72,16 @@ export const triggerSync = createServerFn({ method: "POST" }).handler(
   }
 )
 
+const keysSchema = z.array(z.string()).min(1).max(500)
+
 export const setDone = createServerFn({ method: "POST" })
-  .validator(z.object({ key: z.string(), done: z.boolean() }))
-  .handler(({ data }) => markDone(data.key, data.done))
+  .validator(z.object({ keys: keysSchema, done: z.boolean() }))
+  .handler(({ data }) => markDone(data.keys, data.done))
 
 export const setSnooze = createServerFn({ method: "POST" })
-  .validator(z.object({ key: z.string(), until: z.iso.datetime().nullable() }))
+  .validator(z.object({ keys: keysSchema, until: z.iso.datetime().nullable() }))
   .handler(({ data }) =>
-    snooze(data.key, data.until ? new Date(data.until) : null)
+    snooze(data.keys, data.until ? new Date(data.until) : null)
   )
 
 export const postReply = createServerFn({ method: "POST" })
@@ -155,8 +173,8 @@ export const getPingCount = createServerFn({ method: "GET" }).handler(() =>
 )
 
 export const getItemFiles = createServerFn({ method: "GET" })
-  .validator(z.object({ key: z.string() }))
-  .handler(({ data }) => getPullFiles(data.key))
+  .validator(z.object({ key: z.string(), sinceReview: z.boolean().optional() }))
+  .handler(({ data }) => getPullFiles(data.key, data.sinceReview))
 
 export const setFileViewedState = createServerFn({ method: "POST" })
   .validator(
@@ -169,3 +187,43 @@ export const setFileViewedState = createServerFn({ method: "POST" })
   .handler(({ data }) =>
     markFileViewed(data.pullRequestId, data.path, data.viewed)
   )
+
+export const getItemMergeInfo = createServerFn({ method: "GET" })
+  .validator(z.object({ key: z.string() }))
+  .handler(({ data }) => getMergeInfo(data.key))
+
+export const postMerge = createServerFn({ method: "POST" })
+  .validator(
+    z.object({
+      key: z.string(),
+      method: z.enum(["SQUASH", "MERGE", "REBASE"]),
+      deleteBranch: z.boolean(),
+    })
+  )
+  .handler(({ data }) => merge(data.key, data.method, data.deleteBranch))
+
+export const getItemChecks = createServerFn({ method: "GET" })
+  .validator(z.object({ key: z.string() }))
+  .handler(({ data }) => getChecks(data.key))
+
+export const postRerunChecks = createServerFn({ method: "POST" })
+  .validator(z.object({ key: z.string() }))
+  .handler(({ data }) => rerunChecks(data.key))
+
+export const getTeam = createServerFn({ method: "GET" }).handler(() => {
+  ensureSyncLoop()
+  return listTeam()
+})
+
+export const postTakeReview = createServerFn({ method: "POST" })
+  .validator(z.object({ key: z.string() }))
+  .handler(({ data }) => takeReview(data.key))
+
+export const getDailyRecap = createServerFn({ method: "GET" }).handler(() => {
+  ensureSyncLoop()
+  return getRecap()
+})
+
+export const postRunStandup = createServerFn({ method: "POST" }).handler(() =>
+  runStandup()
+)

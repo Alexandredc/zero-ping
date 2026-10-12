@@ -9,6 +9,12 @@ import {
   searchReviewRequests,
 } from "@/server/inbox/sync"
 import { prefetchLookups } from "@/server/slack/lookups"
+import { applyAutoRules } from "@/server/inbox/auto-done"
+import { getPreferences } from "@/server/preferences"
+import { runDailyRecap } from "@/server/recap/recap"
+import { syncTeamPulls } from "@/server/team/pulls"
+import { repos } from "@/server/db/schema"
+import { eq } from "drizzle-orm"
 
 export type SyncStatus = {
   running: boolean
@@ -21,9 +27,11 @@ type LoopState = {
   status: SyncStatus
   timer: ReturnType<typeof setTimeout> | null
   current: Promise<void> | null
+  lastTeamSyncAt: number
 }
 
 const MIN_INTERVAL_S = 30
+const TEAM_SYNC_MS = 10 * 60 * 1000
 
 const globalForLoop = globalThis as unknown as { __githubInboxLoop?: LoopState }
 
@@ -37,6 +45,7 @@ function state(): LoopState {
     },
     timer: null,
     current: null,
+    lastTeamSyncAt: 0,
   }
   return globalForLoop.__githubInboxLoop
 }
@@ -54,6 +63,22 @@ async function runOnce(forceSearch: boolean): Promise<number> {
   // The initial backlog is done once a sync no longer fills a whole batch.
   if (!notify && enriched < ENRICH_LIMIT) await markAttentionReady(db)
   await rescoreAll(db)
+  const preferences = await getPreferences(db)
+  await applyAutoRules(db, octokit, preferences)
+  const loop = state()
+  if (forceSearch || Date.now() - loop.lastTeamSyncAt > TEAM_SYNC_MS) {
+    const tracked = await db
+      .select({ fullName: repos.fullName })
+      .from(repos)
+      .where(eq(repos.tracked, true))
+    await syncTeamPulls(db, octokit, {
+      repos: tracked.map((repo) => repo.fullName),
+      viewerLogin: viewer.login,
+      staleDays: preferences.teamStaleDays,
+    })
+    loop.lastTeamSyncAt = Date.now()
+  }
+  await runDailyRecap(db)
   // Agent sessions are slow: they run after the sync instead of delaying it.
   void prefetchLookups(db).catch((error: unknown) =>
     console.error("[slack]", error)

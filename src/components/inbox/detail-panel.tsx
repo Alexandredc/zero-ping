@@ -15,6 +15,8 @@ import { SummaryCard } from "./summary-card"
 import { ActionHint } from "./hint"
 import { AiReviewMenu } from "./ai-review-menu"
 import { DiffView } from "./diff-view"
+import { MergeMenu } from "./merge-menu"
+import { FailedChecks } from "./failed-checks"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useHotkeys } from "@/hooks/use-hotkeys"
 import { GitHubIcon, SlackIcon } from "@/components/brand-icons"
@@ -329,7 +331,7 @@ export function DetailPanel({
               variant={isDone ? "outline" : "default"}
               size="sm"
               onClick={() =>
-                actions.done.mutate({ key: item.key, done: !isDone })
+                actions.done.mutate({ keys: [item.key], done: !isDone })
               }
               disabled={actions.done.isPending}
             >
@@ -363,7 +365,7 @@ export function DetailPanel({
                     key={option.label}
                     onClick={() =>
                       actions.snooze.mutate({
-                        key: item.key,
+                        keys: [item.key],
                         until: option.until(),
                       })
                     }
@@ -377,7 +379,7 @@ export function DetailPanel({
                 {item.snoozedUntil && (
                   <DropdownMenuItem
                     onClick={() =>
-                      actions.snooze.mutate({ key: item.key, until: null })
+                      actions.snooze.mutate({ keys: [item.key], until: null })
                     }
                   >
                     Reprendre maintenant
@@ -386,6 +388,12 @@ export function DetailPanel({
               </DropdownMenuGroup>
             </DropdownMenuContent>
           </DropdownMenu>
+          {isPull && item.state === "OPEN" && item.view === "mine" && (
+            <MergeMenu
+              itemKey={item.key}
+              approved={item.reviewDecision === "APPROVED"}
+            />
+          )}
           {isPull && item.state === "OPEN" && (
             <AiReviewMenu itemKey={item.key} />
           )}
@@ -466,7 +474,7 @@ export function DetailPanel({
       <ScrollArea className="min-h-0 flex-1">
         {tab === "files" && isPull ? (
           <div className="px-5 py-4">
-            <DiffView itemKey={item.key} htmlUrl={item.htmlUrl} />
+            <DiffView item={item} />
           </div>
         ) : (
           <div className="flex flex-col gap-5 px-5 py-4">
@@ -476,6 +484,11 @@ export function DetailPanel({
                 kind={item.kind === "PullRequest" ? "PR" : "issue"}
               />
             )}
+            {isPull &&
+              item.state === "OPEN" &&
+              (item.ciState === "FAILURE" || item.ciState === "ERROR") && (
+                <FailedChecks itemKey={item.key} />
+              )}
             <PriorityExplanation
               priority={item.priority}
               reasons={item.priorityReasons}

@@ -7,8 +7,14 @@ Boîte de réception locale pour lead dev : elle remplace les emails de notifica
 - **À reviewer** : PR ouvertes où ta review est encore demandée (directement ou via ton équipe).
 - **On t'attend** : mentions et fils de review où quelqu'un a répondu après toi.
 - **Mes PR** : tes PR ouvertes, avec CI et décision de review.
+- **Équipe** : PR des repos suivis sans reviewer, avec changements en attente, CI rouge, conflits ou ouvertes depuis trop longtemps (hors les tiennes et les bots), avec « Prendre la review » en un clic.
+- **Récap du jour** : chaque jour ouvré à l'heure choisie (9 h 05 par défaut), une notification résume ce qui t'attend et `/standup:team` prépare le standup en brouillon dans Slack.
 
-Chaque élément a un score de priorité expliqué (ancienneté, dernier reviewer manquant, taille, CI, labels urgents, urgence estimée par Jev). Depuis l'app, tu peux lire la conversation (GitHub, Slack ou les deux) et le diff de la PR (onglet « Fichiers modifiés », avec l'arborescence des fichiers et les cases « Vu » synchronisées avec GitHub), lancer une review IA en un clic (`@codex review`, `@claude review`, `/gemini review`, réglables), répondre (commentaire ou fil de review), approuver ou demander des changements, marquer comme traité (synchronisé avec GitHub) ou mettre en pause.
+Chaque élément a un score de priorité expliqué (ancienneté, dernier reviewer manquant, taille, CI, labels urgents, urgence estimée par Jev). Depuis l'app, tu peux lire la conversation (GitHub, Slack ou les deux) et le diff de la PR (onglet « Fichiers modifiés », avec l'arborescence des fichiers et les cases « Vu » synchronisées avec GitHub), lancer une review IA en un clic (`@codex review`, `@claude review`, `/gemini review`, réglables), répondre (commentaire ou fil de review), approuver ou demander des changements, marquer comme traité (synchronisé avec GitHub) ou mettre en pause, seul ou par lot.
+
+Sur tes PR, tu peux merger (méthode au choix, suppression de la branche) et, si la CI échoue, voir les jobs en échec avec leur log et relancer les jobs GitHub Actions ratés. Quand tu as déjà reviewé une PR et que des commits sont arrivés depuis, la PR est signalée et le diff peut se limiter à ces commits ; si tu avais demandé des changements, elle revient dans « À reviewer ». La liste se trie par priorité ou par taille (XS à XL).
+
+Le classement automatique range dans « Traités » les PR mergées ou fermées, les bots, l'activité CI, les releases et les auteurs de ton choix, sans jamais toucher à ce qui t'attend.
 
 ## Démarrer
 
@@ -19,6 +25,16 @@ pnpm dev               # http://localhost:3000
 ```
 
 En production : `pnpm build && pnpm start` (port 3000, ou `PORT`).
+
+### App macOS
+
+```sh
+scripts/macos-app.sh   # crée ~/Applications/Zéro Ping.app (ou le dossier passé en argument)
+```
+
+L'app démarre le serveur sur le port 4747 s'il ne tourne pas (avec un build si les sources ont changé), puis ouvre http://inbox.localhost:4747. Un clic sur son icône dans le Dock ramène l'onglet Zéro Ping déjà ouvert au premier plan (Dia, Chrome, Arc, Brave, Edge ou Safari ; macOS demande une fois l'autorisation de piloter le navigateur) et n'en ouvre un nouveau que s'il n'y en a pas. Sa pastille affiche le nombre d'éléments qui t'attendent. La quitter (⌘Q ou clic droit > Quitter) arrête le serveur. Pour la garder dans le Dock : clic droit sur l'icône > Options > Garder dans le Dock. Relance le script si tu déplaces le repo : il fige le chemin du repo et ton `PATH` (pnpm, gh, claude).
+
+Depuis le terminal, `scripts/server.sh start|stop|status` fait la même chose, comme la fonction zsh `inbox` (`inbox stop` éteint le serveur).
 
 L'authentification GitHub réutilise `gh auth token` (ou `GITHUB_TOKEN`). La première synchronisation récupère les 30 derniers jours de notifications.
 
@@ -41,6 +57,8 @@ Zéro Ping affiche une notification du navigateur quand un élément demande ton
 La page **Réglages** (barre latérale) regroupe :
 
 - **Repos** : repos suivis, ajout d'un repo, filtre.
+- **Classement** : règles de classement automatique, auteurs à classer, seuil d'ancienneté de la vue Équipe.
+- **Récap** : récap du jour, heure, lancement de `/standup:team`.
 - **Slack** : recherche automatique en arrière-plan, canaux exclus (leurs fils sont masqués tout de suite et l'agent ne les fouille plus).
 - **Agent IA** : agent (Claude Code ou Codex) et modèle pour Slack, longueur par défaut et modèle des résumés, état de Jev et du compte GitHub.
 - **Notifications** : autorisation du navigateur, types de notifications, test.
@@ -76,11 +94,12 @@ L'alternative sans agent (app Slack et jeton personnel, plus rapide et sans toke
 | Touche | Action |
 | --- | --- |
 | `j` / `k` | Élément suivant / précédent |
-| `e` | Marquer comme traité (ou remettre dans l'inbox) |
+| `e` | Marquer comme traité (ou remettre dans l'inbox), ou toute la sélection |
+| `x` | Sélectionner l'élément (ou `⇧` clic) |
 | `o` | Ouvrir sur GitHub, sur le message concerné |
 | `r` | Écrire une réponse |
 | `⌘ Entrée` | Envoyer la réponse |
-| `Échap` | Fermer le détail |
+| `Échap` | Vider la sélection, sinon fermer le détail |
 | `d` | Basculer entre la conversation et les fichiers modifiés d'une PR |
 | `[` | Replier ou déplier la barre latérale |
 

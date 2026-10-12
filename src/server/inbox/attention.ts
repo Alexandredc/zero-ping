@@ -53,7 +53,9 @@ export function detectAttention(
       title:
         after.reviewRequest === "team"
           ? "Review demandée à ton équipe"
-          : "Review demandée",
+          : after.reviewRequest === "direct"
+            ? "Review demandée"
+            : "Corrections poussées après ta review",
       body: ref,
     }
   }

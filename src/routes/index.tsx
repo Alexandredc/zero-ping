@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query"
 import { createFileRoute, useNavigate } from "@tanstack/react-router"
-import { useEffect, useRef } from "react"
-import { InboxIcon } from "lucide-react"
+import { useEffect, useRef, useState } from "react"
+import { CheckIcon, ClockIcon, InboxIcon, XIcon } from "lucide-react"
 import { z } from "zod"
 import { DetailPanel } from "@/components/inbox/detail-panel"
 import { FOLDER_META } from "@/components/inbox/folders"
@@ -15,6 +15,19 @@ import {
   EmptyTitle,
 } from "@/components/ui/empty"
 import { Kbd } from "@/components/ui/kbd"
+import { Button } from "@/components/ui/button"
+import { Checkbox } from "@/components/ui/checkbox"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
+import { formatWhen, nextMorning } from "@/lib/format"
+import { cn } from "@/lib/utils"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Skeleton } from "@/components/ui/skeleton"
 import { inboxQuery, useInboxActions } from "@/hooks/use-inbox"
@@ -26,13 +39,20 @@ const searchSchema = z.object({
     .default("review"),
   repo: z.string().optional(),
   item: z.string().optional(),
+  sort: z.enum(["priority", "size"]).default("priority"),
 })
 
 export const Route = createFileRoute("/")({
   validateSearch: searchSchema,
-  loaderDeps: ({ search }) => ({ folder: search.folder, repo: search.repo }),
+  loaderDeps: ({ search }) => ({
+    folder: search.folder,
+    repo: search.repo,
+    sort: search.sort,
+  }),
   loader: ({ context, deps }) =>
-    context.queryClient.ensureQueryData(inboxQuery(deps.folder, deps.repo)),
+    context.queryClient.ensureQueryData(
+      inboxQuery(deps.folder, deps.repo, deps.sort)
+    ),
   component: InboxPage,
 })
 
@@ -49,12 +69,40 @@ const EMPTY_COPY = {
 function InboxPage() {
   const search = Route.useSearch()
   const navigate = useNavigate({ from: "/" })
-  const { data, isPending } = useQuery(inboxQuery(search.folder, search.repo))
+  const { data, isPending } = useQuery(
+    inboxQuery(search.folder, search.repo, search.sort)
+  )
   const actions = useInboxActions()
   const composerRef = useRef<HTMLTextAreaElement>(null)
   const listRef = useRef<HTMLDivElement>(null)
+  const [checked, setChecked] = useState<Set<string>>(new Set())
 
   const items = data?.items ?? []
+  // Items that left the folder (done, synced away) drop out of the selection.
+  const selection = items.filter((item) => checked.has(item.key))
+  const selecting = selection.length > 0
+
+  useEffect(() => setChecked(new Set()), [search.folder, search.repo])
+
+  const toggleChecked = (key: string) =>
+    setChecked((current) => {
+      const next = new Set(current)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
+    })
+  const clearSelection = () => setChecked(new Set())
+  const bulkDone = () => {
+    actions.done.mutate({
+      keys: selection.map((item) => item.key),
+      done: search.folder !== "done",
+    })
+    clearSelection()
+  }
+  const bulkSnooze = (until: Date) => {
+    actions.snooze.mutate({ keys: selection.map((item) => item.key), until })
+    clearSelection()
+  }
   const selectedIndex = items.findIndex((item) => item.key === search.item)
   const selected = selectedIndex >= 0 ? items[selectedIndex] : undefined
 
@@ -82,12 +130,17 @@ function InboxPage() {
     k: () => move(-1),
     ArrowDown: () => move(1),
     ArrowUp: () => move(-1),
-    Escape: () => void select(undefined),
+    Escape: () => (selecting ? clearSelection() : void select(undefined)),
+    x: () => selected && toggleChecked(selected.key),
     e: () => {
+      if (selecting) return bulkDone()
       if (!selected) return
       // Moves to the next item so triage keeps flowing.
       const next = items.at(selectedIndex + 1) ?? items.at(selectedIndex - 1)
-      actions.done.mutate({ key: selected.key, done: selected.doneAt === null })
+      actions.done.mutate({
+        keys: [selected.key],
+        done: selected.doneAt === null,
+      })
       void select(next?.key)
     },
     o: () =>
@@ -97,6 +150,15 @@ function InboxPage() {
   })
 
   const meta = FOLDER_META[search.folder]
+  const canSort = search.folder !== "done"
+  const snoozeOptions = [
+    {
+      label: "Dans 3 heures",
+      until: () => new Date(Date.now() + 3 * 3600_000),
+    },
+    { label: "Demain matin", until: () => nextMorning() },
+    { label: "Lundi matin", until: () => nextMorning(1) },
+  ]
 
   return (
     <div className="flex h-svh overflow-hidden">
@@ -120,11 +182,97 @@ function InboxPage() {
             </h1>
             <p className="text-xs text-muted-foreground">{meta.hint}</p>
           </div>
-          <span className="hidden items-center gap-1 text-xs text-muted-foreground xl:flex">
-            <Kbd>j</Kbd>
-            <Kbd>k</Kbd>
-          </span>
+          {canSort && (
+            <ToggleGroup
+              size="sm"
+              value={[search.sort]}
+              onValueChange={(value) => {
+                const sort = value[0] as "priority" | "size" | undefined
+                if (sort)
+                  void navigate({ search: (prev) => ({ ...prev, sort }) })
+              }}
+              aria-label="Trier la liste"
+            >
+              <ToggleGroupItem value="priority">Priorité</ToggleGroupItem>
+              <ToggleGroupItem value="size">Taille</ToggleGroupItem>
+            </ToggleGroup>
+          )}
         </header>
+        {items.length > 0 && (
+          <div
+            className={cn(
+              "flex items-center gap-2 border-b px-3 py-1.5 text-xs text-muted-foreground",
+              selecting && "bg-accent/60 text-foreground"
+            )}
+          >
+            <Checkbox
+              aria-label="Tout sélectionner"
+              checked={selecting && selection.length === items.length}
+              indeterminate={selecting && selection.length < items.length}
+              onCheckedChange={(value) =>
+                setChecked(
+                  value ? new Set(items.map((item) => item.key)) : new Set()
+                )
+              }
+            />
+            {selecting ? (
+              <>
+                <span className="font-medium tabular-nums">
+                  {selection.length} sélectionné
+                  {selection.length > 1 ? "s" : ""}
+                </span>
+                <div className="ml-auto flex items-center gap-1">
+                  <Button size="xs" onClick={bulkDone}>
+                    <CheckIcon data-icon="inline-start" />
+                    {search.folder === "done" ? "Remettre" : "Traités"}
+                    <Kbd>e</Kbd>
+                  </Button>
+                  {search.folder !== "done" && (
+                    <DropdownMenu>
+                      <DropdownMenuTrigger
+                        render={<Button variant="outline" size="xs" />}
+                      >
+                        <ClockIcon data-icon="inline-start" />
+                        Pause
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="w-60">
+                        <DropdownMenuGroup>
+                          <DropdownMenuLabel>
+                            Faire revenir la sélection…
+                          </DropdownMenuLabel>
+                          {snoozeOptions.map((option) => (
+                            <DropdownMenuItem
+                              key={option.label}
+                              onClick={() => bulkSnooze(option.until())}
+                            >
+                              {option.label}
+                              <span className="ml-auto text-xs text-muted-foreground">
+                                {formatWhen(option.until())}
+                              </span>
+                            </DropdownMenuItem>
+                          ))}
+                        </DropdownMenuGroup>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  )}
+                  <Button
+                    variant="ghost"
+                    size="icon-xs"
+                    onClick={clearSelection}
+                    aria-label="Vider la sélection (Échap)"
+                  >
+                    <XIcon />
+                  </Button>
+                </div>
+              </>
+            ) : (
+              <span className="flex items-center gap-1">
+                <Kbd>x</Kbd> pour sélectionner, <Kbd>j</Kbd>
+                <Kbd>k</Kbd> pour naviguer
+              </span>
+            )}
+          </div>
+        )}
         <ScrollArea className="min-h-0 flex-1">
           <div ref={listRef}>
             {isPending &&
@@ -151,10 +299,12 @@ function InboxPage() {
               </Empty>
             )}
             {items.map((item) => (
-              <div key={item.key} data-key={item.key}>
+              <div key={item.key} data-key={item.key} className="flex">
                 <ItemStrip
                   item={item}
                   selected={item.key === selected?.key}
+                  checked={checked.has(item.key)}
+                  onCheck={() => toggleChecked(item.key)}
                   onSelect={() => void select(item.key)}
                 />
               </div>

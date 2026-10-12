@@ -35,6 +35,8 @@ export const items = snakeCase.table("items", {
   repoFullName: text().notNull(),
   number: integer(),
   kind: text().$type<SubjectKind>().notNull(),
+  /** Notification subject type (PullRequest, Issue, Release, CheckSuite…). */
+  subjectType: text(),
   title: text().notNull(),
   htmlUrl: text().notNull(),
   threadId: text(),
@@ -49,12 +51,19 @@ export const items = snakeCase.table("items", {
   labels: text().array().notNull().default([]),
   additions: integer(),
   deletions: integer(),
+  changedFiles: integer(),
   ciState: text(),
   reviewDecision: text(),
   reviewRequest: text().$type<"direct" | "team" | null>(),
   approvals: integer().notNull().default(0),
   pendingReviewers: integer().notNull().default(0),
   requestedAt: timestamp({ withTimezone: true }),
+
+  /** Head commit, and the commit of the viewer's latest review. */
+  headOid: text(),
+  reviewedOid: text(),
+  reviewedAt: timestamp({ withTimezone: true }),
+  reviewedState: text(),
 
   awaitingMe: boolean().notNull().default(false),
   awaitingUrl: text(),
@@ -73,6 +82,8 @@ export const items = snakeCase.table("items", {
 
   enrichedAt: timestamp({ withTimezone: true }),
   doneAt: timestamp({ withTimezone: true }),
+  /** Set when an automatic rule marked the item done, with the rule's label. */
+  autoDoneReason: text(),
   snoozedUntil: timestamp({ withTimezone: true }),
 })
 
@@ -129,7 +140,13 @@ export const summaries = snakeCase.table(
 
 export type Summary = typeof summaries.$inferSelect
 
-export const ATTENTION_KINDS = ["review", "awaiting", "changes", "ci"] as const
+export const ATTENTION_KINDS = [
+  "review",
+  "awaiting",
+  "changes",
+  "ci",
+  "recap",
+] as const
 export type AttentionKind = (typeof ATTENTION_KINDS)[number]
 
 /** Something that newly needs the viewer, turned into a browser notification. */
@@ -143,3 +160,29 @@ export const attentionEvents = snakeCase.table("attention_events", {
 })
 
 export type AttentionEvent = typeof attentionEvents.$inferSelect
+
+export type TeamProblem =
+  "no-reviewer" | "stale" | "ci" | "conflict" | "changes"
+
+/** Open PRs of the tracked repos, by others: the team's flow, not the viewer's inbox. */
+export const teamPulls = snakeCase.table("team_pulls", {
+  key: text().primaryKey(),
+  repoFullName: text().notNull(),
+  number: integer().notNull(),
+  title: text().notNull(),
+  htmlUrl: text().notNull(),
+  author: text(),
+  isDraft: boolean().notNull().default(false),
+  createdAt: timestamp({ withTimezone: true }).notNull(),
+  updatedAt: timestamp({ withTimezone: true }).notNull(),
+  additions: integer().notNull().default(0),
+  deletions: integer().notNull().default(0),
+  reviewers: text().array().notNull().default([]),
+  reviewDecision: text(),
+  ciState: text(),
+  mergeable: text(),
+  problems: text().$type<TeamProblem>().array().notNull().default([]),
+  syncedAt: timestamp({ withTimezone: true }).notNull(),
+})
+
+export type TeamPull = typeof teamPulls.$inferSelect

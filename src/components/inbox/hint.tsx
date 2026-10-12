@@ -13,16 +13,22 @@ export function Hint({
   children,
   className,
   side,
+  instant,
 }: {
   content: React.ReactNode
   children: React.ReactNode
   className?: string
   side?: "top" | "right" | "bottom" | "left"
+  /** Opens without the hover delay, for small icons read at a glance. */
+  instant?: boolean
 }) {
   if (!content) return <span className={className}>{children}</span>
   return (
     <Tooltip>
-      <TooltipTrigger render={<span className={className} />}>
+      <TooltipTrigger
+        delay={instant ? 0 : undefined}
+        render={<span className={className} />}
+      >
         {children}
       </TooltipTrigger>
       <TooltipContent side={side} className="flex-col items-start text-left">

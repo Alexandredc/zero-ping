@@ -6,6 +6,14 @@ import {
 import {
   getAccessibleRepos,
   getAppSettings,
+  getDailyRecap,
+  getItemChecks,
+  getItemMergeInfo,
+  getTeam,
+  postMerge,
+  postRerunChecks,
+  postRunStandup,
+  postTakeReview,
   getInbox,
   getItemConversation,
   getItemFiles,
@@ -25,16 +33,20 @@ import {
   summarizeItem,
   triggerSync,
 } from "@/functions/inbox"
-import type { Folder } from "@/server/inbox/actions"
+import type { Folder, SortOrder } from "@/server/inbox/actions"
 import { toast } from "@/components/ui/toast"
 
 /** The UI reads the local database often; GitHub is only polled by the server. */
 const LOCAL_REFRESH_MS = 4000
 
-export const inboxQuery = (folder: Folder, repo?: string) =>
+export const inboxQuery = (
+  folder: Folder,
+  repo?: string,
+  sort: SortOrder = "priority"
+) =>
   queryOptions({
-    queryKey: ["inbox", folder, repo ?? null],
-    queryFn: () => getInbox({ data: { folder, repo } }),
+    queryKey: ["inbox", folder, repo ?? null, sort],
+    queryFn: () => getInbox({ data: { folder, repo, sort } }),
     refetchInterval: LOCAL_REFRESH_MS,
     refetchOnWindowFocus: true,
   })
@@ -106,16 +118,19 @@ export function useInboxActions() {
     toast.add({ title, description: errorMessage(error), type: "error" })
 
   const done = useMutation({
-    mutationFn: (input: { key: string; done: boolean }) =>
+    mutationFn: (input: { keys: string[]; done: boolean }) =>
       setDone({ data: input }),
     onSuccess: (_, input) => {
       void refresh()
       if (input.done) {
         toast.add({
-          title: "Marqué comme traité",
+          title:
+            input.keys.length > 1
+              ? `${input.keys.length} éléments marqués comme traités`
+              : "Marqué comme traité",
           actionProps: {
             children: "Annuler",
-            onClick: () => done.mutate({ key: input.key, done: false }),
+            onClick: () => done.mutate({ keys: input.keys, done: false }),
           },
         })
       }
@@ -124,15 +139,18 @@ export function useInboxActions() {
   })
 
   const snooze = useMutation({
-    mutationFn: (input: { key: string; until: Date | null }) =>
+    mutationFn: (input: { keys: string[]; until: Date | null }) =>
       setSnooze({
-        data: { key: input.key, until: input.until?.toISOString() ?? null },
+        data: { keys: input.keys, until: input.until?.toISOString() ?? null },
       }),
     onSuccess: (_, input) => {
       void refresh()
       if (input.until) {
         toast.add({
-          title: "Mis en pause",
+          title:
+            input.keys.length > 1
+              ? `${input.keys.length} éléments mis en pause`
+              : "Mis en pause",
           description: `Jusqu'au ${input.until.toLocaleString("fr", { weekday: "long", hour: "2-digit", minute: "2-digit" })}`,
         })
       }
@@ -246,15 +264,15 @@ export const pingCountQuery = () =>
     refetchOnWindowFocus: true,
   })
 
-export const filesQuery = (key: string) =>
+export const filesQuery = (key: string, sinceReview = false) =>
   queryOptions({
-    queryKey: ["files", key],
-    queryFn: () => getItemFiles({ data: { key } }),
+    queryKey: ["files", key, sinceReview],
+    queryFn: () => getItemFiles({ data: { key, sinceReview } }),
     staleTime: 60_000,
   })
 
 /** Toggles a file's viewed state, optimistically, then syncs it to GitHub. */
-export function useFileViewed(key: string) {
+export function useFileViewed(key: string, sinceReview = false) {
   const queryClient = useQueryClient()
   type Files = Awaited<ReturnType<typeof getItemFiles>>
   return useMutation({
@@ -264,9 +282,13 @@ export function useFileViewed(key: string) {
       viewed: boolean
     }) => setFileViewedState({ data: input }),
     onMutate: (input) => {
-      const previous = queryClient.getQueryData<Files>(["files", key])
+      const previous = queryClient.getQueryData<Files>([
+        "files",
+        key,
+        sinceReview,
+      ])
       queryClient.setQueryData<Files>(
-        ["files", key],
+        ["files", key, sinceReview],
         (data) =>
           data && {
             ...data,
@@ -280,12 +302,129 @@ export function useFileViewed(key: string) {
       return { previous }
     },
     onError: (error, _input, context) => {
-      queryClient.setQueryData(["files", key], context?.previous)
+      queryClient.setQueryData(["files", key, sinceReview], context?.previous)
       toast.add({
         title: "Fichier non synchronisé avec GitHub",
         description: error.message,
         type: "error",
       })
     },
+  })
+}
+
+export const mergeInfoQuery = (key: string) =>
+  queryOptions({
+    queryKey: ["merge-info", key],
+    queryFn: () => getItemMergeInfo({ data: { key } }),
+    staleTime: 10_000,
+  })
+
+export function useMerge(key: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (input: {
+      method: "SQUASH" | "MERGE" | "REBASE"
+      deleteBranch: boolean
+    }) => postMerge({ data: { key, ...input } }),
+    onSuccess: (result) => {
+      void queryClient.invalidateQueries({ queryKey: ["inbox"] })
+      void queryClient.invalidateQueries({ queryKey: ["merge-info", key] })
+      toast.add({
+        title: "PR mergée",
+        description: result.deletedBranch
+          ? `Branche ${result.deletedBranch} supprimée.`
+          : undefined,
+        type: "success",
+      })
+    },
+    onError: (error) =>
+      toast.add({
+        title: "Merge impossible",
+        description: error.message,
+        type: "error",
+      }),
+  })
+}
+
+export const checksQuery = (key: string) =>
+  queryOptions({
+    queryKey: ["checks", key],
+    queryFn: () => getItemChecks({ data: { key } }),
+    staleTime: 15_000,
+  })
+
+export function useRerunChecks(key: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: () => postRerunChecks({ data: { key } }),
+    onSuccess: ({ runs }) => {
+      setTimeout(
+        () => void queryClient.invalidateQueries({ queryKey: ["checks", key] }),
+        5000
+      )
+      toast.add({
+        title: "Jobs en échec relancés",
+        description: `${runs} workflow${runs > 1 ? "s" : ""} relancé${runs > 1 ? "s" : ""} sur GitHub Actions.`,
+        type: "success",
+      })
+    },
+    onError: (error) =>
+      toast.add({
+        title: "Relance impossible",
+        description: error.message,
+        type: "error",
+      }),
+  })
+}
+
+export const teamQuery = () =>
+  queryOptions({
+    queryKey: ["team"],
+    queryFn: () => getTeam(),
+    refetchInterval: 30_000,
+  })
+
+export function useTakeReview() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (key: string) => postTakeReview({ data: { key } }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["inbox"] })
+      toast.add({
+        title: "Review prise",
+        description: "La PR arrive dans « À reviewer » à la prochaine synchro.",
+        type: "success",
+      })
+    },
+    onError: (error) =>
+      toast.add({
+        title: "Impossible de prendre la review",
+        description: error.message,
+        type: "error",
+      }),
+  })
+}
+
+export const recapQuery = () =>
+  queryOptions({
+    queryKey: ["recap"],
+    queryFn: () => getDailyRecap(),
+    // Polls faster while the standup runs.
+    refetchInterval: (query) =>
+      query.state.data?.standup.status === "running" ? 5000 : 30_000,
+  })
+
+export function useRunStandup() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: () => postRunStandup(),
+    onSuccess: () =>
+      void queryClient.invalidateQueries({ queryKey: ["recap"] }),
+    onError: (error) =>
+      toast.add({
+        title: "Standup non lancé",
+        description: error.message,
+        type: "error",
+      }),
   })
 }

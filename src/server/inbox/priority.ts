@@ -18,6 +18,9 @@ export type PriorityInput = {
   reviewRequest: "direct" | "team" | null
   approvals: number
   pendingReviewers: number
+  headOid: string | null
+  reviewedOid: string | null
+  reviewedState: string | null
   awaitingMe: boolean
   waitingSince: Date | null
   aiUrgency: number | null
@@ -53,6 +56,17 @@ function formatConfidence(confidence: number | null): string {
   return confidence === null
     ? "non fournie"
     : `${Math.round(confidence * 100)} %`
+}
+
+/** The viewer reviewed the PR and its head moved since. */
+export function hasNewCommitsSinceReview(
+  input: Pick<PriorityInput, "headOid" | "reviewedOid">
+): boolean {
+  return (
+    input.reviewedOid !== null &&
+    input.headOid !== null &&
+    input.reviewedOid !== input.headOid
+  )
 }
 
 export function computePriority(
@@ -99,6 +113,21 @@ export function computePriority(
       15,
       "La PR a déjà au moins une approbation et tu es le dernier reviewer attendu."
     )
+  }
+
+  if (hasNewCommitsSinceReview(input)) {
+    if (input.reviewedState === "CHANGES_REQUESTED" && !input.reviewRequest)
+      add(
+        "Corrections poussées",
+        25,
+        "Tu avais demandé des changements et de nouveaux commits sont arrivés depuis : à revoir."
+      )
+    else if (input.reviewRequest)
+      add(
+        "Re-review",
+        5,
+        "Tu as déjà reviewé cette PR : seuls les commits arrivés depuis ta review sont à lire."
+      )
   }
 
   if (input.awaitingMe)

@@ -17,6 +17,9 @@ const base: PriorityInput = {
   reviewRequest: null,
   approvals: 0,
   pendingReviewers: 0,
+  headOid: "head",
+  reviewedOid: null,
+  reviewedState: null,
   awaitingMe: false,
   waitingSince: null,
   aiUrgency: null,
@@ -161,5 +164,23 @@ describe("priority reasons", () => {
     )
     expect(reasons.length).toBeGreaterThan(8)
     for (const reason of reasons) expect(reason.hint).toBeTruthy()
+  })
+
+  it("ranks pushed fixes after requested changes like a review request", () => {
+    const fixes = { reviewedOid: "old", reviewedState: "CHANGES_REQUESTED" }
+    expect(labels(fixes)).toContain("Corrections poussées")
+    expect(labels({ ...fixes, reviewedOid: "head" })).not.toContain(
+      "Corrections poussées"
+    )
+  })
+
+  it("marks a renewed review request as a re-review", () => {
+    expect(
+      labels({
+        reviewRequest: "direct",
+        reviewedOid: "old",
+        reviewedState: "APPROVED",
+      })
+    ).toContain("Re-review")
   })
 })

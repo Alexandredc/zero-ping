@@ -33,8 +33,17 @@ describe("preferences", () => {
       summaryModel: null,
       summaryLength: "short",
       notifyEnabled: true,
-      notifyKinds: ["review", "awaiting", "changes", "ci"],
+      notifyKinds: ["review", "awaiting", "changes", "ci", "recap"],
       reviewCommands: ["@codex review", "@claude review", "/gemini review"],
+      autoDoneClosed: true,
+      autoDoneBots: true,
+      autoDoneCi: true,
+      autoDoneReleases: true,
+      autoDoneAuthors: [],
+      recapEnabled: true,
+      recapTime: "09:05",
+      standupEnabled: true,
+      teamStaleDays: 7,
     })
   })
 
@@ -87,5 +96,26 @@ describe("getAgentConfig overrides", () => {
       model: undefined,
     })
     expect(getAgentConfig(env, { agentModel: "sonnet" }).model).toBe("sonnet")
+  })
+})
+
+describe("triage preferences", () => {
+  let db: Database
+
+  beforeEach(async () => {
+    db = await createDatabase()
+  })
+
+  it("normalises the logins of the authors to file away", async () => {
+    const next = await updatePreferences(db, {
+      autoDoneAuthors: ["@Release-Bot", "release-bot", "ci-user"],
+    })
+    expect(next.autoDoneAuthors).toEqual(["ci-user", "release-bot"])
+  })
+
+  it("rejects an invalid recap time", async () => {
+    await expect(
+      updatePreferences(db, { recapTime: "25:00" })
+    ).rejects.toThrow()
   })
 })

@@ -54,3 +54,18 @@ export function formatWhen(date: Date, now: Date = new Date()): string {
   if (days === 1) return `demain ${time}`
   return `${date.toLocaleDateString("fr", { weekday: "short", day: "numeric", month: "short" })} ${time}`
 }
+
+export type PullSize = "XS" | "S" | "M" | "L" | "XL"
+
+/** T-shirt size of a PR from its changed lines, to pick quick reviews at a glance. */
+export function pullSize(
+  additions: number,
+  deletions: number | null
+): PullSize {
+  const lines = additions + (deletions ?? 0)
+  if (lines <= 10) return "XS"
+  if (lines <= 100) return "S"
+  if (lines <= 400) return "M"
+  if (lines <= 1000) return "L"
+  return "XL"
+}

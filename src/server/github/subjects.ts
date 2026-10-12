@@ -21,11 +21,13 @@ const REVIEWER_FIELDS = `
 `
 
 const PULL_REQUEST_FIELDS = `
-  title url body createdAt state isDraft additions deletions reviewDecision
+  title url body createdAt state isDraft additions deletions changedFiles
+  reviewDecision headRefOid
   author { login }
   labels(first: 20) { nodes { name } }
   reviewRequests(first: 20) { nodes { requestedReviewer { ${REVIEWER_FIELDS} } } }
   latestOpinionatedReviews(first: 20) { nodes { state } }
+  reviews(last: 30) { nodes { author { login } state submittedAt commit { oid } } }
   commits(last: 1) { nodes { commit { statusCheckRollup { state } } } }
   comments(last: 20) { nodes { ${COMMENT_FIELDS} } }
   reviewThreads(last: 20) {
@@ -67,11 +69,21 @@ type RawSubject = {
   isDraft?: boolean
   additions?: number
   deletions?: number
+  changedFiles?: number
+  headRefOid?: string
   reviewDecision?: string | null
   author: { login: string } | null
   labels: { nodes: { name: string }[] }
   reviewRequests?: { nodes: { requestedReviewer: RawReviewer }[] }
   latestOpinionatedReviews?: { nodes: { state: string }[] }
+  reviews?: {
+    nodes: {
+      author: { login: string } | null
+      state: string
+      submittedAt: string | null
+      commit: { oid: string } | null
+    }[]
+  }
   commits?: {
     nodes: { commit: { statusCheckRollup: { state: string } | null } }[]
   }
@@ -118,6 +130,20 @@ export function toSubjectDetails(
     labels: raw.labels.nodes.map((label) => label.name),
     additions: raw.additions ?? null,
     deletions: raw.deletions ?? null,
+    changedFiles: raw.changedFiles ?? null,
+    headOid: raw.headRefOid ?? null,
+    reviews: (raw.reviews?.nodes ?? []).flatMap((review) =>
+      review.submittedAt && review.state !== "PENDING"
+        ? [
+            {
+              author: review.author?.login ?? null,
+              state: review.state,
+              submittedAt: review.submittedAt,
+              commitOid: review.commit?.oid ?? null,
+            },
+          ]
+        : []
+    ),
     ciState: raw.commits?.nodes[0]?.commit.statusCheckRollup?.state ?? null,
     reviewDecision: raw.reviewDecision ?? null,
     reviewRequests: (raw.reviewRequests?.nodes ?? [])

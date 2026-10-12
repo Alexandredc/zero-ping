@@ -23,6 +23,8 @@ export type PullFiles = {
   truncated: boolean
   totalAdditions: number
   totalDeletions: number
+  /** Set when the diff only covers the commits pushed since the viewer's review. */
+  sinceReview: { base: string; head: string; commits: number } | null
 }
 
 const MAX_FILES = 300
@@ -86,10 +88,63 @@ export async function setFileViewed(
   )
 }
 
+type RestFile = {
+  filename: string
+  previous_filename?: string
+  status: string
+  additions: number
+  deletions: number
+  patch?: string
+  sha: string | null
+}
+
+function toPullFile(
+  ref: { owner: string; repo: string; number: number },
+  file: RestFile
+): PullFile {
+  return {
+    filename: file.filename,
+    previousFilename: file.previous_filename ?? null,
+    status: file.status,
+    additions: file.additions,
+    deletions: file.deletions,
+    patch: file.patch ?? null,
+    url: `https://github.com/${ref.owner}/${ref.repo}/pull/${ref.number}/files#diff-${file.sha}`,
+    viewed: "UNVIEWED",
+  }
+}
+
+/**
+ * Lists the changed files, or with `since` only what changed between the
+ * reviewed commit and the head. After a force-push the comparison also shows
+ * the base changes brought by the rebase.
+ */
 export async function fetchPullFiles(
   octokit: Octokit,
-  ref: { owner: string; repo: string; number: number }
+  ref: { owner: string; repo: string; number: number },
+  since?: { base: string; head: string }
 ): Promise<PullFiles> {
+  if (since) {
+    const { data } = await octokit.rest.repos.compareCommitsWithBasehead({
+      owner: ref.owner,
+      repo: ref.repo,
+      basehead: `${since.base}...${since.head}`,
+      per_page: 100,
+    })
+    const compared = (data.files ?? []).slice(0, MAX_FILES)
+    const files = compared.map((file) => toPullFile(ref, file))
+    const { pullRequestId, states } = await fetchViewedStates(octokit, ref)
+    for (const file of files)
+      file.viewed = states.get(file.filename) ?? "UNVIEWED"
+    return {
+      pullRequestId,
+      files,
+      truncated: (data.files?.length ?? 0) > MAX_FILES,
+      totalAdditions: files.reduce((sum, file) => sum + file.additions, 0),
+      totalDeletions: files.reduce((sum, file) => sum + file.deletions, 0),
+      sinceReview: { ...since, commits: data.ahead_by },
+    }
+  }
   const files: PullFile[] = []
   let truncated = false
   for await (const { data } of octokit.paginate.iterator(
@@ -106,16 +161,7 @@ export async function fetchPullFiles(
         truncated = true
         break
       }
-      files.push({
-        filename: file.filename,
-        previousFilename: file.previous_filename ?? null,
-        status: file.status,
-        additions: file.additions,
-        deletions: file.deletions,
-        patch: file.patch ?? null,
-        url: `https://github.com/${ref.owner}/${ref.repo}/pull/${ref.number}/files#diff-${file.sha}`,
-        viewed: "UNVIEWED",
-      })
+      files.push(toPullFile(ref, file))
     }
     if (truncated) break
   }
@@ -128,5 +174,6 @@ export async function fetchPullFiles(
     truncated,
     totalAdditions: files.reduce((sum, file) => sum + file.additions, 0),
     totalDeletions: files.reduce((sum, file) => sum + file.deletions, 0),
+    sinceReview: null,
   }
 }

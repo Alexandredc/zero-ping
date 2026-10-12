@@ -14,6 +14,13 @@ export type ReviewThread = {
   comments: Comment[]
 }
 
+export type Review = {
+  author: string | null
+  state: string
+  submittedAt: string
+  commitOid: string | null
+}
+
 export type ReviewRequest = { user: string } | { team: string }
 
 export type SubjectDetails = {
@@ -28,6 +35,9 @@ export type SubjectDetails = {
   labels: string[]
   additions: number | null
   deletions: number | null
+  changedFiles: number | null
+  headOid: string | null
+  reviews: Review[]
   ciState: string | null
   reviewDecision: string | null
   reviewRequests: ReviewRequest[]
@@ -50,11 +60,20 @@ export type Awaiting = {
   since: Date
 }
 
+/** The viewer's latest review, and whether commits were pushed after it. */
+export type LastReview = {
+  oid: string | null
+  at: Date
+  state: string
+  newCommits: boolean
+}
+
 export type Analysis = {
   view: View
   reviewRequest: "direct" | "team" | null
   requestedAt: Date | null
   awaiting: Awaiting | null
+  lastReview: LastReview | null
 }
 
 const sameLogin = (a: string | null, b: string) =>
@@ -125,6 +144,35 @@ export function findAwaiting(
   }
 }
 
+/**
+ * The viewer's latest review sets the commit they last read. Its verdict comes
+ * from their latest approval or change request: a reply in a review thread is
+ * also a COMMENTED review, and must not hide a change request.
+ */
+export function findLastReview(
+  details: SubjectDetails,
+  viewer: Viewer
+): LastReview | null {
+  const own = details.reviews
+    .filter((review) => sameLogin(review.author, viewer.login))
+    .sort((a, b) => a.submittedAt.localeCompare(b.submittedAt))
+  const latest = own.at(-1)
+  if (!latest) return null
+  const verdict = own.findLast(
+    (review) =>
+      review.state === "APPROVED" || review.state === "CHANGES_REQUESTED"
+  )
+  return {
+    oid: latest.commitOid,
+    at: new Date(latest.submittedAt),
+    state: verdict?.state ?? latest.state,
+    newCommits:
+      latest.commitOid !== null &&
+      details.headOid !== null &&
+      latest.commitOid !== details.headOid,
+  }
+}
+
 export function analyze(details: SubjectDetails, viewer: Viewer): Analysis {
   const isReviewer = (request: ReviewRequest): "direct" | "team" | null => {
     if ("user" in request)
@@ -155,11 +203,22 @@ export function analyze(details: SubjectDetails, viewer: Viewer): Analysis {
   const awaiting =
     details.state === "OPEN" ? findAwaiting(details, viewer) : null
 
-  let view: View = "other"
-  if (reviewRequest) view = "review"
-  else if (awaiting) view = "awaiting"
-  else if (sameLogin(details.author, viewer.login) && details.state === "OPEN")
-    view = "mine"
+  const isAuthor = sameLogin(details.author, viewer.login)
+  const lastReview =
+    details.kind === "PullRequest" && !isAuthor
+      ? findLastReview(details, viewer)
+      : null
+  // Commits pushed after the viewer asked for changes usually answer them.
+  const changesAddressed =
+    details.state === "OPEN" &&
+    !details.isDraft &&
+    lastReview?.state === "CHANGES_REQUESTED" &&
+    lastReview.newCommits
 
-  return { view, reviewRequest, requestedAt, awaiting }
+  let view: View = "other"
+  if (reviewRequest || changesAddressed) view = "review"
+  else if (awaiting) view = "awaiting"
+  else if (isAuthor && details.state === "OPEN") view = "mine"
+
+  return { view, reviewRequest, requestedAt, awaiting, lastReview }
 }
