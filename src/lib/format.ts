@@ -40,3 +40,17 @@ export function nextMorning(weekday?: number, now: Date = new Date()): Date {
   date.setDate(date.getDate() + days)
   return date
 }
+
+/** "aujourd'hui 17:30", "demain 09:00" or "lun. 13 oct. 09:00". */
+export function formatWhen(date: Date, now: Date = new Date()): string {
+  const time = date.toLocaleTimeString("fr", {
+    hour: "2-digit",
+    minute: "2-digit",
+  })
+  const startOfDay = (d: Date) =>
+    new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime()
+  const days = Math.round((startOfDay(date) - startOfDay(now)) / 86_400_000)
+  if (days === 0) return `aujourd'hui ${time}`
+  if (days === 1) return `demain ${time}`
+  return `${date.toLocaleDateString("fr", { weekday: "short", day: "numeric", month: "short" })} ${time}`
+}

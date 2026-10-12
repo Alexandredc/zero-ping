@@ -50,18 +50,22 @@ describe("computePriority", () => {
       { ...base, waitingSince: new Date("2026-10-07T12:00:00Z") },
       NOW
     )
-    expect(fiveDays.reasons).toContainEqual({
-      label: "En attente depuis 5 j",
-      weight: 20,
-    })
+    expect(fiveDays.reasons).toContainEqual(
+      expect.objectContaining({
+        label: "En attente depuis 5 j",
+        weight: 20,
+      })
+    )
     const twoDays = computePriority(
       { ...base, waitingSince: new Date("2026-10-10T12:00:00Z") },
       NOW
     )
-    expect(twoDays.reasons).toContainEqual({
-      label: "En attente depuis 2 j",
-      weight: 8,
-    })
+    expect(twoDays.reasons).toContainEqual(
+      expect.objectContaining({
+        label: "En attente depuis 2 j",
+        weight: 8,
+      })
+    )
   })
 
   it("boosts urgent labels and small PRs, and lowers drafts", () => {
@@ -80,8 +84,12 @@ describe("computePriority", () => {
       { ...base, view: "mine", ciState: "FAILURE" },
       NOW
     )
-    expect(review.reasons).toContainEqual({ label: "CI en échec", weight: -10 })
-    expect(mine.reasons).toContainEqual({ label: "CI en échec", weight: 15 })
+    expect(review.reasons).toContainEqual(
+      expect.objectContaining({ label: "CI en échec", weight: -10 })
+    )
+    expect(mine.reasons).toContainEqual(
+      expect.objectContaining({ label: "CI en échec", weight: 15 })
+    )
   })
 
   it("ignores a low-confidence AI urgency and asks for a check", () => {
@@ -89,10 +97,12 @@ describe("computePriority", () => {
       { ...base, aiUrgency: 3, aiConfidence: 0.9 },
       NOW
     )
-    expect(confident.reasons).toContainEqual({
-      label: "IA : bloquante ou urgente",
-      weight: 30,
-    })
+    expect(confident.reasons).toContainEqual(
+      expect.objectContaining({
+        label: "IA : bloquante ou urgente",
+        weight: 30,
+      })
+    )
     const unsure = computePriority(
       { ...base, aiUrgency: 3, aiConfidence: 0.2 },
       NOW
@@ -125,5 +135,31 @@ describe("computePriority", () => {
       NOW
     )
     expect(everything.priority).toBe(100)
+  })
+})
+
+describe("priority reasons", () => {
+  it("explain every rule they apply", () => {
+    const { reasons } = computePriority(
+      {
+        ...base,
+        reviewRequest: "direct",
+        approvals: 1,
+        pendingReviewers: 1,
+        awaitingMe: true,
+        aiQuestionProbability: 0.9,
+        labels: ["urgent"],
+        additions: 10,
+        deletions: 0,
+        ciState: "FAILURE",
+        isDraft: true,
+        waitingSince: new Date("2026-10-01T00:00:00Z"),
+        aiUrgency: 2,
+        aiConfidence: 0.8,
+      },
+      NOW
+    )
+    expect(reasons.length).toBeGreaterThan(8)
+    for (const reason of reasons) expect(reason.hint).toBeTruthy()
   })
 })

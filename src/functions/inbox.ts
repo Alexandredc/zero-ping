@@ -2,17 +2,28 @@ import { createServerFn } from "@tanstack/react-start"
 import { z } from "zod"
 import {
   countFolders,
+  countPings,
   getConversation,
+  getPullFiles,
+  generateSummary,
+  getAttention,
+  getSettings,
+  getSummary,
+  getSlackDiscussions,
+  replyInSlack,
+  savePreferences,
   listAccessibleRepos,
   listInbox,
   listRepos,
   markDone,
+  markFileViewed,
   reply,
   setRepoTracked,
   snooze,
   submitReview,
 } from "@/server/inbox/actions"
 import { ensureSyncLoop, getSyncStatus, syncNow } from "@/server/inbox/loop"
+import { preferencesPatchSchema } from "@/server/preferences"
 
 const folderSchema = z.enum([
   "review",
@@ -95,3 +106,66 @@ export const setRepo = createServerFn({ method: "POST" })
     await setRepoTracked(data.fullName, data.tracked)
     if (data.tracked) void syncNow()
   })
+
+export const getSlack = createServerFn({ method: "GET" })
+  .validator(z.object({ key: z.string() }))
+  .handler(({ data }) => getSlackDiscussions(data.key))
+
+export const refreshSlack = createServerFn({ method: "POST" })
+  .validator(z.object({ key: z.string() }))
+  .handler(({ data }) => getSlackDiscussions(data.key, true))
+
+export const postSlackReply = createServerFn({ method: "POST" })
+  .validator(
+    z.object({
+      key: z.string(),
+      permalink: z.url(),
+      message: z.string().trim().min(1).max(4000),
+    })
+  )
+  .handler(({ data }) => replyInSlack(data.key, data.permalink, data.message))
+
+export const getAppSettings = createServerFn({ method: "GET" }).handler(() =>
+  getSettings()
+)
+
+export const setPreferences = createServerFn({ method: "POST" })
+  .validator(preferencesPatchSchema)
+  .handler(({ data }) => savePreferences(data))
+
+export const getItemSummary = createServerFn({ method: "GET" })
+  .validator(z.object({ key: z.string() }))
+  .handler(({ data }) => getSummary(data.key))
+
+export const summarizeItem = createServerFn({ method: "POST" })
+  .validator(
+    z.object({
+      key: z.string(),
+      length: z.enum(["short", "standard", "detailed"]),
+    })
+  )
+  .handler(({ data }) => generateSummary(data.key, data.length))
+
+export const getAttentionEvents = createServerFn({ method: "GET" })
+  .validator(z.object({ afterId: z.number().int().nullable() }))
+  .handler(({ data }) => getAttention(data.afterId))
+
+export const getPingCount = createServerFn({ method: "GET" }).handler(() =>
+  countPings()
+)
+
+export const getItemFiles = createServerFn({ method: "GET" })
+  .validator(z.object({ key: z.string() }))
+  .handler(({ data }) => getPullFiles(data.key))
+
+export const setFileViewedState = createServerFn({ method: "POST" })
+  .validator(
+    z.object({
+      pullRequestId: z.string(),
+      path: z.string(),
+      viewed: z.boolean(),
+    })
+  )
+  .handler(({ data }) =>
+    markFileViewed(data.pullRequestId, data.path, data.viewed)
+  )

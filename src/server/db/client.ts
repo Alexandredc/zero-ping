@@ -5,6 +5,7 @@ import { PGlite } from "@electric-sql/pglite"
 import { drizzle } from "drizzle-orm/pglite"
 import type { PgliteDatabase } from "drizzle-orm/pglite"
 import { migrate } from "drizzle-orm/pglite/migrator"
+import { acquireLock } from "./lock"
 import * as schema from "./schema"
 
 export type Database = PgliteDatabase & { $client: PGlite }
@@ -12,8 +13,19 @@ export type Database = PgliteDatabase & { $client: PGlite }
 const MIGRATIONS_FOLDER = path.resolve(process.cwd(), "drizzle")
 
 export async function createDatabase(dataDir?: string): Promise<Database> {
-  if (dataDir) await mkdir(dataDir, { recursive: true })
-  const client = new PGlite(dataDir)
+  if (!dataDir) return openDatabase(new PGlite())
+  await mkdir(dataDir, { recursive: true })
+  const release = acquireLock(`${dataDir}.lock`)
+  process.once("exit", release)
+  try {
+    return await openDatabase(new PGlite(dataDir))
+  } catch (error) {
+    release()
+    throw error
+  }
+}
+
+async function openDatabase(client: PGlite): Promise<Database> {
   const db: Database = drizzle({ client })
   await migrate(db, { migrationsFolder: MIGRATIONS_FOLDER })
   return db

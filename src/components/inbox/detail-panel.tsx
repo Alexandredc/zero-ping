@@ -2,14 +2,25 @@ import { useQuery } from "@tanstack/react-query"
 import { useEffect, useRef, useState } from "react"
 import {
   CheckIcon,
+  ChevronDownIcon,
   ClockIcon,
-  ExternalLinkIcon,
   FileCodeIcon,
   MessageSquareReplyIcon,
   Undo2Icon,
   XIcon,
 } from "lucide-react"
 import { Markdown } from "./markdown"
+import { SlackDiscussions } from "./slack-discussions"
+import { SummaryCard } from "./summary-card"
+import { ActionHint } from "./hint"
+import { AiReviewMenu } from "./ai-review-menu"
+import { DiffView } from "./diff-view"
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { useHotkeys } from "@/hooks/use-hotkeys"
+import { GitHubIcon, SlackIcon } from "@/components/brand-icons"
+import { useConversationSources } from "@/hooks/use-conversation-sources"
+import { NEEDS_CHECK_HINT } from "@/server/inbox/priority"
+import type { PriorityReason } from "@/server/inbox/priority"
 import type { Item } from "@/server/db/schema"
 import type {
   ConversationComment,
@@ -23,8 +34,10 @@ import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuCheckboxItem,
   DropdownMenuGroup,
   DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Kbd } from "@/components/ui/kbd"
@@ -32,7 +45,7 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Spinner } from "@/components/ui/spinner"
 import { Textarea } from "@/components/ui/textarea"
-import { avatarUrl, nextMorning, timeAgo } from "@/lib/format"
+import { avatarUrl, formatWhen, nextMorning, timeAgo } from "@/lib/format"
 
 type ReplyTarget =
   | { type: "conversation" }
@@ -145,6 +158,51 @@ function Entry({
   )
 }
 
+function PriorityExplanation({
+  priority,
+  reasons,
+  needsCheck,
+}: {
+  priority: number
+  reasons: PriorityReason[]
+  needsCheck: boolean
+}) {
+  const counted = reasons.filter((reason) => reason.weight !== 0)
+  if (counted.length === 0 && !needsCheck) return null
+  return (
+    <section className="flex flex-col gap-2 rounded-lg border bg-muted/40 p-3">
+      <h3 className="text-xs font-medium text-muted-foreground">
+        Pourquoi la priorité {priority} sur 100
+      </h3>
+      <ul className="flex flex-col gap-1.5 text-xs">
+        {counted.map((reason) => (
+          <li key={reason.label} className="flex gap-2">
+            <span className="w-8 shrink-0 text-right font-mono tabular-nums">
+              {reason.weight > 0 ? "+" : "−"}
+              {Math.abs(reason.weight)}
+            </span>
+            <span>
+              <span className="font-medium">{reason.label}</span>
+              {reason.hint && (
+                <span className="text-muted-foreground"> · {reason.hint}</span>
+              )}
+            </span>
+          </li>
+        ))}
+        {needsCheck && (
+          <li className="flex gap-2 text-heat-foreground">
+            <span className="w-8 shrink-0 text-right font-mono">?</span>
+            <span>
+              <span className="font-medium">À vérifier</span> ·{" "}
+              {NEEDS_CHECK_HINT}
+            </span>
+          </li>
+        )}
+      </ul>
+    </section>
+  )
+}
+
 export function DetailPanel({
   item,
   composerRef,
@@ -158,12 +216,22 @@ export function DetailPanel({
   const actions = useInboxActions()
   const [body, setBody] = useState("")
   const [target, setTarget] = useState<ReplyTarget>({ type: "conversation" })
+  const [tab, setTab] = useState<"conversation" | "files">("conversation")
   const bottomRef = useRef<HTMLDivElement>(null)
+  const isPull = item.kind === "PullRequest"
+  const { sources, toggle: toggleSource } = useConversationSources()
 
   useEffect(() => {
     setBody("")
     setTarget({ type: "conversation" })
+    setTab("conversation")
   }, [item.key])
+
+  useHotkeys({
+    d: () =>
+      isPull &&
+      setTab((current) => (current === "files" ? "conversation" : "files")),
+  })
 
   const conversation = data?.conversation ?? null
   const canReply = item.kind === "PullRequest" || item.kind === "Issue"
@@ -220,51 +288,76 @@ export function DetailPanel({
               {item.title}
             </h2>
           </div>
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            onClick={onClose}
-            aria-label="Fermer"
-          >
-            <XIcon />
-          </Button>
+          <ActionHint content="Fermer le détail (Échap)">
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              onClick={onClose}
+              aria-label="Fermer"
+            >
+              <XIcon />
+            </Button>
+          </ActionHint>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            nativeButton={false}
-            render={<a href={githubUrl} target="_blank" rel="noreferrer" />}
-          >
-            <ExternalLinkIcon data-icon="inline-start" />
-            Ouvrir sur GitHub
-            <Kbd>o</Kbd>
-          </Button>
-          <Button
-            variant={isDone ? "outline" : "default"}
-            size="sm"
-            onClick={() =>
-              actions.done.mutate({ key: item.key, done: !isDone })
+          <ActionHint
+            content={
+              item.awaitingUrl
+                ? "Ouvre GitHub directement sur le message qui attend ta réponse (o)."
+                : "Ouvre la PR ou l'issue sur GitHub dans un nouvel onglet (o)."
             }
-            disabled={actions.done.isPending}
           >
-            {isDone ? (
-              <Undo2Icon data-icon="inline-start" />
-            ) : (
-              <CheckIcon data-icon="inline-start" />
-            )}
-            {isDone ? "Remettre dans l'inbox" : "Marquer comme traité"}
-            <Kbd>e</Kbd>
-          </Button>
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              render={<Button variant="outline" size="sm" />}
+            <Button
+              variant="outline"
+              size="sm"
+              nativeButton={false}
+              render={<a href={githubUrl} target="_blank" rel="noreferrer" />}
             >
-              <ClockIcon data-icon="inline-start" />
-              Mettre en pause
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start">
+              <GitHubIcon data-icon="inline-start" />
+              Ouvrir sur GitHub
+              <Kbd>o</Kbd>
+            </Button>
+          </ActionHint>
+          <ActionHint
+            content={
+              isDone
+                ? "Remet l'élément dans son dossier de l'inbox (e)."
+                : "Retire l'élément de l'inbox et le marque « Done » dans tes notifications GitHub (e). Il revient tout seul s'il y a du nouveau."
+            }
+          >
+            <Button
+              variant={isDone ? "outline" : "default"}
+              size="sm"
+              onClick={() =>
+                actions.done.mutate({ key: item.key, done: !isDone })
+              }
+              disabled={actions.done.isPending}
+            >
+              {isDone ? (
+                <Undo2Icon data-icon="inline-start" />
+              ) : (
+                <CheckIcon data-icon="inline-start" />
+              )}
+              {isDone ? "Remettre dans l'inbox" : "Marquer comme traité"}
+              <Kbd>e</Kbd>
+            </Button>
+          </ActionHint>
+          <DropdownMenu>
+            <ActionHint content="Cache l'élément jusqu'à l'heure choisie, puis le fait revenir dans son dossier. En attendant, il est rangé dans « En pause ». Rien ne change sur GitHub.">
+              <DropdownMenuTrigger
+                render={<Button variant="outline" size="sm" />}
+              >
+                <ClockIcon data-icon="inline-start" />
+                {item.snoozedUntil && item.snoozedUntil > new Date()
+                  ? `En pause jusqu'à ${formatWhen(item.snoozedUntil)}`
+                  : "Mettre en pause"}
+              </DropdownMenuTrigger>
+            </ActionHint>
+            <DropdownMenuContent align="start" className="w-64">
               <DropdownMenuGroup>
+                <DropdownMenuLabel>
+                  Faire revenir cet élément…
+                </DropdownMenuLabel>
                 {snoozeOptions.map((option) => (
                   <DropdownMenuItem
                     key={option.label}
@@ -276,6 +369,9 @@ export function DetailPanel({
                     }
                   >
                     {option.label}
+                    <span className="ml-auto text-xs text-muted-foreground">
+                      {formatWhen(option.until())}
+                    </span>
                   </DropdownMenuItem>
                 ))}
                 {item.snoozedUntil && (
@@ -290,77 +386,187 @@ export function DetailPanel({
               </DropdownMenuGroup>
             </DropdownMenuContent>
           </DropdownMenu>
+          {isPull && item.state === "OPEN" && (
+            <AiReviewMenu itemKey={item.key} />
+          )}
         </div>
       </header>
 
-      <ScrollArea className="min-h-0 flex-1">
-        <div className="flex flex-col gap-5 px-5 py-4">
-          {item.awaitingMe && item.awaitingExcerpt && (
-            <Alert>
-              <MessageSquareReplyIcon />
-              <AlertTitle>@{item.awaitingFrom} attend ta réponse</AlertTitle>
-              <AlertDescription>
-                <p className="line-clamp-3">{item.awaitingExcerpt}</p>
-                {item.awaitingUrl && (
-                  <a
-                    href={item.awaitingUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="text-primary underline underline-offset-2"
-                  >
-                    Voir le message sur GitHub
-                  </a>
+      {isPull && (
+        <Tabs
+          value={tab}
+          onValueChange={(value) => setTab(value as "conversation" | "files")}
+          className="border-b px-5"
+        >
+          <TabsList variant="line" className="h-9">
+            <TabsTrigger value="conversation">Conversation</TabsTrigger>
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                render={
+                  <Button
+                    variant="ghost"
+                    size="xs"
+                    aria-label="Choisir les sources de la conversation"
+                    className="-ml-1"
+                  />
+                }
+              >
+                {sources.github && <GitHubIcon className="size-3.5" />}
+                {sources.slack && (
+                  <SlackIcon className="size-3.5" aria-hidden />
                 )}
-              </AlertDescription>
-            </Alert>
-          )}
+                <ChevronDownIcon />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start">
+                <DropdownMenuGroup>
+                  <DropdownMenuLabel>
+                    Afficher dans la conversation
+                  </DropdownMenuLabel>
+                  <DropdownMenuCheckboxItem
+                    checked={sources.github}
+                    onCheckedChange={(checked) => {
+                      toggleSource("github", checked)
+                      setTab("conversation")
+                    }}
+                  >
+                    <GitHubIcon className="size-3.5" />
+                    GitHub
+                  </DropdownMenuCheckboxItem>
+                  <DropdownMenuCheckboxItem
+                    checked={sources.slack}
+                    onCheckedChange={(checked) => {
+                      toggleSource("slack", checked)
+                      setTab("conversation")
+                    }}
+                  >
+                    <SlackIcon className="size-3.5" aria-hidden />
+                    Slack
+                  </DropdownMenuCheckboxItem>
+                </DropdownMenuGroup>
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <TabsTrigger value="files">
+              Fichiers modifiés
+              {item.additions !== null && (
+                <span className="font-mono text-xs tabular-nums">
+                  <span className="text-diff-add-strong">
+                    +{item.additions}
+                  </span>{" "}
+                  <span className="text-diff-del-strong">
+                    −{item.deletions ?? 0}
+                  </span>
+                </span>
+              )}
+              <Kbd>d</Kbd>
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
+      )}
 
-          {isPending && (
-            <div className="flex flex-col gap-3">
-              <Skeleton className="h-4 w-2/3" />
-              <Skeleton className="h-20 w-full" />
-              <Skeleton className="h-16 w-full" />
-            </div>
-          )}
-          {error && (
-            <Alert variant="destructive">
-              <AlertTitle>Conversation indisponible</AlertTitle>
-              <AlertDescription>
-                {error.message}. Ouvre-la sur GitHub en attendant.
-              </AlertDescription>
-            </Alert>
-          )}
-          {data && !conversation && (
-            <p className="text-sm text-muted-foreground">
-              Ce type de notification ne s'affiche pas ici. Ouvre-la sur GitHub.
-            </p>
-          )}
-          {conversation && (
-            <>
-              <CommentBlock
-                comment={conversation.description}
-                note="a ouvert"
+      <ScrollArea className="min-h-0 flex-1">
+        {tab === "files" && isPull ? (
+          <div className="px-5 py-4">
+            <DiffView itemKey={item.key} htmlUrl={item.htmlUrl} />
+          </div>
+        ) : (
+          <div className="flex flex-col gap-5 px-5 py-4">
+            {canReply && (
+              <SummaryCard
+                itemKey={item.key}
+                kind={item.kind === "PullRequest" ? "PR" : "issue"}
               />
-              {conversation.entries.map((entry) => (
-                <Entry
-                  key={entry.id}
-                  entry={entry}
-                  onReplyInThread={setTarget}
-                />
-              ))}
-            </>
-          )}
-          <div ref={bottomRef} />
-        </div>
+            )}
+            <PriorityExplanation
+              priority={item.priority}
+              reasons={item.priorityReasons}
+              needsCheck={item.needsCheck}
+            />
+            {item.awaitingMe && item.awaitingExcerpt && (
+              <Alert>
+                <MessageSquareReplyIcon />
+                <AlertTitle>@{item.awaitingFrom} attend ta réponse</AlertTitle>
+                <AlertDescription>
+                  <p className="line-clamp-3">{item.awaitingExcerpt}</p>
+                  {item.awaitingUrl && (
+                    <a
+                      href={item.awaitingUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-primary underline underline-offset-2"
+                    >
+                      Voir le message sur GitHub
+                    </a>
+                  )}
+                </AlertDescription>
+              </Alert>
+            )}
+
+            {isPull && sources.slack && <SlackDiscussions itemKey={item.key} />}
+            {(!isPull || sources.github) && (
+              <>
+                {canReply && (
+                  <header className="flex items-center gap-2">
+                    <GitHubIcon />
+                    <h3 className="text-sm font-semibold">GitHub</h3>
+                    {conversation && (
+                      <span className="text-xs text-muted-foreground">
+                        {conversation.entries.length + 1} message
+                        {conversation.entries.length > 0 ? "s" : ""}
+                      </span>
+                    )}
+                  </header>
+                )}
+                {isPending && (
+                  <div className="flex flex-col gap-3">
+                    <Skeleton className="h-4 w-2/3" />
+                    <Skeleton className="h-20 w-full" />
+                    <Skeleton className="h-16 w-full" />
+                  </div>
+                )}
+                {error && (
+                  <Alert variant="destructive">
+                    <AlertTitle>Conversation indisponible</AlertTitle>
+                    <AlertDescription>
+                      {error.message}. Ouvre-la sur GitHub en attendant.
+                    </AlertDescription>
+                  </Alert>
+                )}
+                {data && !conversation && (
+                  <p className="text-sm text-muted-foreground">
+                    Ce type de notification ne s'affiche pas ici. Ouvre-la sur
+                    GitHub.
+                  </p>
+                )}
+                {conversation && (
+                  <>
+                    <CommentBlock
+                      comment={conversation.description}
+                      note="a ouvert"
+                    />
+                    {conversation.entries.map((entry) => (
+                      <Entry
+                        key={entry.id}
+                        entry={entry}
+                        onReplyInThread={setTarget}
+                      />
+                    ))}
+                  </>
+                )}
+              </>
+            )}
+            <div ref={bottomRef} />
+          </div>
+        )}
       </ScrollArea>
 
       {canReply && (
         <footer className="flex flex-col gap-2 border-t bg-card px-5 py-3">
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <GitHubIcon className="size-3.5 text-foreground" />
             {target.type === "thread" ? (
               <>
                 <span className="truncate">
-                  Réponse dans le fil{" "}
+                  Réponse dans le fil GitHub{" "}
                   <span className="font-mono">{target.path}</span>
                   {target.author && ` (@${target.author})`}
                 </span>
@@ -373,7 +579,7 @@ export function DetailPanel({
                 </Button>
               </>
             ) : (
-              <span>Commentaire sur la conversation</span>
+              <span>Commentaire sur la conversation GitHub</span>
             )}
             <span className="ml-auto hidden items-center gap-1 sm:flex">
               <Kbd>r</Kbd> pour écrire, <Kbd>⌘</Kbd>
@@ -397,37 +603,67 @@ export function DetailPanel({
           <div className="flex flex-wrap items-center justify-end gap-2">
             {canReview && (
               <>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => review("REQUEST_CHANGES")}
-                  disabled={actions.review.isPending || !body.trim()}
+                {/* The span keeps the hint visible on a disabled button. */}
+                <ActionHint
+                  side="top"
+                  content="Envoie une review « Changes requested » avec ton texte comme commentaire : la PR ne peut plus être mergée sans nouvelle approbation. Écris d'abord ce qu'il faut changer."
                 >
-                  Demander des changements
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => review("APPROVE")}
-                  disabled={actions.review.isPending}
+                  <span className="inline-flex">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => review("REQUEST_CHANGES")}
+                      disabled={actions.review.isPending || !body.trim()}
+                    >
+                      Demander des changements
+                    </Button>
+                  </span>
+                </ActionHint>
+                <ActionHint
+                  side="top"
+                  content="Envoie une review « Approve » sur GitHub, avec ton texte en commentaire s'il y en a un."
                 >
-                  {actions.review.isPending ? (
-                    <Spinner data-icon="inline-start" />
-                  ) : (
-                    <CheckIcon data-icon="inline-start" />
-                  )}
-                  Approuver
-                </Button>
+                  <span className="inline-flex">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => review("APPROVE")}
+                      disabled={actions.review.isPending}
+                    >
+                      {actions.review.isPending ? (
+                        <Spinner data-icon="inline-start" />
+                      ) : (
+                        <CheckIcon data-icon="inline-start" />
+                      )}
+                      Approuver
+                    </Button>
+                  </span>
+                </ActionHint>
               </>
             )}
-            <Button
-              size="sm"
-              onClick={send}
-              disabled={!body.trim() || actions.reply.isPending}
+            <ActionHint
+              side="top"
+              content={
+                target.type === "thread"
+                  ? "Publie ta réponse dans ce fil de review sur GitHub (⌘ Entrée)."
+                  : "Publie ton texte comme commentaire sur la conversation GitHub, sans review (⌘ Entrée)."
+              }
             >
-              {actions.reply.isPending && <Spinner data-icon="inline-start" />}
-              Envoyer
-            </Button>
+              <span className="inline-flex">
+                <Button
+                  size="sm"
+                  onClick={send}
+                  disabled={!body.trim() || actions.reply.isPending}
+                >
+                  {actions.reply.isPending ? (
+                    <Spinner data-icon="inline-start" />
+                  ) : (
+                    <GitHubIcon data-icon="inline-start" />
+                  )}
+                  Envoyer sur GitHub
+                </Button>
+              </span>
+            </ActionHint>
           </div>
         </footer>
       )}

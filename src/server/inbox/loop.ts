@@ -1,11 +1,14 @@
 import { getDb } from "@/server/db/client"
 import { getOctokit, getViewer } from "@/server/github/client"
+import { attentionReady, markAttentionReady } from "@/server/inbox/attention"
 import {
+  ENRICH_LIMIT,
   enrichItems,
   pollNotifications,
   rescoreAll,
   searchReviewRequests,
 } from "@/server/inbox/sync"
+import { prefetchLookups } from "@/server/slack/lookups"
 
 export type SyncStatus = {
   running: boolean
@@ -46,8 +49,15 @@ async function runOnce(forceSearch: boolean): Promise<number> {
   ])
   const { pollInterval } = await pollNotifications(db, octokit)
   await searchReviewRequests(db, octokit, forceSearch)
-  await enrichItems(db, octokit, viewer)
+  const notify = await attentionReady(db)
+  const enriched = await enrichItems(db, octokit, viewer, undefined, { notify })
+  // The initial backlog is done once a sync no longer fills a whole batch.
+  if (!notify && enriched < ENRICH_LIMIT) await markAttentionReady(db)
   await rescoreAll(db)
+  // Agent sessions are slow: they run after the sync instead of delaying it.
+  void prefetchLookups(db).catch((error: unknown) =>
+    console.error("[slack]", error)
+  )
   return Math.max(MIN_INTERVAL_S, pollInterval)
 }
 

@@ -16,6 +16,6 @@ export default [
     },
   },
   {
-    ignores: ["eslint.config.js", ".prettierrc", ".agents/**", ".claude/**", "drizzle/**", "src/components/ui/**", "src/routeTree.gen.ts"],
+    ignores: ["eslint.config.js", ".prettierrc", "dist/**", ".data/**", ".output/**", ".agents/**", ".claude/**", "drizzle/**", "src/components/ui/**", "src/routeTree.gen.ts"],
   },
 ]

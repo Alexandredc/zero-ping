@@ -6,7 +6,6 @@ import tailwindcss from "@tailwindcss/vite"
 
 const config = defineConfig({
   resolve: { tsconfigPaths: true },
-  server: { allowedHosts: ["triage.test"] },
   plugins: [devtools(), tailwindcss(), tanstackStart(), viteReact()],
 })
 

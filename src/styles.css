@@ -15,6 +15,12 @@
     --color-heat-foreground: var(--heat-foreground);
     --color-signal: var(--signal);
     --color-strip: var(--strip);
+    --color-slack: var(--slack);
+    --color-diff-add: var(--diff-add);
+    --color-diff-add-strong: var(--diff-add-strong);
+    --color-diff-del: var(--diff-del);
+    --color-diff-del-strong: var(--diff-del-strong);
+    --color-slack-surface: var(--slack-surface);
     --color-sidebar-ring: var(--sidebar-ring);
     --color-sidebar-border: var(--sidebar-border);
     --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -79,6 +85,13 @@
     --heat-foreground: oklch(0.42 0.13 45);
     --signal: oklch(0.5 0.19 268);
     --strip: oklch(0.89 0.012 258);
+    /* Slack aubergine, used to tell Slack content apart from GitHub content. */
+    --slack: oklch(0.42 0.13 330);
+    --slack-surface: oklch(0.97 0.012 330);
+    --diff-add: oklch(0.96 0.04 150);
+    --diff-add-strong: oklch(0.5 0.13 150);
+    --diff-del: oklch(0.96 0.03 20);
+    --diff-del-strong: oklch(0.55 0.17 25);
     --chart-1: oklch(0.66 0.19 45);
     --chart-2: oklch(0.5 0.19 268);
     --chart-3: oklch(0.62 0.12 200);
@@ -118,6 +131,12 @@
     --heat-foreground: oklch(0.82 0.12 55);
     --signal: oklch(0.7 0.14 270);
     --strip: oklch(0.3 0.025 264);
+    --slack: oklch(0.74 0.12 330);
+    --slack-surface: oklch(0.22 0.03 330);
+    --diff-add: oklch(0.3 0.06 150 / 45%);
+    --diff-add-strong: oklch(0.75 0.14 150);
+    --diff-del: oklch(0.3 0.07 20 / 45%);
+    --diff-del-strong: oklch(0.72 0.15 22);
     --chart-1: oklch(0.74 0.16 50);
     --chart-2: oklch(0.7 0.14 270);
     --chart-3: oklch(0.72 0.11 200);

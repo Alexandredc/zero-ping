@@ -10,6 +10,8 @@ import { analyze } from "@/server/inbox/analyze"
 import { parseSubjectKey, toItem } from "@/server/inbox/notifications"
 import type { RawNotification } from "@/server/inbox/notifications"
 import { computePriority } from "@/server/inbox/priority"
+import { detectAttention, recordAttention } from "@/server/inbox/attention"
+import type { AttentionDraft } from "@/server/inbox/attention"
 import { fetchStates, fetchSubjects } from "@/server/github/subjects"
 import type { SubjectRef } from "@/server/github/subjects"
 
@@ -17,7 +19,7 @@ const INITIAL_LOOKBACK_MS = 30 * 24 * 60 * 60 * 1000
 const MAX_NOTIFICATION_PAGES = 10
 const REFRESH_ACTIVE_MS = 5 * 60 * 1000
 const SEARCH_INTERVAL_MS = 5 * 60 * 1000
-const ENRICH_LIMIT = 100
+export const ENRICH_LIMIT = 100
 
 type SyncState = {
   notificationsLastModified?: string
@@ -205,9 +207,11 @@ export async function enrichItems(
   db: Database,
   octokit: Octokit,
   viewer: Viewer,
-  candidates?: Item[]
+  candidates?: Item[],
+  options: { notify?: boolean } = {}
 ): Promise<number> {
   const pending = candidates ?? (await itemsToEnrich(db))
+  const attention: AttentionDraft[] = []
   const refs: SubjectRef[] = pending.flatMap((item) => {
     const parsed = parseSubjectKey(item.key)
     return parsed && (item.kind === "PullRequest" || item.kind === "Issue")
@@ -309,8 +313,13 @@ export async function enrichItems(
           needsCheck: priority.needsCheck,
         })
         .where(eq(items.key, item.key))
+      if (options.notify) {
+        const draft = detectAttention(item, enriched, now)
+        if (draft) attention.push(draft)
+      }
     })
   )
+  await recordAttention(db, attention)
   return pending.length
 }
 
@@ -337,7 +346,11 @@ export async function rescoreAll(db: Database) {
       { ...item, waitingSince: waitingSince(item) },
       now
     )
-    if (priority.priority !== item.priority) {
+    const changed =
+      priority.priority !== item.priority ||
+      priority.needsCheck !== item.needsCheck ||
+      JSON.stringify(priority.reasons) !== JSON.stringify(item.priorityReasons)
+    if (changed) {
       await db
         .update(items)
         .set({

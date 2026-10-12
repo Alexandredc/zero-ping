@@ -2,6 +2,7 @@ import {
   boolean,
   integer,
   jsonb,
+  primaryKey,
   snakeCase,
   real,
   text,
@@ -77,3 +78,68 @@ export const items = snakeCase.table("items", {
 
 export type Item = typeof items.$inferSelect
 export type NewItem = typeof items.$inferInsert
+
+export type SlackMatch = "link" | "reference" | "title"
+
+export type SlackDiscussion = {
+  channel: string
+  permalink: string
+  match: SlackMatch
+  messages: { author: string; text: string; postedAt: string }[]
+}
+
+/** Cached result of the agent-driven Slack search, one row per subject. */
+export const slackLookups = snakeCase.table("slack_lookups", {
+  itemKey: text().primaryKey(),
+  status: text().$type<"pending" | "done" | "error">().notNull(),
+  discussions: jsonb().$type<SlackDiscussion[]>().notNull().default([]),
+  error: text(),
+  agent: text().notNull(),
+  startedAt: timestamp({ withTimezone: true }).notNull(),
+  finishedAt: timestamp({ withTimezone: true }),
+})
+
+export type SlackLookup = typeof slackLookups.$inferSelect
+
+export const SUMMARY_LENGTHS = ["short", "standard", "detailed"] as const
+export type SummaryLength = (typeof SUMMARY_LENGTHS)[number]
+
+export type SummaryContent = {
+  tldr: string
+  status: string
+  expectedFromMe: string
+  openQuestions: string[]
+  risks: string[]
+}
+
+/** AI summary of a PR or issue per length, kept until the user asks for a new one. */
+export const summaries = snakeCase.table(
+  "summaries",
+  {
+    itemKey: text().notNull(),
+    length: text().$type<SummaryLength>().notNull().default("detailed"),
+    content: jsonb().$type<SummaryContent>().notNull(),
+    model: text().notNull(),
+    /** Subject activity time when summarised, to tell when it is out of date. */
+    sourceUpdatedAt: timestamp({ withTimezone: true }).notNull(),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [primaryKey({ columns: [table.itemKey, table.length] })]
+)
+
+export type Summary = typeof summaries.$inferSelect
+
+export const ATTENTION_KINDS = ["review", "awaiting", "changes", "ci"] as const
+export type AttentionKind = (typeof ATTENTION_KINDS)[number]
+
+/** Something that newly needs the viewer, turned into a browser notification. */
+export const attentionEvents = snakeCase.table("attention_events", {
+  id: integer().primaryKey().generatedAlwaysAsIdentity(),
+  itemKey: text().notNull(),
+  kind: text().$type<AttentionKind>().notNull(),
+  title: text().notNull(),
+  body: text().notNull(),
+  createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+})
+
+export type AttentionEvent = typeof attentionEvents.$inferSelect
