@@ -1,0 +1,219 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Files changed</title>
+    <link rel="stylesheet" href="app.css" />
+    <style>
+      .range {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-top: 14px;
+        padding: 10px 12px;
+        border-radius: 10px;
+        background: var(--muted);
+        font-size: 13px;
+      }
+      .sumline {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin: 12px 0;
+        color: var(--muted-fg);
+        font-size: 12.5px;
+      }
+      .prog {
+        width: 64px;
+        height: 6px;
+        border-radius: 9px;
+        background: var(--strip);
+      }
+      .prog i {
+        display: block;
+        width: 33%;
+        height: 100%;
+        border-radius: inherit;
+        background: var(--green);
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: 250px 1fr;
+        gap: 14px;
+      }
+      .tree {
+        align-self: start;
+        padding: 8px;
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        font: 12px/1.9 "Geist Mono", monospace;
+      }
+      .tree p {
+        display: flex;
+        gap: 6px;
+        padding: 0 6px;
+        border-radius: 5px;
+      }
+      .tree .in {
+        padding-left: 22px;
+      }
+      .tree .in2 {
+        padding-left: 38px;
+      }
+      .tree .n {
+        margin-left: auto;
+        color: var(--muted-fg);
+      }
+      .tree .seen {
+        color: var(--muted-fg);
+        text-decoration: line-through;
+      }
+      .tree .cur {
+        background: var(--accent);
+      }
+      .file {
+        margin-bottom: 12px;
+        overflow: hidden;
+        border: 1px solid var(--border);
+        border-radius: 10px;
+      }
+      .fh {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 12px;
+        border-bottom: 1px solid var(--border);
+        background: var(--muted);
+        font-size: 12.5px;
+      }
+      .fh .path {
+        font: 12.5px "Geist Mono", monospace;
+      }
+      .since {
+        padding: 0 6px;
+        border: 1px solid #f2c39c;
+        border-radius: 6px;
+        color: var(--heat-fg);
+        font-size: 11px;
+      }
+      .seenbox {
+        margin-left: auto;
+        padding: 1px 8px;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        background: var(--card);
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font: 12.5px/1.7 "Geist Mono", monospace;
+      }
+      td {
+        padding: 0 8px;
+        white-space: pre;
+      }
+      td.ln {
+        width: 40px;
+        color: #a3a8bf;
+        text-align: right;
+      }
+      tr.hunk td {
+        background: rgb(229 231 248 / 0.5);
+        color: var(--muted-fg);
+      }
+      tr.add td {
+        background: var(--green-bg);
+      }
+      tr.del td {
+        background: var(--del-bg);
+      }
+      tr.add td.code::before {
+        content: "+ ";
+        color: var(--green);
+      }
+      tr.del td.code::before {
+        content: "− ";
+        color: var(--red);
+      }
+      tr.ctx td.code::before {
+        content: "  ";
+      }
+      .k {
+        color: #7a3fb0;
+      }
+      .s {
+        color: #2f7a4a;
+      }
+      .c {
+        color: #8a90ad;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="detail" style="height: 100vh">
+      <div class="detail-in" style="padding: 18px 32px">
+        <p class="ref">acme/api#233 <span>⎇ feat/rate-limit → main</span><span class="ci-ok">✓ 14 checks</span><span class="tools">⤡ ✕</span></p>
+        <div class="title-row">
+          <span class="av a1">N</span>
+          <div>
+            <p class="title">Add rate limiting to public endpoints</p>
+            <p class="muted" style="font-size: 12.5px; margin-top: 3px">by nadia · opened 2 days ago</p>
+          </div>
+        </div>
+        <div class="tabs"><span>Conversation</span><span class="on">Files changed <span class="plus">+184</span> <span class="minus">−22</span> <kbd>d</kbd></span></div>
+
+        <div class="range">
+          <span class="seg"><span class="on">Since my review</span><span>Whole PR</span></span>
+          <span class="muted">Your last review was 2 days ago (<span class="mono">4e1c9a2</span>). After a force-push, the diff also includes what the rebase brought.</span>
+        </div>
+        <p class="sumline"><b style="color: var(--fg)">2 commits since your review ·</b> 6 files <span class="plus">+61</span><span class="minus">−9</span><span class="prog"><i></i></span>2/6 viewed<span style="margin-left: auto">Open the diff on GitHub ↗</span></p>
+
+        <div class="grid">
+          <div class="tree">
+            <p>⌄ 📁 src</p>
+            <p class="in">⌄ 📁 middleware</p>
+            <p class="in2 cur"><span>rate-limit.ts</span><span class="n">+38</span></p>
+            <p class="in2 seen"><span class="ok">✓</span>limits.ts<span class="n">+9</span></p>
+            <p class="in">⌄ 📁 routes</p>
+            <p class="in2 seen"><span class="ok">✓</span>public.ts<span class="n">+4</span></p>
+            <p class="in2"><span>keys.ts</span><span class="n">+3</span></p>
+            <p>⌄ 📁 test</p>
+            <p class="in"><span class="ok">rate-limit.test.ts</span><span class="n">+7</span></p>
+            <p><span>README.md</span><span class="n">+0</span></p>
+          </div>
+          <div>
+            <div class="file">
+              <p class="fh">⌄ <span class="path">src/middleware/rate-limit.ts</span><span class="since">changed since</span><span class="plus">+38</span><span class="minus">−6</span><span class="seenbox">☐ Viewed</span>↗</p>
+              <table>
+                <tr class="hunk"><td class="ln"></td><td class="ln"></td><td>@@ -12,9 +12,14 @@ export function rateLimit(options: RateLimitOptions) {</td></tr>
+                <tr class="ctx"><td class="ln">12</td><td class="ln">12</td><td class="code">  <span class="k">const</span> window = options.windowMs ?? <span class="s">60_000</span></td></tr>
+                <tr class="del"><td class="ln">13</td><td class="ln"></td><td class="code">  <span class="k">const</span> limit = <span class="s">60</span></td></tr>
+                <tr class="add"><td class="ln"></td><td class="ln">13</td><td class="code">  <span class="k">const</span> limit = options.limit ?? <span class="s">100</span></td></tr>
+                <tr class="ctx"><td class="ln">14</td><td class="ln">14</td><td class="code"></td></tr>
+                <tr class="ctx"><td class="ln">15</td><td class="ln">15</td><td class="code">  <span class="k">return async</span> (req, res, next) =&gt; {</td></tr>
+                <tr class="add"><td class="ln"></td><td class="ln">16</td><td class="code">    <span class="c">// Internal keys are trusted services: never throttled.</span></td></tr>
+                <tr class="add"><td class="ln"></td><td class="ln">17</td><td class="code">    <span class="k">if</span> (isInternalKey(req.apiKey)) <span class="k">return</span> next()</td></tr>
+                <tr class="ctx"><td class="ln">16</td><td class="ln">18</td><td class="code">    <span class="k">const</span> used = <span class="k">await</span> counter.hit(req.apiKey, window)</td></tr>
+                <tr class="del"><td class="ln">17</td><td class="ln"></td><td class="code">    <span class="k">if</span> (used &gt; limit) <span class="k">return</span> res.status(<span class="s">429</span>).end()</td></tr>
+                <tr class="add"><td class="ln"></td><td class="ln">19</td><td class="code">    <span class="k">if</span> (used &gt; limit) {</td></tr>
+                <tr class="add"><td class="ln"></td><td class="ln">20</td><td class="code">      res.setHeader(<span class="s">"Retry-After"</span>, Math.ceil(counter.resetIn(req.apiKey) / <span class="s">1000</span>))</td></tr>
+                <tr class="add"><td class="ln"></td><td class="ln">21</td><td class="code">      <span class="k">return</span> res.status(<span class="s">429</span>).json({ error: <span class="s">"rate_limited"</span> })</td></tr>
+                <tr class="add"><td class="ln"></td><td class="ln">22</td><td class="code">    }</td></tr>
+                <tr class="ctx"><td class="ln">18</td><td class="ln">23</td><td class="code">    next()</td></tr>
+              </table>
+            </div>
+            <div class="file">
+              <p class="fh">⌄ <span class="path">src/routes/keys.ts</span><span class="plus">+3</span><span class="minus">−0</span><span class="seenbox">☐ Viewed</span>↗</p>
+              <table>
+                <tr class="hunk"><td class="ln"></td><td class="ln"></td><td>@@ -1,4 +1,7 @@</td></tr>
+                <tr class="add"><td class="ln"></td><td class="ln">1</td><td class="code"><span class="k">export function</span> isInternalKey(key: <span class="k">string</span>) {</td></tr>
+                <tr class="add"><td class="ln"></td><td class="ln">2</td><td class="code">  <span class="k">return</span> key.startsWith(<span class="s">"int_"</span>)</td></tr>
+                <tr class="add"><td class="ln"></td><td class="ln">3</td><td class="code">}</td></tr>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </body>
+</html>

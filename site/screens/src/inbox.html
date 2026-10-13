@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Inbox</title>
+    <link rel="stylesheet" href="app.css" />
+  </head>
+  <body data-page="review">
+    <div class="app">
+      <nav class="side" data-side></nav>
+
+      <section class="list">
+        <div class="list-head">
+          <p class="list-title h">⟟ To review</p>
+          <p class="list-hint">Open PRs where your review is requested</p>
+          <div class="filters"><span>Sort: priority</span><span>Type</span><span>CI</span><span>Size</span><span>Jev urgency</span><span>Repo</span></div>
+        </div>
+        <p class="selbar">↑ ↓ navigate · x select</p>
+        <div class="row sel">
+          <span class="gauge hot" style="--l: 0.93">93</span>
+          <div class="row-body">
+            <p class="row-top">acme/api#233 <span class="ci-ok">✓</span><span class="dot"></span><span class="right"><span class="chip slack"># 2</span><span class="chip">M</span><span class="av a1">N</span></span></p>
+            <p class="row-title">Add rate limiting to public endpoints</p>
+            <p class="row-why"><span>Review asked of you</span><span>Urgent label</span><span class="age">2 days ago</span></p>
+          </div>
+        </div>
+        <div class="row">
+          <span class="gauge hot" style="--l: 0.66">66</span>
+          <div class="row-body">
+            <p class="row-top">acme/web#415 <span class="ci-ok">✓</span><span class="dot"></span><span class="right"><span class="chip new">2 new commits</span><span class="chip xs">S</span><span class="av a2">P</span></span></p>
+            <p class="row-title">Fix flaky checkout test on Safari</p>
+            <p class="row-why"><span>Fixes pushed</span><span>Small PR</span><span class="age">5 hours ago</span></p>
+          </div>
+        </div>
+        <div class="row">
+          <span class="gauge" style="--l: 0.44">44</span>
+          <div class="row-body">
+            <p class="row-top">acme/docs#76 <span class="ci-ok">✓</span><span class="right"><span class="chip xs">XS</span><span class="av a4">K</span></span></p>
+            <p class="row-title read">Document the webhook retry policy</p>
+            <p class="row-why"><span>Asked of your team</span><span>Small PR</span><span class="age">1 day ago</span></p>
+          </div>
+        </div>
+        <div class="row">
+          <span class="gauge" style="--l: 0.31">31</span>
+          <div class="row-body">
+            <p class="row-top">acme/mobile#88 <span class="ci-bad">✕</span><span class="right"><span class="chip">L</span><span class="av a3">O</span></span></p>
+            <p class="row-title read">Offline mode for the cart</p>
+            <p class="row-why"><span>Asked of your team</span><span>↓ Failing CI</span><span class="age">3 hours ago</span></p>
+          </div>
+        </div>
+        <div class="row">
+          <span class="gauge" style="--l: 0.18">18</span>
+          <div class="row-body">
+            <p class="row-top">acme/web#402 <span class="ci-ok">✓</span><span class="right"><span class="chip xl">XL</span><span class="av a5">L</span></span></p>
+            <p class="row-title read">Upgrade the router to v2</p>
+            <p class="row-why"><span>Re-review</span><span>↓ Very large PR</span><span class="age">4 days ago</span></p>
+          </div>
+        </div>
+        <div class="row">
+          <span class="gauge" style="--l: 0.12">12</span>
+          <div class="row-body">
+            <p class="row-top">acme/infra#19 <span class="ci-ok">✓</span><span class="right"><span class="chip xs">S</span><span class="av a6">S</span></span></p>
+            <p class="row-title read">Draft: move staging to the new cluster</p>
+            <p class="row-why"><span>Asked of your team</span><span>↓ Draft</span><span class="age">6 days ago</span></p>
+          </div>
+        </div>
+      </section>
+
+      <main class="detail">
+        <div class="detail-in">
+          <p class="ref">acme/api#233 <span>⎇ feat/rate-limit → main</span><span class="ci-ok">✓ 14 checks</span><span class="tools">⤢ ✕</span></p>
+          <div class="title-row">
+            <span class="av a1">N</span>
+            <div>
+              <p class="title">Add rate limiting to public endpoints</p>
+              <p class="muted" style="font-size: 12.5px; margin-top: 3px">by nadia · opened 2 days ago · <span class="chip">Priority: High</span> <span class="chip">uat ✓ deployed</span></p>
+            </div>
+          </div>
+          <div class="actions">
+            <span class="btn">⌥ Open on GitHub <kbd>o</kbd></span>
+            <span class="btn primary">✓ Mark as done <kbd>e</kbd></span>
+            <span class="btn">◷ Snooze</span>
+            <span class="btn">Reviewers</span>
+            <span class="btn">✦ AI review</span>
+          </div>
+          <div class="tabs"><span class="on">Conversation</span><span>Files changed <span class="plus">+184</span> <span class="minus">−22</span> <kbd>d</kbd></span></div>
+
+          <div class="kpi">
+            <p class="kpi-h"><span style="color: var(--primary)">◔</span><b>Jev KPIs</b><span class="muted" style="font-size: 12px">5 min ago ⓘ</span><span class="r">↻</span></p>
+            <div class="kpi-grid">
+              <div class="tile"><small>Production risk ⓘ</small><b class="bad">High</b></div>
+              <div class="tile"><small>Review effort ⓘ</small><b class="ok">~30 min</b></div>
+              <div class="tile"><small>Ready to merge ⓘ</small><b class="watch">Not yet</b></div>
+              <div class="tile"><small>Tests ⓘ</small><b class="watch">Partial</b></div>
+              <div class="tile"><small>Breaking change ⓘ</small><b class="muted">No <span class="unsure">uncertain</span></b></div>
+              <div class="tile"><small>PR clarity ⓘ</small><b class="ok">Clear</b></div>
+              <div class="tile"><small>Expertise needed ⓘ</small><b class="bad">security</b></div>
+            </div>
+          </div>
+
+          <div class="summary">
+            <p class="sum-h">⌄ <span style="color: var(--heat)">✦</span><b>AI summary</b><span class="seg"><span>Short</span><span class="on">Standard</span><span>Detailed</span></span><span class="muted" style="font-size: 12px">3 min ago · sonnet</span><span class="stale">Out of date</span><span class="muted" style="margin-left: auto; font-size: 12.5px">↻ Regenerate</span></p>
+            <div class="sum-b">
+              <p><b>Limits public endpoints to 100 requests per minute and per key, with a Retry-After header.</b></p>
+              <p class="expect"><b>What’s expected from you:</b> your review. otto approved; you are the last reviewer the PR waits for.</p>
+              <p style="margin-top: 8px"><b>Open questions</b></p>
+              <ul><li>Do internal keys keep the same limit? nadia says they are excluded (Slack, #api-team).</li></ul>
+            </div>
+          </div>
+
+          <div class="slack-card">
+            <p class="sum-h"><b style="color: var(--slack)">Slack</b><span class="muted" style="font-size: 12px">1/2 read · checked 1 h ago</span></p>
+            <div class="thread">
+              <p><b>#api-team</b> <span class="muted">· 3 messages</span> <span class="stale">new messages</span></p>
+              <p><b>priya</b> <span class="muted">10:42</span> Do internal keys keep the same limit?</p>
+              <p><b>nadia</b> <span class="muted">10:47</span> No, they’re excluded, it’s in the PR.</p>
+            </div>
+          </div>
+
+          <div class="why">
+            <p><b>Why priority 93 out of 100</b></p>
+            <p><span class="w">+30</span>Review asked of you <span class="muted">· you are named as a reviewer</span></p>
+            <p><span class="w">+20</span>AI: important <span class="muted">· estimated by Jev, 84% confidence</span></p>
+            <p><span class="w">+20</span>Urgent label <span class="muted">· labelled “hotfix”</span></p>
+            <p><span class="w">+15</span>Only your review missing <span class="muted">· otto already approved</span></p>
+            <p><span class="w">+8</span>Waiting for 2 days <span class="muted">· 4 points a day, 20 at most</span></p>
+          </div>
+        </div>
+      </main>
+    </div>
+    <script src="shell.js"></script>
+  </body>
+</html>

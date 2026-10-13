@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>My issues</title>
+    <link rel="stylesheet" href="app.css" />
+    <style>
+      .toggle {
+        display: inline-flex;
+        margin-top: 10px;
+        padding: 2px;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        background: var(--card);
+        font-size: 12px;
+      }
+      .toggle span {
+        padding: 2px 9px;
+        border-radius: 6px;
+        color: var(--muted-fg);
+      }
+      .toggle .on {
+        background: var(--accent);
+        color: var(--fg);
+        font-weight: 600;
+      }
+      .sprint {
+        padding: 10px 16px;
+        border-bottom: 1px solid var(--border);
+        font-size: 12.5px;
+      }
+      .sprint-top {
+        display: flex;
+        justify-content: space-between;
+      }
+      .days {
+        display: flex;
+        gap: 3px;
+        margin-top: 7px;
+      }
+      .days i {
+        flex: 1;
+        height: 5px;
+        border-radius: 2px;
+        background: var(--strip);
+      }
+      .days i.past {
+        background: rgb(38 43 72 / 0.5);
+      }
+      .days i.today {
+        background: var(--heat);
+      }
+      .stack {
+        display: flex;
+        height: 6px;
+        margin-top: 6px;
+        overflow: hidden;
+        border-radius: 9px;
+      }
+      .group {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        padding: 6px 16px;
+        border-bottom: 1px solid var(--border);
+        background: var(--muted);
+        font-size: 12.5px;
+        font-weight: 600;
+      }
+      .group i {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+      }
+      .group em {
+        color: var(--muted-fg);
+        font: normal 11.5px "Geist Mono", monospace;
+      }
+      .label {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        margin-top: 5px;
+        margin-right: 4px;
+        padding: 0 7px;
+        border: 1px solid var(--border);
+        border-radius: 99px;
+        font-size: 11px;
+      }
+      .label i {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+      }
+      .status {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+      }
+      .status i {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+      }
+      .body p + p {
+        margin-top: 6px;
+      }
+    </style>
+  </head>
+  <body data-page="issues">
+    <div class="app">
+      <nav class="side" data-side></nav>
+
+      <section class="list">
+        <div class="list-head">
+          <p class="list-title h">⊙ My issues <span class="chip" style="margin-left: auto; font-family: Geist">Sprint project: Acme Platform ▾</span></p>
+          <p class="list-hint">Your tasks for the current sprint, column by column of the board.</p>
+          <div class="toggle"><span>Assigned 7</span><span class="on">My sprint 5</span><span>Team 23</span></div>
+        </div>
+        <div class="sprint">
+          <p class="sprint-top"><span><b>Sprint 42</b> · Oct 11 → Oct 24</span><span class="muted">day <b style="color: var(--fg)">3</b>/14 · 11 left</span></p>
+          <div class="days"><i class="past"></i><i class="past"></i><i class="today"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+          <div class="stack"><i style="width: 40%; background: #9aa0b8"></i><i style="width: 25%; background: #e3a23b"></i><i style="width: 15%; background: #6f68e0"></i><i style="width: 20%; background: #3f9b62"></i></div>
+        </div>
+
+        <p class="group">⌄ <i style="background: #e3a23b"></i>In Progress <em>2</em></p>
+        <div class="row sel">
+          <span class="gauge hot" style="--l: 0.67">67</span>
+          <div class="row-body">
+            <p class="row-top">acme/web#420<span class="right"><span class="status"><i style="background: #e3a23b"></i>In Progress</span><span class="muted">2 d</span><span class="av a6">S</span></span></p>
+            <p class="row-title">Export invoices as CSV</p>
+            <span class="label"><i style="background: #2a98ad"></i>billing</span><span class="label"><i style="background: #6f68e0"></i>feature</span>
+          </div>
+        </div>
+        <div class="row">
+          <span class="gauge" style="--l: 0.33">33</span>
+          <div class="row-body">
+            <p class="row-top">acme/api#244<span class="right"><span class="status"><i style="background: #e3a23b"></i>In Progress</span><span class="muted">1 d</span><span class="av a6">S</span></span></p>
+            <p class="row-title read">Log slow queries above 500 ms</p>
+            <span class="label"><i style="background: #9aa0b8"></i>observability</span>
+          </div>
+        </div>
+        <p class="group">⌄ <i style="background: #6f68e0"></i>In Review <em>1</em></p>
+        <div class="row">
+          <span class="gauge hot" style="--l: 1">100</span>
+          <div class="row-body">
+            <p class="row-top">acme/api#240<span class="right"><span class="status"><i style="background: #6f68e0"></i>In Review</span><span class="muted">5 h</span><span class="av a6">S</span></span></p>
+            <p class="row-title">Payment webhook drops events after deploy</p>
+            <span class="label"><i style="background: #d6332a"></i>bug</span><span class="label"><i style="background: #ea7a2c"></i>hotfix</span>
+          </div>
+        </div>
+        <p class="group">⌄ <i style="background: #9aa0b8"></i>Todo <em>2</em></p>
+        <div class="row">
+          <span class="gauge" style="--l: 0.33">33</span>
+          <div class="row-body">
+            <p class="row-top">acme/web#431<span class="right"><span class="status"><i style="background: #9aa0b8"></i>Todo</span><span class="muted">3 d</span><span class="av a6">S</span></span></p>
+            <p class="row-title read">Remember the last used filters</p>
+            <span class="label"><i style="background: #6f68e0"></i>feature</span>
+          </div>
+        </div>
+        <div class="row">
+          <span class="gauge" style="--l: 0.06">0</span>
+          <div class="row-body">
+            <p class="row-top">acme/mobile#91<span class="right"><span class="status"><i style="background: #9aa0b8"></i>Todo</span><span class="muted">6 d</span><span class="av a6">S</span></span></p>
+            <p class="row-title read">Rename analytics events</p>
+            <span class="label"><i style="background: #9aa0b8"></i>chore</span>
+          </div>
+        </div>
+      </section>
+
+      <main class="detail">
+        <div class="detail-in">
+          <p class="ref">acme/web#420 <span class="tools">⤢ ✕</span></p>
+          <div class="title-row">
+            <span class="av a2">P</span>
+            <div>
+              <p class="title">Export invoices as CSV</p>
+              <p class="muted" style="font-size: 12.5px; margin-top: 3px">opened by priya · 2 days ago · <span class="chip">Sprint 42</span> <span class="label"><i style="background: #2a98ad"></i>billing</span></p>
+            </div>
+          </div>
+          <div class="actions"><span class="btn"><span class="status"><i style="background: #e3a23b"></i>In Progress</span> · Move to… ▾</span><span class="btn">Assignees</span><span class="btn">Open <kbd>o</kbd></span></div>
+
+          <div class="kpi">
+            <p class="kpi-h"><span style="color: var(--primary)">◔</span><b>Jev KPIs</b><span class="muted" style="font-size: 12px">2 min ago ⓘ</span><span class="r">↻</span></p>
+            <div class="kpi-grid">
+              <div class="tile"><small>Ready to start ⓘ</small><b class="bad">Needs detail</b></div>
+              <div class="tile"><small>Estimated size ⓘ</small><b class="watch">2-3 days</b></div>
+              <div class="tile"><small>Business impact ⓘ</small><b class="ok">Medium</b></div>
+              <div class="tile"><small>Blocked ⓘ</small><b class="ok">No</b></div>
+              <div class="tile"><small>Split it ⓘ</small><b class="watch">Advised</b></div>
+              <div class="tile"><small>Technical risk ⓘ</small><b class="watch">Moderate</b></div>
+              <div class="tile"><small>Your call ⓘ</small><b class="watch">Yes</b></div>
+            </div>
+          </div>
+
+          <div class="summary">
+            <p class="sum-h">⌄ <span style="color: var(--heat)">✦</span><b>AI summary</b><span class="seg"><span class="on">Short</span><span>Standard</span><span>Detailed</span></span><span class="muted" style="font-size: 12px">just now · sonnet</span></p>
+            <div class="sum-b">
+              <p><b>Finance wants a monthly CSV of paid invoices; the columns and the currency format are still open.</b></p>
+              <p class="expect"><b>What’s expected from you:</b> decide whether credit notes go in the same file, priya asked yesterday.</p>
+            </div>
+          </div>
+
+          <div class="comment">
+            <span class="av a2">P</span>
+            <div>
+              <p><b>priya</b> <span class="muted">· yesterday</span></p>
+              <p style="margin-top: 4px">Should credit notes be in the same export, or a second file? Finance is fine either way but wants it before the 24th.</p>
+            </div>
+          </div>
+          <div class="comment">
+            <span class="av a4">K</span>
+            <div>
+              <p><b>kim</b> <span class="muted">· 5 hours ago</span></p>
+              <p style="margin-top: 4px">If we keep one file we need a “type” column. I can pair on the query.</p>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+    <script src="shell.js"></script>
+  </body>
+</html>

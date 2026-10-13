@@ -1,0 +1,595 @@
+/* Light theme of the app (src/styles.css), for the screenshots of the landing page. */
+@font-face {
+  font-family: "Bricolage Grotesque";
+  font-weight: 200 800;
+  font-stretch: 75% 100%;
+  src: url("../../fonts/bricolage-grotesque-latin-standard-normal.woff2") format("woff2-variations");
+}
+@font-face {
+  font-family: "Geist";
+  font-weight: 100 900;
+  src: url("../../fonts/geist-latin-wght-normal.woff2") format("woff2-variations");
+}
+@font-face {
+  font-family: "Geist Mono";
+  font-weight: 100 900;
+  src: url("../../fonts/geist-mono-latin-wght-normal.woff2") format("woff2-variations");
+}
+
+:root {
+  --bg: #f4f6fb;
+  --fg: #262b48;
+  --card: #fff;
+  --primary: #4b44d4;
+  --primary-fg: #fafaff;
+  --muted: #eceff6;
+  --muted-fg: #646b8a;
+  --accent: #e5e7f8;
+  --accent-fg: #2f2f7a;
+  --border: #dfe3ee;
+  --heat: #ea7a2c;
+  --heat-fg: #9a3d0c;
+  --red: #d6332a;
+  --green: #2f8a4a;
+  --green-bg: #e3f6e7;
+  --del-bg: #fde9e7;
+  --slack: #7a2d6b;
+  --slack-bg: #fbf3f9;
+  --strip: #dfe3ec;
+  --teal: #2a98ad;
+  --sidebar: #eef1f7;
+}
+
+* {
+  box-sizing: border-box;
+}
+html,
+body {
+  margin: 0;
+  height: 100%;
+}
+body {
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--fg);
+  font: 14px/1.45 "Geist", system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+p {
+  margin: 0;
+}
+.mono {
+  font-family: "Geist Mono", ui-monospace, monospace;
+}
+.h {
+  font-family: "Bricolage Grotesque", sans-serif;
+  font-stretch: 88%;
+  letter-spacing: -0.01em;
+}
+.muted {
+  color: var(--muted-fg);
+}
+.app {
+  display: flex;
+  height: 100vh;
+}
+
+/* Sidebar */
+.side {
+  display: flex;
+  flex-direction: column;
+  width: 232px;
+  flex-shrink: 0;
+  padding: 14px 10px;
+  border-right: 1px solid var(--border);
+  background: var(--sidebar);
+}
+.side-brand {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 2px 8px 14px;
+  font-size: 16px;
+  font-weight: 700;
+}
+.side-brand .badge {
+  margin-left: -16px;
+  margin-top: -18px;
+  padding: 0 5px;
+  border-radius: 99px;
+  background: var(--heat);
+  color: #fff;
+  font: 700 10px/16px "Geist Mono", monospace;
+}
+.side-group {
+  margin: 12px 8px 4px;
+  color: var(--muted-fg);
+  font-size: 11px;
+  font-weight: 500;
+}
+.side a {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 6px 8px;
+  border-radius: 7px;
+  color: var(--fg);
+  font-size: 13.5px;
+  text-decoration: none;
+}
+.side a.on {
+  background: #dfe2f5;
+  font-weight: 600;
+}
+.side a em {
+  margin-left: auto;
+  color: var(--muted-fg);
+  font: normal 12px "Geist Mono", monospace;
+}
+.side a.on em {
+  color: var(--fg);
+}
+.side .ico {
+  width: 16px;
+  text-align: center;
+  color: var(--muted-fg);
+  font-size: 13px;
+}
+.side-bottom {
+  margin-top: auto;
+}
+
+/* Common pieces */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 6px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 11px;
+  line-height: 18px;
+  white-space: nowrap;
+}
+.chip.slack {
+  border-color: #ead2e4;
+  background: var(--slack-bg);
+  color: var(--slack);
+}
+.chip.new {
+  border-color: #c9ccf5;
+  color: var(--primary);
+}
+.chip.xs {
+  color: var(--green);
+}
+.chip.xl {
+  color: var(--red);
+}
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 11px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--card);
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+.btn.primary {
+  border-color: var(--primary);
+  background: var(--primary);
+  color: var(--primary-fg);
+}
+.btn.ghost {
+  border-color: transparent;
+  background: transparent;
+}
+kbd {
+  padding: 0 4px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--muted-fg);
+  font: 10.5px "Geist Mono", monospace;
+}
+.btn.primary kbd {
+  border-color: rgb(255 255 255 / 0.4);
+  color: #fff;
+}
+.av {
+  display: inline-grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+}
+.a1 { background: #7c6cf0; }
+.a2 { background: #2aa3b8; }
+.a3 { background: #e08a3c; }
+.a4 { background: #3f9b62; }
+.a5 { background: #c45a9a; }
+.a6 { background: #5b7bd8; }
+
+/* Priority gauge */
+.gauge {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  width: 34px;
+  flex-shrink: 0;
+  padding-top: 1px;
+  color: var(--muted-fg);
+  font: 500 12px "Geist Mono", monospace;
+}
+.gauge::after {
+  content: "";
+  flex: 1;
+  width: 4px;
+  min-height: 16px;
+  border-radius: 99px;
+  background: linear-gradient(to top, rgb(75 68 212 / 0.7) calc(var(--l) * 100%), var(--strip) 0);
+}
+.gauge.hot {
+  color: var(--heat-fg);
+}
+.gauge.hot::after {
+  background: linear-gradient(to top, var(--heat) calc(var(--l) * 100%), var(--strip) 0);
+}
+
+/* List */
+.list {
+  display: flex;
+  flex-direction: column;
+  width: 416px;
+  flex-shrink: 0;
+  border-right: 1px solid var(--border);
+  background: var(--bg);
+}
+.list-head {
+  padding: 14px 16px 10px;
+  border-bottom: 1px solid var(--border);
+}
+.list-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 17px;
+  font-weight: 650;
+}
+.list-hint {
+  margin-top: 2px;
+  color: var(--muted-fg);
+  font-size: 12.5px;
+}
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 10px;
+}
+.filters span {
+  padding: 2px 8px;
+  border: 1px dashed var(--border);
+  border-radius: 7px;
+  color: var(--muted-fg);
+  font-size: 12px;
+}
+.selbar {
+  padding: 6px 16px;
+  border-bottom: 1px solid var(--border);
+  color: var(--muted-fg);
+  font-size: 11.5px;
+}
+.row {
+  display: flex;
+  gap: 8px;
+  padding: 11px 14px 11px 8px;
+  border-bottom: 1px solid var(--border);
+  background: var(--card);
+}
+.row.sel {
+  background: var(--accent);
+}
+.row-body {
+  flex: 1;
+  min-width: 0;
+}
+.row-top {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted-fg);
+  font: 11.5px "Geist Mono", monospace;
+}
+.row-top .right {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: auto;
+  font-family: "Geist", sans-serif;
+}
+.dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--primary);
+}
+.ci-ok {
+  color: var(--green);
+}
+.ci-bad {
+  color: var(--red);
+}
+.row-title {
+  margin-top: 3px;
+  font-size: 14px;
+  font-weight: 600;
+}
+.row-title.read {
+  font-weight: 450;
+}
+.row-why {
+  display: flex;
+  overflow: hidden;
+  white-space: nowrap;
+  gap: 8px;
+  margin-top: 5px;
+  color: var(--muted-fg);
+  font-size: 11.5px;
+}
+.row-why .age {
+  margin-left: auto;
+}
+
+/* Detail */
+.detail {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  background: var(--card);
+}
+.detail-in {
+  padding: 16px 24px;
+}
+.ref {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--muted-fg);
+  font: 12px "Geist Mono", monospace;
+}
+.ref .tools {
+  margin-left: auto;
+  font-family: "Geist", sans-serif;
+}
+.title-row {
+  display: flex;
+  gap: 12px;
+  margin-top: 10px;
+}
+.title-row .av {
+  width: 40px;
+  height: 40px;
+  font-size: 16px;
+}
+.title {
+  font-size: 21px;
+  font-weight: 650;
+  line-height: 1.25;
+}
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 12px;
+}
+.tabs {
+  display: flex;
+  gap: 20px;
+  margin-top: 16px;
+  border-bottom: 1px solid var(--border);
+  color: var(--muted-fg);
+  font-size: 13.5px;
+}
+.tabs span {
+  padding-bottom: 8px;
+}
+.tabs .on {
+  margin-bottom: -1px;
+  border-bottom: 2px solid var(--primary);
+  color: var(--fg);
+  font-weight: 600;
+}
+.plus {
+  color: var(--green);
+  font-weight: 600;
+}
+.minus {
+  color: var(--red);
+  font-weight: 600;
+}
+
+/* KPI Jev card */
+.kpi {
+  margin-top: 14px;
+  padding: 14px;
+  border: 1px solid rgb(75 68 212 / 0.2);
+  border-radius: 12px;
+  background: rgb(229 231 248 / 0.4);
+}
+.kpi-h {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13.5px;
+}
+.kpi-h b {
+  font-weight: 650;
+}
+.kpi-h .r {
+  margin-left: auto;
+  color: var(--muted-fg);
+}
+.kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+  margin-top: 10px;
+}
+.kpi-grid.c3 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.tile {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 1px;
+  height: 52px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+}
+.tile small {
+  overflow: hidden;
+  color: var(--muted-fg);
+  font-size: 11px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.tile b {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 14px;
+  font-weight: 650;
+}
+.ok {
+  color: var(--green);
+}
+.watch {
+  color: var(--heat-fg);
+}
+.bad {
+  color: var(--red);
+}
+.unsure {
+  padding: 0 4px;
+  border: 1px dashed var(--border);
+  border-radius: 4px;
+  color: var(--muted-fg);
+  font-size: 10px;
+  font-weight: 500;
+}
+
+/* AI summary */
+.summary {
+  margin-top: 12px;
+  padding: 14px;
+  border: 1px solid rgb(75 68 212 / 0.2);
+  border-radius: 12px;
+  background: rgb(229 231 248 / 0.4);
+}
+.sum-h {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13.5px;
+}
+.seg {
+  display: inline-flex;
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--card);
+  font-size: 12px;
+}
+.seg span {
+  padding: 1px 8px;
+  border-radius: 5px;
+  color: var(--muted-fg);
+}
+.seg .on {
+  background: var(--primary);
+  color: #fff;
+}
+.stale {
+  padding: 0 6px;
+  border: 1px solid #f2c39c;
+  border-radius: 6px;
+  color: var(--heat-fg);
+  font-size: 11.5px;
+}
+.sum-b {
+  margin-top: 10px;
+  font-size: 13.5px;
+}
+.expect {
+  margin-top: 8px;
+  padding: 8px 10px;
+  border: 1px solid #f2c39c;
+  border-left: 3px solid var(--heat);
+  border-radius: 8px;
+  background: #fff8f2;
+}
+.sum-b ul {
+  margin: 6px 0 0;
+  padding-left: 18px;
+}
+
+/* Slack */
+.slack-card {
+  margin-top: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--slack);
+  border-radius: 12px;
+}
+.thread {
+  margin-top: 8px;
+  padding: 10px 12px;
+  border-left: 3px solid var(--slack);
+  border-radius: 8px;
+  background: var(--slack-bg);
+  font-size: 13px;
+}
+.thread p + p {
+  margin-top: 4px;
+}
+
+.why {
+  margin-top: 12px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--muted);
+  font-size: 13px;
+}
+.why p + p {
+  margin-top: 4px;
+}
+.why .w {
+  display: inline-block;
+  width: 34px;
+  color: var(--heat-fg);
+  font: 600 12px "Geist Mono", monospace;
+}
+.comment {
+  display: flex;
+  gap: 10px;
+  margin-top: 12px;
+  font-size: 13px;
+}
+.comment > div {
+  flex: 1;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}

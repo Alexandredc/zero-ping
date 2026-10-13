@@ -40,8 +40,9 @@
         </a>
         <ul class="nav-links">
           <li><a href="#sort" data-i18n="nav.how">How it sorts</a></li>
+          <li><a href="#jev" data-i18n="nav.jev">Jev KPIs</a></li>
+          <li><a href="#tour" data-i18n="nav.tour">Tour</a></li>
           <li><a href="#features" data-i18n="nav.features">Features</a></li>
-          <li><a href="#local" data-i18n="nav.local">Local</a></li>
           <li><a href="#start" data-i18n="nav.start">Quick start</a></li>
         </ul>
         <div class="nav-end">
@@ -198,6 +199,109 @@
               <p data-i18n="sort.s4.d">An agent finds the Slack threads that cite each PR, and an AI summary tells you where things stand and what is expected from you.</p>
             </li>
           </ol>
+        </div>
+      </section>
+
+      <!-- Jev: the KPI card of a PR or an issue, with the scale of the tile in focus. -->
+      <section class="jev" id="jev" aria-labelledby="jev-title">
+        <div class="jev-glow" aria-hidden="true" data-speed="0.1"></div>
+        <div class="wrap">
+          <p class="eyebrow" data-i18n="jev.eyebrow">Jev KPIs</p>
+          <h2 id="jev-title" data-i18n="jev.title">Know what a PR will cost you before you open it.</h2>
+          <p class="section-lede" data-i18n="jev.lede">Jev, the app’s decision model, reads the description, the comments, the CI, the files and the start of the diff, and answers the same questions on every pull request and every issue. Each answer comes with its scale and its confidence.</p>
+
+          <div class="jev-switch" role="tablist" aria-label="Item type" data-i18n-label="jev.kind">
+            <button type="button" role="tab" aria-selected="true" data-kind="pr" data-i18n="jev.pr">Pull request</button>
+            <button type="button" role="tab" aria-selected="false" data-kind="issue" data-i18n="jev.issue">Issue</button>
+          </div>
+
+          <div class="jev-grid">
+            <div class="kpi-card" data-kpi-card>
+              <div class="kpi-head">
+                <span class="kpi-gauge-icon" aria-hidden="true"></span>
+                <b data-i18n="kpi.head">Jev KPIs</b>
+                <span class="kpi-when" data-kpi-when></span>
+                <span class="kpi-refresh" aria-hidden="true">↻</span>
+              </div>
+              <p class="kpi-subject" data-kpi-subject></p>
+              <ul class="kpi-tiles" data-kpi-tiles></ul>
+            </div>
+            <aside class="kpi-scale" data-kpi-scale aria-live="polite"></aside>
+          </div>
+
+          <ul class="kpi-legend">
+            <li><i class="dot ok"></i><span data-i18n="jev.ok">nothing to flag</span></li>
+            <li><i class="dot watch"></i><span data-i18n="jev.watch">keep an eye on it</span></li>
+            <li><i class="dot bad"></i><span data-i18n="jev.bad">look at it</span></li>
+            <li><i class="unsure-tag" data-i18n="kpi.unsure">uncertain</i><span data-i18n="jev.unsure">Jev is less than 50% sure: not counted</span></li>
+          </ul>
+
+          <div class="rank">
+            <div class="rank-copy">
+              <h3 data-i18n="jev.rank.t">A ranking for what nobody assigned to you</h3>
+              <p data-i18n="jev.rank.d">Teammates’ PRs and sprint tickets have no inbox rule, so Jev’s urgency ranks them on the same 0 to 100 gauge: can wait, normal, important, blocking or urgent.</p>
+              <p class="rank-note" data-i18n="jev.rank.note">Jev runs with your TypeSafe key, or any model through <code>AI_DECISION_MODEL</code>. It is only called when an item’s content changes. Without it, deterministic rules rank the list.</p>
+            </div>
+            <ol class="rank-list" aria-label="Example ranking" data-i18n-label="jev.rank.label">
+              <li style="--level: 1"><span class="rg hot"><b>100</b></span><span><em>acme/api #240</em>Payment webhook drops events after deploy</span><i class="lvl hot" data-i18n="jev.l3">Blocking or urgent</i></li>
+              <li style="--level: 0.67"><span class="rg hot"><b>67</b></span><span><em>acme/web #398</em>Dark mode for settings</span><i class="lvl" data-i18n="jev.l2">Important</i></li>
+              <li style="--level: 0.33"><span class="rg"><b>33</b></span><span><em>acme/docs #74</em>API versioning guide</span><i class="lvl" data-i18n="jev.l1">Normal</i></li>
+              <li style="--level: 0.06"><span class="rg"><b>0</b></span><span><em>acme/mobile #91</em>Rename analytics events</span><i class="lvl" data-i18n="jev.l0">Can wait</i></li>
+            </ol>
+          </div>
+        </div>
+      </section>
+
+      <!-- A tour of the app, as screenshots with demo data. -->
+      <section class="tour" id="tour" aria-labelledby="tour-title">
+        <div class="wrap">
+          <p class="eyebrow" data-i18n="tour.eyebrow">A tour of the app</p>
+          <h2 id="tour-title" data-i18n="tour.title">Every screen built around one question: what needs you now?</h2>
+          <div class="tour-tabs" role="tablist" aria-label="Screens" data-i18n-label="tour.label">
+            <button type="button" role="tab" id="tab-inbox" aria-controls="shot-inbox" aria-selected="true" tabindex="0" data-shot="inbox" data-i18n="tour.inbox.tab">Inbox</button>
+            <button type="button" role="tab" id="tab-diff" aria-controls="shot-diff" aria-selected="false" tabindex="-1" data-shot="diff" data-i18n="tour.diff.tab">Files changed</button>
+            <button type="button" role="tab" id="tab-team" aria-controls="shot-team" aria-selected="false" tabindex="-1" data-shot="team" data-i18n="tour.team.tab">Team</button>
+            <button type="button" role="tab" id="tab-issues" aria-controls="shot-issues" aria-selected="false" tabindex="-1" data-shot="issues" data-i18n="tour.issues.tab">My issues</button>
+            <button type="button" role="tab" id="tab-overview" aria-controls="shot-overview" aria-selected="false" tabindex="-1" data-shot="overview" data-i18n="tour.overview.tab">Overview</button>
+          </div>
+          <div class="tour-stage" data-tour>
+            <figure class="shot" role="tabpanel" id="shot-inbox" aria-labelledby="tab-inbox">
+              <div class="shot-frame">
+                <div class="shot-bar" aria-hidden="true"><span class="lights"><i></i><i></i><i></i></span><span class="shot-url">inbox.localhost:4747/review</span></div>
+                <a class="shot-link" href="assets/screens/inbox.jpg"><img src="assets/screens/inbox.jpg" width="1440" height="900" loading="lazy" decoding="async" alt="Zéro Ping inbox with the To review folder and a pull request open: Jev KPIs, AI summary and Slack thread" data-i18n-alt="tour.inbox.alt" /></a>
+              </div>
+              <figcaption data-i18n="tour.inbox.cap">The inbox: priority gauge on every row, Jev KPIs, AI summary and the Slack thread next to the PR.</figcaption>
+            </figure>
+            <figure class="shot" role="tabpanel" id="shot-diff" aria-labelledby="tab-diff" hidden>
+              <div class="shot-frame">
+                <div class="shot-bar" aria-hidden="true"><span class="lights"><i></i><i></i><i></i></span><span class="shot-url">inbox.localhost:4747/review</span></div>
+                <a class="shot-link" href="assets/screens/diff.jpg"><img src="assets/screens/diff.jpg" width="1440" height="900" loading="lazy" decoding="async" alt="Files changed tab with a file tree, Viewed boxes and the diff since the last review" data-i18n-alt="tour.diff.alt" /></a>
+              </div>
+              <figcaption data-i18n="tour.diff.cap">Files changed: only the commits since your review, a file tree and Viewed boxes synced with GitHub.</figcaption>
+            </figure>
+            <figure class="shot" role="tabpanel" id="shot-team" aria-labelledby="tab-team" hidden>
+              <div class="shot-frame">
+                <div class="shot-bar" aria-hidden="true"><span class="lights"><i></i><i></i><i></i></span><span class="shot-url">inbox.localhost:4747/team</span></div>
+                <a class="shot-link" href="assets/screens/team.jpg"><img src="assets/screens/team.jpg" width="1440" height="900" loading="lazy" decoding="async" alt="Team page listing blocked pull requests with the reason, the next step and who has the ball" data-i18n-alt="tour.team.alt" /></a>
+              </div>
+              <figcaption data-i18n="tour.team.cap">Team: every blocked PR, what’s stuck, the next step and who has the ball.</figcaption>
+            </figure>
+            <figure class="shot" role="tabpanel" id="shot-issues" aria-labelledby="tab-issues" hidden>
+              <div class="shot-frame">
+                <div class="shot-bar" aria-hidden="true"><span class="lights"><i></i><i></i><i></i></span><span class="shot-url">inbox.localhost:4747/issues</span></div>
+                <a class="shot-link" href="assets/screens/issues.jpg"><img src="assets/screens/issues.jpg" width="1440" height="900" loading="lazy" decoding="async" alt="My issues page with the sprint progress, board columns and the Jev KPIs of an issue" data-i18n-alt="tour.issues.alt" /></a>
+              </div>
+              <figcaption data-i18n="tour.issues.cap">My issues: the sprint board of your GitHub project, ranked by Jev urgency, with the issue’s KPIs.</figcaption>
+            </figure>
+            <figure class="shot" role="tabpanel" id="shot-overview" aria-labelledby="tab-overview" hidden>
+              <div class="shot-frame">
+                <div class="shot-bar" aria-hidden="true"><span class="lights"><i></i><i></i><i></i></span><span class="shot-url">inbox.localhost:4747/dashboard</span></div>
+                <a class="shot-link" href="assets/screens/overview.jpg"><img src="assets/screens/overview.jpg" width="1440" height="900" loading="lazy" decoding="async" alt="Overview page with the work queue estimate, next actions, team weather and trends" data-i18n-alt="tour.overview.alt" /></a>
+              </div>
+              <figcaption data-i18n="tour.overview.cap">Overview: your work queue in minutes, next actions, the team’s weather and your trends.</figcaption>
+            </figure>
+          </div>
+          <p class="tour-note" data-i18n="tour.note">Demo data. Labels shown in English; the app itself is in French for now.</p>
         </div>
       </section>
 

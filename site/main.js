@@ -43,6 +43,11 @@ function applyLang(next) {
     if (!english.has(key)) english.set(key, el.getAttribute("aria-label"))
     el.setAttribute("aria-label", t(key))
   }
+  for (const el of document.querySelectorAll("[data-i18n-alt]")) {
+    const key = el.dataset.i18nAlt
+    if (!english.has(key)) english.set(key, el.alt)
+    el.alt = t(key)
+  }
   document.title = t("meta.title")
   metaDescription.content = t("meta.description")
   for (const button of document.querySelectorAll("[data-lang]")) {
@@ -50,6 +55,7 @@ function applyLang(next) {
   }
   renderBoardTitle()
   renderSummary(false)
+  renderKpiTiles()
 }
 
 for (const button of document.querySelectorAll("[data-lang]")) {
@@ -169,6 +175,12 @@ const ITEMS = {
       ],
       summary:
         "Ajoute une limite de 100 requêtes par minute et par clé. nadia attend ta review ; une question reste ouverte sur les clés internes.",
+      kpis: [
+        ["Risque en prod", "Élevé", "bad"],
+        ["Effort de review", "~30 min", "ok"],
+        ["Prête à merger", "Pas encore", "watch"],
+        ["Expertise requise", "sécurité", "bad"],
+      ],
       thread: [
         "#api-team",
         [
@@ -214,6 +226,12 @@ const ITEMS = {
       ],
       summary:
         "otto a répondu à ton fil de review sur le cache du panier et te demande s’il peut merger après la démo de jeudi.",
+      kpis: [
+        ["Risque en prod", "Modéré", "watch"],
+        ["Effort de review", "~1 h", "watch"],
+        ["Prête à merger", "Oui", "ok"],
+        ["Tests", "Suffisants", "ok"],
+      ],
       thread: ["#web", [["otto", "Je merge après la démo si c’est bon pour toi ?"]]],
       actions: [["Répondre", "primary", false, "r"], ["Traité", "", true, "e"]],
     },
@@ -398,6 +416,11 @@ function renderDetail(item) {
     <div class="tabs"><span class="on">Conversation</span><span>Fichiers modifiés</span></div>`
   if (item.summary) {
     html += `<div class="d-card ai"><p class="d-label">✦ Résumé IA · court</p><p>${esc(item.summary)}</p></div>`
+  }
+  if (item.kpis) {
+    html += `<div class="d-kpis"><p class="d-label">◔ KPI Jev</p><div>${item.kpis
+      .map(([label, value, tone]) => `<span><em>${label}</em><b class="${tone}">${value}</b></span>`)
+      .join("")}</div></div>`
   }
   if (item.failed) {
     html += `<div class="d-card bad"><p class="d-label">✕ ${esc(item.failed[0])}</p><p>${esc(item.failed[1])}</p></div>`
@@ -676,6 +699,323 @@ const copyAll = document.querySelector("[data-copy-all]")
 copyAll.addEventListener("click", () =>
   copy([...document.querySelectorAll("[data-cmd]")].map((el) => el.textContent).join("\n"), copyAll)
 )
+
+/* ---------- Jev KPIs ---------- */
+
+// The KPI scales come from src/lib/insights.ts; values are demo answers.
+const KPI = {
+  pr: {
+    subject: "acme/api #233 · Add rate limiting to public endpoints",
+    specs: [
+      {
+        label: ["Production risk", "Risque en prod"],
+        hint: ["What can break once in production: migrations, auth, payments, infra, config, size of the change.", "Ce qui peut casser une fois en prod : migrations, auth, paiements, infra, config, volume du changement."],
+        levels: [["Low", "Faible"], ["Moderate", "Modéré"], ["High", "Élevé"], ["Critical", "Critique"]],
+        meanings: [["isolated change, no sensitive area", "changement isolé, sans zone sensible"], ["touches shared code or visible behaviour", "touche du code partagé ou un comportement visible"], ["sensitive area (data, auth, infra) or large volume", "zone sensible (données, auth, infra) ou gros volume"], ["can break production or lose data", "peut casser la prod ou perdre des données"]],
+        worst: "high",
+        level: 2,
+        confidence: 0.82,
+      },
+      {
+        label: ["Review effort", "Effort de review"],
+        hint: ["Estimated reading time, from the number of files, the lines and the complexity of the diff.", "Temps de relecture estimé, d'après le nombre de fichiers, les lignes et la complexité du diff."],
+        levels: [["< 15 min", "< 15 min"], ["~30 min", "~30 min"], ["~1 h", "~1 h"], ["> 2 h", "> 2 h"]],
+        meanings: [["a few simple files", "quelques fichiers simples"], ["one topic to understand, short diff", "un sujet à comprendre, diff court"], ["several files or logic to follow", "plusieurs fichiers ou une logique à suivre"], ["large diff or dense logic: book a slot", "gros diff ou logique dense : prévoir un créneau"]],
+        worst: "high",
+        level: 1,
+        confidence: 0.77,
+      },
+      {
+        label: ["Ready to merge", "Prête à merger"],
+        hint: ["Chance of merging without another round: CI, approvals, open review threads, unanswered questions.", "Chance d'être mergée sans nouvel aller-retour : CI, approbations, fils de review ouverts, questions sans réponse."],
+        yes: ["Yes", "Oui"],
+        no: ["Not yet", "Pas encore"],
+        worst: "no",
+        value: 0.41,
+        confidence: 0.74,
+      },
+      {
+        label: ["Tests", "Tests"],
+        hint: ["Are the changes covered by tests added or changed in the diff?", "Les changements sont-ils couverts par des tests ajoutés ou modifiés dans le diff ?"],
+        levels: [["Missing", "Absents"], ["Partial", "Partiels"], ["Enough", "Suffisants"]],
+        meanings: [["no test added or changed for this change", "aucun test ajouté ni modifié pour ce changement"], ["tests, but some changed cases have none", "des tests, mais des cas changés restent sans test"], ["the changed behaviours are tested", "les comportements modifiés sont testés"]],
+        worst: "low",
+        level: 1,
+        confidence: 0.7,
+      },
+      {
+        label: ["Breaking change", "Changement cassant"],
+        hint: ["A broken contract: API, database schema, environment variables, event format. Then someone must be told or migrate.", "Rupture d'un contrat : API, schéma de base, variables d'environnement, format d'événement. Il faut alors prévenir ou migrer."],
+        yes: ["Yes", "Oui"],
+        no: ["No", "Non"],
+        worst: "yes",
+        value: 0.22,
+        confidence: 0.42,
+      },
+      {
+        label: ["PR clarity", "Clarté de la PR"],
+        hint: ["Does the description say why, how to test and what impact to expect?", "La description dit-elle pourquoi, comment tester et quel impact attendre ?"],
+        levels: [["Vague", "Floue"], ["Fair", "Correcte"], ["Clear", "Claire"]],
+        meanings: [["no idea why or how to test", "on ne sait pas pourquoi ni comment tester"], ["the what is there, the why or the tests are missing", "le quoi est dit, le pourquoi ou les tests manquent"], ["why, how to test and impact are explained", "pourquoi, comment tester et impact sont expliqués"]],
+        worst: "low",
+        level: 2,
+        confidence: 0.88,
+      },
+      {
+        label: ["Expertise needed", "Expertise requise"],
+        hint: ["Should a security, data or infra specialist sign off?", "Une personne spécialisée en sécurité, data ou infra devrait-elle valider ?"],
+        experts: [
+          [["security", "sécurité"], 0.78],
+          [["data / DB", "data / BDD"], 0.12],
+          [["infra", "infra"], 0.2],
+        ],
+        confidence: 0.8,
+      },
+    ],
+  },
+  issue: {
+    subject: "acme/web #420 · Export invoices as CSV",
+    specs: [
+      {
+        label: ["Ready to start", "Prête à démarrer"],
+        hint: ["Is the need precise enough for a dev to start: context, acceptance criteria, examples or mock-ups?", "Le besoin est-il assez précis pour qu'un dev s'y mette : contexte, critères d'acceptation, exemples ou maquettes ?"],
+        yes: ["Ready", "Prête"],
+        no: ["Needs detail", "À préciser"],
+        worst: "no",
+        value: 0.3,
+        confidence: 0.79,
+      },
+      {
+        label: ["Estimated size", "Taille estimée"],
+        hint: ["Likely effort for one person of the team, from the scope described.", "Effort probable pour une personne de l'équipe, d'après le périmètre décrit."],
+        levels: [["< ½ day", "< ½ j"], ["~1 day", "~1 j"], ["2-3 days", "2-3 j"], ["~1 week", "~1 sem."], ["> 1 sprint", "> 1 sprint"]],
+        meanings: [["a small fix or a setting", "une petite correction ou un réglage"], ["a simple, well-bounded change", "un changement simple et bien délimité"], ["a short feature or a bug to investigate", "une fonctionnalité courte ou un bug à investiguer"], ["a full feature, several layers", "une fonctionnalité complète, plusieurs couches"], ["too big for a sprint: split it", "trop gros pour un sprint : à découper"]],
+        worst: "high",
+        level: 2,
+        confidence: 0.66,
+      },
+      {
+        label: ["Business impact", "Impact métier"],
+        hint: ["Who is affected and how much: customers, operations, finance, production bug, blocked process.", "Qui est touché et à quel point : clients, opérations, finance, bug en prod, process bloqué."],
+        levels: [["Low", "Faible"], ["Medium", "Moyen"], ["High", "Fort"], ["Critical", "Critique"]],
+        meanings: [["comfort or a rare case", "confort ou cas rare"], ["a real nuisance for some users", "gêne réelle pour une partie des utilisateurs"], ["key processes or customers affected", "process ou clients importants touchés"], ["production down, money or data lost", "prod cassée, perte d'argent ou de données"]],
+        worst: "high",
+        level: 1,
+        confidence: 0.71,
+      },
+      {
+        label: ["Blocked", "Bloquée"],
+        hint: ["Is the issue waiting on something: a decision, another team, a dependency, an answer from the business?", "L'issue attend-elle quelque chose : une décision, une autre équipe, une dépendance, une réponse du métier ?"],
+        yes: ["Yes", "Oui"],
+        no: ["No", "Non"],
+        worst: "yes",
+        value: 0.14,
+        confidence: 0.83,
+      },
+      {
+        label: ["Split it", "À découper"],
+        hint: ["Does the ticket mix several topics better tracked as separate issues?", "Le ticket mélange-t-il plusieurs sujets qu'il vaudrait mieux séparer en plusieurs issues ?"],
+        yes: ["Advised", "Conseillé"],
+        no: ["No", "Non"],
+        worst: "yes",
+        value: 0.62,
+        confidence: 0.68,
+      },
+      {
+        label: ["Technical risk", "Risque technique"],
+        hint: ["Technical unknowns, sensitive areas (data, auth, infra), need for a spike before coding.", "Inconnues techniques, zones sensibles (données, auth, infra), besoin d'une étude avant de coder."],
+        levels: [["Low", "Faible"], ["Moderate", "Modéré"], ["High", "Élevé"]],
+        meanings: [["known ground, few unknowns", "terrain connu, peu d'inconnues"], ["a few points to check on the way", "quelques points à vérifier en route"], ["unknowns or sensitive area: plan a spike", "inconnues ou zone sensible : prévoir une étude"]],
+        worst: "high",
+        level: 1,
+        confidence: 0.72,
+      },
+      {
+        label: ["Your call", "Ton arbitrage"],
+        hint: ["Does the conversation wait for a question or a decision from you, the lead?", "Une question ou une décision t'est-elle demandée, à toi le lead, dans la conversation ?"],
+        yes: ["Yes", "Oui"],
+        no: ["No", "Non"],
+        worst: "yes",
+        value: 0.58,
+        confidence: 0.64,
+      },
+    ],
+  },
+}
+
+const kpiCard = document.querySelector("[data-kpi-card]")
+const kpiTiles = document.querySelector("[data-kpi-tiles]")
+const kpiScale = document.querySelector("[data-kpi-scale]")
+const kpiWhen = document.querySelector("[data-kpi-when]")
+const kpiSubject = document.querySelector("[data-kpi-subject]")
+const kindButtons = [...document.querySelectorAll("[data-kind]")]
+const kpiState = { kind: "pr", selected: 0, loaded: false }
+let kpiTimer = null
+
+const tr = (pair) => pair[lang === "fr" ? 1 : 0]
+const pct = (value) => `${Math.round(value * 100)}${lang === "fr" ? " %" : "%"}`
+
+// Same reading as the app: 0 is fine, 1 means look at it.
+function kpiConcern(spec) {
+  if (spec.experts) return Math.max(...spec.experts.map(([, value]) => value))
+  if (spec.levels) {
+    const top = spec.levels.length - 1
+    return spec.worst === "high" ? spec.level / top : 1 - spec.level / top
+  }
+  return spec.worst === "yes" ? spec.value : 1 - spec.value
+}
+
+function kpiTone(spec) {
+  if (spec.confidence < 0.5) return "unsure"
+  const level = kpiConcern(spec)
+  if (level >= 0.66) return "bad"
+  if (level >= 0.4) return "watch"
+  return "ok"
+}
+
+function kpiValue(spec) {
+  if (spec.experts) {
+    const needed = spec.experts.filter(([, value]) => value >= 0.5).map(([name]) => tr(name))
+    return needed.length ? needed.join(", ") : tr(["None", "Aucune"])
+  }
+  if (spec.levels) return tr(spec.levels[spec.level])
+  return spec.value >= 0.5 ? tr(spec.yes) : tr(spec.no)
+}
+
+function renderKpiTiles() {
+  const specs = KPI[kpiState.kind].specs
+  kpiSubject.textContent = KPI[kpiState.kind].subject
+  if (!kpiState.loaded) {
+    kpiWhen.textContent = tr([
+      `Jev is reading the ${kpiState.kind === "pr" ? "PR" : "issue"}… (a few seconds)`,
+      `Jev évalue ${kpiState.kind === "pr" ? "la PR" : "l’issue"}… (quelques secondes)`,
+    ])
+    kpiTiles.innerHTML = specs
+      .map((spec) => `<li><span class="kpi-tile loading"><span class="kpi-label">${tr(spec.label)}</span><span class="skel"></span></span></li>`)
+      .join("")
+    kpiScale.innerHTML = ""
+    return
+  }
+  kpiWhen.textContent = tr(["2 min ago", "il y a 2 min"])
+  kpiTiles.innerHTML = specs
+    .map((spec, i) => {
+      const tone = kpiTone(spec)
+      const unsure = tone === "unsure" ? `<i class="unsure-tag">${t("kpi.unsure")}</i>` : ""
+      return `<li style="--i: ${i}"><button type="button" class="kpi-tile" data-kpi="${i}" aria-pressed="${i === kpiState.selected}">
+        <span class="kpi-label">${tr(spec.label)} <span aria-hidden="true">ⓘ</span></span>
+        <span class="kpi-value ${tone}">${kpiValue(spec)}${unsure}</span></button></li>`
+    })
+    .join("")
+  renderKpiScale()
+}
+
+function renderKpiScale() {
+  const spec = KPI[kpiState.kind].specs[kpiState.selected]
+  let body = ""
+  if (spec.levels) {
+    body = `<ol class="scale-levels">${spec.levels
+      .map(
+        (level, i) =>
+          `<li class="${i === spec.level ? `on ${kpiTone(spec)}` : ""}"><b>${tr(level)}</b><span>${tr(spec.meanings[i])}</span></li>`
+      )
+      .join("")}</ol>`
+  } else if (spec.experts) {
+    body = `<ul class="scale-probs">${spec.experts
+      .map(
+        ([name, value]) =>
+          `<li><span>${tr(name)}</span><span class="bar"><i style="--v: ${value}" class="${value >= 0.5 ? "bad" : "ok"}"></i></span><b>${pct(value)}</b></li>`
+      )
+      .join("")}</ul><p class="scale-foot">${tr(["“Required” from 50%.", "« Requis » à partir de 50 %."])}</p>`
+  } else {
+    body = `<ul class="scale-probs"><li><span>${tr(spec.yes)}</span><span class="bar"><i style="--v: ${spec.value}" class="${kpiTone(spec)}"></i><em class="mid"></em></span><b>${pct(spec.value)}</b></li></ul>
+      <p class="scale-foot">${tr([`Probability of “${tr(spec.yes).toLowerCase()}”; “${tr(spec.yes)}” from 50%.`, `Probabilité de « ${tr(spec.yes).toLowerCase()} » ; « ${tr(spec.yes)} » à partir de 50 %.`])}</p>`
+  }
+  const unsure =
+    spec.confidence < 0.5
+      ? `<p class="scale-warn">${tr(["Below 50% confidence: shown as uncertain and left out of the score.", "Moins de 50 % de confiance : affiché comme incertain et ignoré dans le score."])}</p>`
+      : ""
+  kpiScale.innerHTML = `<p class="scale-kicker">${tr(["Scale", "Échelle"])}</p>
+    <h3>${tr(spec.label)}</h3>
+    <p class="scale-hint">${tr(spec.hint)}</p>
+    ${body}
+    <p class="scale-conf">${tr(["Jev’s confidence", "Confiance de Jev"])} <b>${pct(spec.confidence)}</b></p>${unsure}`
+}
+
+function runKpi(animate = true) {
+  clearTimeout(kpiTimer)
+  if (!animate || reduceMotion) {
+    kpiState.loaded = true
+    renderKpiTiles()
+    return
+  }
+  kpiState.loaded = false
+  renderKpiTiles()
+  kpiCard.classList.remove("revealed")
+  kpiTimer = setTimeout(() => {
+    kpiState.loaded = true
+    renderKpiTiles()
+    kpiCard.classList.add("revealed")
+  }, 1100)
+}
+
+kpiTiles.addEventListener("click", (event) => {
+  const tile = event.target.closest("[data-kpi]")
+  if (!tile) return
+  kpiState.selected = Number(tile.dataset.kpi)
+  for (const t of kpiTiles.querySelectorAll("[data-kpi]")) t.setAttribute("aria-pressed", String(t === tile))
+  renderKpiScale()
+})
+kpiTiles.addEventListener("pointerover", (event) => {
+  const tile = event.target.closest("[data-kpi]")
+  if (tile && window.matchMedia("(hover: hover)").matches) tile.click()
+})
+
+for (const button of kindButtons) {
+  button.addEventListener("click", () => {
+    kpiState.kind = button.dataset.kind
+    kpiState.selected = 0
+    for (const b of kindButtons) b.setAttribute("aria-selected", String(b === button))
+    runKpi()
+  })
+}
+
+// Jev "reads" the PR the first time the card scrolls into view.
+kpiState.loaded = true
+renderKpiTiles()
+const kpiObserver = new IntersectionObserver(
+  ([entry]) => {
+    if (!entry.isIntersecting) return
+    kpiObserver.disconnect()
+    runKpi()
+  },
+  { threshold: 0.4 }
+)
+kpiObserver.observe(kpiCard)
+
+/* ---------- Tour of the app ---------- */
+
+const shotTabs = [...document.querySelectorAll("[data-shot]")]
+
+function showShot(tab, focus = false) {
+  for (const other of shotTabs) {
+    const on = other === tab
+    other.setAttribute("aria-selected", String(on))
+    other.tabIndex = on ? 0 : -1
+    document.getElementById(`shot-${other.dataset.shot}`).hidden = !on
+  }
+  if (focus) tab.focus()
+}
+
+shotTabs.forEach((tab, i) => {
+  tab.addEventListener("click", () => showShot(tab))
+  // Arrow keys move between tabs, as in any tab list.
+  tab.addEventListener("keydown", (event) => {
+    const step = { ArrowRight: 1, ArrowLeft: -1 }[event.key]
+    if (!step) return
+    event.preventDefault()
+    showShot(shotTabs[(i + step + shotTabs.length) % shotTabs.length], true)
+  })
+})
 
 /* ---------- Initial language ---------- */
 
