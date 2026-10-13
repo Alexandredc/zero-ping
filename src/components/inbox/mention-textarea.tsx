@@ -6,6 +6,7 @@ import { mentionsQuery } from "@/hooks/use-inbox"
 import { avatarUrl } from "@/lib/format"
 import { insertMention, mentionQueryAt, rankMentions } from "@/lib/mentions"
 import { cn } from "@/lib/utils"
+import { useI18n } from "@/hooks/use-i18n"
 
 type Props = Omit<React.ComponentProps<typeof Textarea>, "onChange"> & {
   /** `owner/repo`, whose members are offered after an `@`. */
@@ -27,6 +28,7 @@ export function MentionTextarea({
   className,
   ...props
 }: Props) {
+  const { t } = useI18n()
   const [mention, setMention] = useState<{
     start: number
     query: string
@@ -111,7 +113,7 @@ export function MentionTextarea({
       {open && (
         <ul
           role="listbox"
-          aria-label="Personnes à mentionner"
+          aria-label={t.detail.mentions.label}
           className="absolute bottom-full left-0 z-20 mb-1 flex w-72 flex-col overflow-hidden rounded-lg border bg-popover p-1 text-popover-foreground shadow-md"
         >
           {suggestions.map((person, index) => (
@@ -145,7 +147,7 @@ export function MentionTextarea({
             </li>
           ))}
           <li className="px-2 pt-1 text-[0.65rem] text-muted-foreground">
-            ↑ ↓ pour choisir, Entrée ou Tab pour insérer
+            {t.detail.mentions.keys}
           </li>
         </ul>
       )}

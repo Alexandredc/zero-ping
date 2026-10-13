@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { projectFieldsQuery, useSetProjectField } from "@/hooks/use-inbox"
 import type { SprintStatus } from "@/server/issues/sprint"
+import { useI18n } from "@/hooks/use-i18n"
 
 function OptionDot({ color }: { color: string | undefined }) {
   return (
@@ -86,6 +87,8 @@ function FieldMenu({
 
 /** The status and priority of the item's card on the sprint project, editable in place. */
 export function ProjectFields({ itemKey }: { itemKey: string }) {
+  const { t } = useI18n()
+  const copy = t.detail.project
   const { data, isPending } = useQuery(projectFieldsQuery(itemKey))
   const set = useSetProjectField(itemKey)
   if (isPending)
@@ -96,18 +99,16 @@ export function ProjectFields({ itemKey }: { itemKey: string }) {
       </div>
     )
   if (!data) return null
-  const where = data.via
-    ? `la carte de l'issue #${data.via.number} que cette PR ferme, sur le projet « ${data.projectTitle} »`
-    : `la carte du projet « ${data.projectTitle} »`
+  const where = copy.where(data.via?.number ?? null, data.projectTitle)
   return (
     <div className="flex flex-wrap items-center gap-1.5">
       {data.statusField && (
         <FieldMenu
-          label="Statut"
+          label={copy.status}
           value={data.status}
-          empty="Sans statut"
+          empty={copy.noStatus}
           options={data.statusField.options}
-          hint={`Colonne de ${where}. Choisir une valeur la change sur GitHub.`}
+          hint={copy.statusHint(where)}
           pending={set.isPending && set.variables.field === "status"}
           onChange={(option) =>
             data.statusField &&
@@ -124,11 +125,11 @@ export function ProjectFields({ itemKey }: { itemKey: string }) {
       )}
       {data.priorityField && (
         <FieldMenu
-          label="Priorité"
+          label={copy.priority}
           value={data.priority}
-          empty="Aucune"
+          empty={copy.noPriority}
           options={data.priorityField.options}
-          hint={`Priorité de ${where}. Choisir une valeur la change sur GitHub.`}
+          hint={copy.priorityHint(where)}
           pending={set.isPending && set.variables.field === "priority"}
           onChange={(option) =>
             data.priorityField &&
@@ -145,7 +146,7 @@ export function ProjectFields({ itemKey }: { itemKey: string }) {
       )}
       {data.via && (
         <span className="text-xs text-muted-foreground">
-          via #{data.via.number}
+          {copy.via(data.via.number)}
         </span>
       )}
     </div>

@@ -1,11 +1,13 @@
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
+import { useI18n } from "@/hooks/use-i18n"
 
 export function Markdown({ children }: { children: string }) {
+  const { t } = useI18n()
   if (!children.trim()) {
     return (
       <p className="text-sm text-muted-foreground italic">
-        Pas de description.
+        {t.detail.markdown.empty}
       </p>
     )
   }

@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button"
 import { avatarUrl, timeAgo } from "@/lib/format"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Skeleton } from "@/components/ui/skeleton"
+import { useI18n } from "@/hooks/use-i18n"
 
 export type ReplyTarget =
   | { type: "conversation" }
@@ -22,13 +23,6 @@ export type ReplyTarget =
       author: string | null
     }
 
-const REVIEW_STATE_LABEL: Record<string, string> = {
-  APPROVED: "a approuvé",
-  CHANGES_REQUESTED: "a demandé des changements",
-  COMMENTED: "a commenté",
-  DISMISSED: "review rejetée",
-}
-
 export function CommentBlock({
   comment,
   note,
@@ -36,6 +30,7 @@ export function CommentBlock({
   comment: ConversationComment
   note?: string
 }) {
+  const { language, t } = useI18n()
   return (
     <article className="flex gap-3" id={comment.id}>
       <Avatar className="size-7">
@@ -50,7 +45,7 @@ export function CommentBlock({
       <div className="flex min-w-0 flex-1 flex-col gap-1">
         <header className="flex items-baseline gap-2 text-xs text-muted-foreground">
           <span className="font-medium text-foreground">
-            {comment.author ?? "fantôme"}
+            {comment.author ?? t.detail.conversation.ghost}
           </span>
           {note && <span>{note}</span>}
           <a
@@ -59,7 +54,7 @@ export function CommentBlock({
             rel="noreferrer"
             className="ml-auto hover:text-foreground hover:underline"
           >
-            {timeAgo(comment.createdAt)}
+            {timeAgo(comment.createdAt, language)}
           </a>
         </header>
         {comment.body.trim() && <Markdown>{comment.body}</Markdown>}
@@ -75,12 +70,17 @@ export function Entry({
   entry: ConversationEntry
   onReplyInThread: (target: ReplyTarget) => void
 }) {
+  const { t } = useI18n()
   if (entry.type === "comment") return <CommentBlock comment={entry} />
   if (entry.type === "review") {
     return (
       <CommentBlock
         comment={entry}
-        note={REVIEW_STATE_LABEL[entry.state] ?? entry.state}
+        note={
+          entry.state === "DISMISSED"
+            ? t.detail.conversation.dismissed
+            : (t.detail.reviewState(entry.state) ?? entry.state)
+        }
       />
     )
   }
@@ -95,7 +95,7 @@ export function Entry({
         </span>
         {entry.isResolved && (
           <Badge variant="secondary" className="ml-auto">
-            Résolu
+            {t.detail.conversation.resolved}
           </Badge>
         )}
       </header>
@@ -117,7 +117,7 @@ export function Entry({
           }
         >
           <MessageSquareReplyIcon data-icon="inline-start" />
-          Répondre dans ce fil
+          {t.detail.conversation.replyInThread}
         </Button>
       )}
     </section>
@@ -140,9 +140,11 @@ export function GitHubConversation({
   error: Error | null
   onReplyInThread: (target: ReplyTarget) => void
 }) {
+  const { t } = useI18n()
+  const copy = t.detail.conversation
   return (
     <section
-      aria-label="Conversation GitHub"
+      aria-label={copy.label}
       className="flex flex-col gap-5 rounded-lg border border-l-4 border-l-foreground/60 bg-card p-4"
     >
       <header className="flex items-center gap-2">
@@ -150,8 +152,7 @@ export function GitHubConversation({
         <h3 className="text-sm font-semibold">GitHub</h3>
         {conversation && (
           <span className="text-xs text-muted-foreground">
-            {conversation.entries.length + 1} message
-            {conversation.entries.length > 0 ? "s" : ""}
+            {copy.messages(conversation.entries.length + 1)}
           </span>
         )}
       </header>
@@ -164,20 +165,18 @@ export function GitHubConversation({
       )}
       {error && (
         <Alert variant="destructive">
-          <AlertTitle>Conversation indisponible</AlertTitle>
+          <AlertTitle>{copy.unavailable}</AlertTitle>
           <AlertDescription>
-            {error.message}. Ouvre-la sur GitHub en attendant.
+            {copy.unavailableDetail(error.message)}
           </AlertDescription>
         </Alert>
       )}
       {!isPending && !error && conversation === null && (
-        <p className="text-sm text-muted-foreground">
-          Ce type de notification ne s'affiche pas ici. Ouvre-la sur GitHub.
-        </p>
+        <p className="text-sm text-muted-foreground">{copy.unsupported}</p>
       )}
       {conversation && (
         <>
-          <CommentBlock comment={conversation.description} note="a ouvert" />
+          <CommentBlock comment={conversation.description} note={copy.opened} />
           {conversation.entries.map((entry) => (
             <Entry
               key={entry.id}

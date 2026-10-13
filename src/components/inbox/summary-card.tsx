@@ -19,24 +19,9 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { Spinner } from "@/components/ui/spinner"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { timeAgo } from "@/lib/format"
+import { useI18n } from "@/hooks/use-i18n"
 
-export const LENGTH_LABEL: Record<SummaryLength, string> = {
-  short: "Court",
-  standard: "Standard",
-  detailed: "Détaillé",
-}
-
-const LENGTH_HINT: Record<SummaryLength, string> = {
-  short: "L'essentiel en une phrase, lisible en 15 secondes",
-  standard: "Les points clés, lisible en moins d'une minute",
-  detailed: "Toutes les décisions, désaccords et points en suspens",
-}
-
-const LENGTH_DURATION: Record<SummaryLength, string> = {
-  short: "10 à 20 s",
-  standard: "15 à 40 s",
-  detailed: "20 à 60 s",
-}
+const LENGTHS: SummaryLength[] = ["short", "standard", "detailed"]
 
 function List({ title, items }: { title: string; items: string[] }) {
   if (items.length === 0) return null
@@ -61,31 +46,33 @@ function LengthPicker({
   onChange: (length: SummaryLength) => void
   ready: Record<SummaryLength, boolean>
 }) {
+  const { t } = useI18n()
+  const copy = t.detail.summary
   return (
     <ToggleGroup
       value={[value]}
       onValueChange={(next) => next[0] && onChange(next[0] as SummaryLength)}
       variant="outline"
       size="sm"
-      aria-label="Longueur du résumé"
+      aria-label={copy.lengthPicker}
       className="bg-background"
     >
-      {(Object.keys(LENGTH_LABEL) as SummaryLength[]).map((length) => (
+      {LENGTHS.map((length) => (
         // ActionHint renders the item itself, so the group keeps its own children.
         <ActionHint
           key={length}
           side="top"
-          content={`${LENGTH_HINT[length]}${ready[length] ? " · déjà généré" : ""}`}
+          content={`${copy.lengthHints[length]}${ready[length] ? ` · ${copy.alreadyGenerated}` : ""}`}
         >
           <ToggleGroupItem
             value={length}
             className="aria-pressed:bg-primary aria-pressed:text-primary-foreground aria-pressed:hover:bg-primary/90"
           >
-            {LENGTH_LABEL[length]}
+            {copy.lengths[length]}
             {ready[length] && (
               <span
                 className="size-1.5 rounded-full bg-current opacity-70"
-                aria-label="déjà généré"
+                aria-label={copy.alreadyGenerated}
               />
             )}
           </ToggleGroupItem>
@@ -102,6 +89,8 @@ export function SummaryCard({
   itemKey: string
   kind: "PR" | "issue"
 }) {
+  const { t, language } = useI18n()
+  const copy = t.detail.summary
   const { data, isPending } = useQuery(summaryQuery(itemKey))
   const { data: readState } = useQuery(summaryReadQuery(itemKey))
   const summarize = useSummarize(itemKey)
@@ -137,12 +126,11 @@ export function SummaryCard({
         <div className="flex flex-wrap items-center gap-3">
           <SparklesIcon className="size-4 text-primary" />
           <p className="min-w-48 flex-1 text-sm text-muted-foreground">
-            Pas le temps de tout lire ? L'IA résume la {kind}, ses fils Slack et
-            ce qu'on attend de toi.
+            {copy.pitch(kind)}
           </p>
           <LengthPicker value={length} onChange={setChosen} ready={ready} />
           <Button size="sm" onClick={() => summarize.mutate(length)}>
-            Résumer avec l'IA
+            {copy.summarize}
           </Button>
         </div>
         <AskAi itemKey={itemKey} kind={kind} />
@@ -152,7 +140,7 @@ export function SummaryCard({
 
   return (
     <section
-      aria-label="Résumé IA"
+      aria-label={copy.title}
       className="flex flex-col gap-3 rounded-lg border border-primary/20 bg-accent/40 p-4"
     >
       <header className="flex flex-wrap items-center gap-2">
@@ -169,21 +157,21 @@ export function SummaryCard({
             )}
           />
           <SparklesIcon className="size-4 text-primary" />
-          <h3 className="text-sm font-semibold">Résumé IA</h3>
+          <h3 className="text-sm font-semibold">{copy.title}</h3>
         </button>
         <LengthPicker value={length} onChange={setChosen} ready={ready} />
         {summary && !generating && (
           <span className="text-xs text-muted-foreground">
-            {timeAgo(summary.createdAt)} · {summary.model}
+            {timeAgo(summary.createdAt, language)} · {summary.model}
           </span>
         )}
         {summary?.outdated && !generating && (
-          <Hint content="Il y a eu de l'activité sur GitHub depuis ce résumé : régénère-le pour en tenir compte.">
+          <Hint content={copy.outdatedHint}>
             <Badge
               variant="outline"
               className="cursor-help border-heat/40 text-heat-foreground"
             >
-              Pas à jour
+              {copy.outdated}
             </Badge>
           </Hint>
         )}
@@ -201,12 +189,12 @@ export function SummaryCard({
               <RefreshCwIcon data-icon="inline-start" />
             )}
             {generating
-              ? `L'IA résume… (${LENGTH_DURATION[length]})`
-              : "Régénérer"}
+              ? copy.generating(copy.lengthDurations[length])
+              : copy.regenerate}
           </Button>
         )}
         {summary && (
-          <Hint content="Replie le résumé ; il se rouvre s'il est régénéré.">
+          <Hint content={copy.readHint}>
             <label className="flex cursor-pointer items-center gap-1.5 rounded border bg-background px-1.5 py-0.5 text-xs">
               <Checkbox
                 checked={isRead}
@@ -215,7 +203,7 @@ export function SummaryCard({
                   setOpenChoice(!checked)
                 }}
               />
-              Lu
+              {copy.read}
             </label>
           </Hint>
         )}
@@ -225,11 +213,10 @@ export function SummaryCard({
           {!summary && !generating && (
             <div className="flex items-center gap-3">
               <p className="flex-1 text-sm text-muted-foreground">
-                Pas encore de résumé {LENGTH_LABEL[length].toLowerCase()} pour
-                cette {kind}.
+                {copy.missing(copy.lengths[length], kind)}
               </p>
               <Button size="sm" onClick={() => summarize.mutate(length)}>
-                Générer ({LENGTH_DURATION[length]})
+                {copy.generate(copy.lengthDurations[length])}
               </Button>
             </div>
           )}
@@ -237,7 +224,7 @@ export function SummaryCard({
           {generating && !summary && (
             <div className="flex flex-col gap-2">
               <p className="text-xs text-muted-foreground">
-                L'IA lit la conversation… ({LENGTH_DURATION[length]})
+                {copy.reading(copy.lengthDurations[length])}
               </p>
               <Skeleton className="h-4 w-full" />
               <Skeleton className="h-4 w-2/3" />
@@ -258,22 +245,22 @@ export function SummaryCard({
               {summary.content.expectedFromMe && (
                 <div className="rounded-md border border-heat/30 bg-background px-3 py-2">
                   <h4 className="text-xs font-medium text-heat-foreground">
-                    Ce qu'on attend de toi
+                    {copy.expectedFromMe}
                   </h4>
                   <Markdown>{summary.content.expectedFromMe}</Markdown>
                 </div>
               )}
               <div className="flex flex-col gap-1">
                 <h4 className="text-xs font-medium text-muted-foreground">
-                  Où on en est
+                  {copy.status}
                 </h4>
                 <Markdown>{summary.content.status}</Markdown>
               </div>
               <List
-                title="Questions ouvertes"
+                title={copy.openQuestions}
                 items={summary.content.openQuestions}
               />
-              <List title="Points de vigilance" items={summary.content.risks} />
+              <List title={copy.risks} items={summary.content.risks} />
             </div>
           )}
           <AskAi itemKey={itemKey} kind={kind} />

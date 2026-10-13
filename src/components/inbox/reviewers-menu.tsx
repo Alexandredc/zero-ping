@@ -22,13 +22,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover"
 import { Spinner } from "@/components/ui/spinner"
-
-const REVIEW_STATE: Record<string, string> = {
-  APPROVED: "a approuvé",
-  CHANGES_REQUESTED: "a demandé des changements",
-  COMMENTED: "a commenté",
-  DISMISSED: "review écartée",
-}
+import { useI18n } from "@/hooks/use-i18n"
 
 function CandidateItem({
   candidate,
@@ -39,6 +33,7 @@ function CandidateItem({
   checked: boolean
   onToggle: () => void
 }) {
+  const { t } = useI18n()
   return (
     <CommandItem
       value={candidate.id}
@@ -62,7 +57,8 @@ function CandidateItem({
           <span className="truncate text-xs text-muted-foreground">
             {[
               candidate.name,
-              candidate.reviewState && REVIEW_STATE[candidate.reviewState],
+              candidate.reviewState &&
+                t.detail.reviewState(candidate.reviewState),
             ]
               .filter(Boolean)
               .join(" · ")}
@@ -87,6 +83,8 @@ export function ReviewersMenu({
   size?: "sm" | "xs"
   variant?: "outline" | "default" | "ghost"
 }) {
+  const { t } = useI18n()
+  const copy = t.detail.reviewers
   const [open, setOpen] = useState(false)
   // Null until the viewer changes something: the PR's current reviewers show meanwhile.
   const [draft, setDraft] = useState<string[] | null>(null)
@@ -112,14 +110,20 @@ export function ReviewersMenu({
   const candidates = data?.candidates ?? []
   const groups = [
     {
-      heading: "Suggérés par GitHub",
+      id: "suggested",
+      heading: copy.suggested,
       items: candidates.filter((c) => c.suggested),
     },
     {
-      heading: "Personnes",
+      id: "people",
+      heading: copy.people,
       items: candidates.filter((c) => c.kind === "user" && !c.suggested),
     },
-    { heading: "Équipes", items: candidates.filter((c) => c.kind === "team") },
+    {
+      id: "teams",
+      heading: copy.teams,
+      items: candidates.filter((c) => c.kind === "team"),
+    },
   ].filter((group) => group.items.length > 0)
 
   return (
@@ -130,7 +134,7 @@ export function ReviewersMenu({
         if (!next) setDraft(null)
       }}
     >
-      <ActionHint content="Choisis qui doit reviewer la PR : GitHub leur envoie la demande, et retire celle des reviewers que tu décoches.">
+      <ActionHint content={copy.hint}>
         <PopoverTrigger
           render={
             <Button variant={variant} size={size} disabled={save.isPending} />
@@ -141,27 +145,27 @@ export function ReviewersMenu({
           ) : (
             <UserRoundPlusIcon data-icon="inline-start" />
           )}
-          Reviewers
+          {copy.button}
         </PopoverTrigger>
       </ActionHint>
       <PopoverContent align="start" className="w-80 p-0">
         <Command>
-          <CommandInput placeholder="Chercher une personne ou une équipe…" />
+          <CommandInput placeholder={copy.search} />
           <CommandList>
             <CommandEmpty>
               {isPending ? (
                 <span className="flex items-center justify-center gap-2 text-muted-foreground">
-                  <Spinner /> Chargement des reviewers…
+                  <Spinner /> {copy.loading}
                 </span>
               ) : (
-                "Personne ne correspond."
+                copy.empty
               )}
             </CommandEmpty>
             {groups.map((group) => (
               <CommandGroup
-                key={group.heading}
+                key={group.id}
                 heading={
-                  group.heading === "Suggérés par GitHub" ? (
+                  group.id === "suggested" ? (
                     <span className="flex items-center gap-1">
                       <SparklesIcon className="size-3" />
                       {group.heading}
@@ -191,7 +195,7 @@ export function ReviewersMenu({
                   ]
                     .filter(Boolean)
                     .join(" ")
-                : `${selected.length} reviewer${selected.length > 1 ? "s" : ""}`}
+                : copy.count(selected.length)}
             </span>
             <Button
               size="sm"
@@ -206,7 +210,7 @@ export function ReviewersMenu({
               }
             >
               {save.isPending && <Spinner data-icon="inline-start" />}
-              Enregistrer
+              {t.common.save}
             </Button>
           </div>
         </Command>

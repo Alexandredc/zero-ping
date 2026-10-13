@@ -12,6 +12,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Spinner } from "@/components/ui/spinner"
+import { useI18n } from "@/hooks/use-i18n"
 
 /** Who answers each command, for the menu labels. */
 function botName(command: string): string {
@@ -21,6 +22,7 @@ function botName(command: string): string {
 
 /** Posts a review command such as `@codex review` as a comment, in one click. */
 export function AiReviewMenu({ itemKey }: { itemKey: string }) {
+  const { t } = useI18n()
   const { data: settings } = useQuery(settingsQuery())
   const { reply } = useInboxActions()
   const commands = settings?.preferences.reviewCommands ?? []
@@ -28,7 +30,7 @@ export function AiReviewMenu({ itemKey }: { itemKey: string }) {
 
   return (
     <DropdownMenu>
-      <ActionHint content="Poste en un clic un commentaire qui demande une review à un bot IA (Codex, Claude, Gemini…). Les commandes se règlent dans Réglages > Agent IA.">
+      <ActionHint content={t.detail.aiReview.hint}>
         <DropdownMenuTrigger
           render={
             <Button variant="outline" size="sm" disabled={reply.isPending} />
@@ -39,13 +41,13 @@ export function AiReviewMenu({ itemKey }: { itemKey: string }) {
           ) : (
             <BotIcon data-icon="inline-start" />
           )}
-          Review IA
+          {t.detail.aiReview.button}
           <ChevronDownIcon data-icon="inline-end" />
         </DropdownMenuTrigger>
       </ActionHint>
       <DropdownMenuContent align="start" className="w-64">
         <DropdownMenuGroup>
-          <DropdownMenuLabel>Poster sur la PR…</DropdownMenuLabel>
+          <DropdownMenuLabel>{t.detail.aiReview.postOn}</DropdownMenuLabel>
           {commands.map((command) => (
             <DropdownMenuItem
               key={command}

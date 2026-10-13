@@ -30,8 +30,8 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { toast } from "@/components/ui/toast"
 import { useHotkeys } from "@/hooks/use-hotkeys"
+import { useI18n } from "@/hooks/use-i18n"
 import { GitHubIcon } from "@/components/brand-icons"
-import { NEEDS_CHECK_HINT } from "@/server/inbox/priority"
 import type { PriorityReason } from "@/server/inbox/priority"
 import type { Item } from "@/server/db/schema"
 import {
@@ -63,12 +63,13 @@ function PriorityExplanation({
   reasons: PriorityReason[]
   needsCheck: boolean
 }) {
+  const { t } = useI18n()
   const counted = reasons.filter((reason) => reason.weight !== 0)
   if (counted.length === 0 && !needsCheck) return null
   return (
     <section className="flex flex-col gap-2 rounded-lg border bg-muted/40 p-3">
       <h3 className="text-xs font-medium text-muted-foreground">
-        Pourquoi la priorité {priority} sur 100
+        {t.detail.priority.title(priority)}
       </h3>
       <ul className="flex flex-col gap-1.5 text-xs">
         {counted.map((reason) => (
@@ -89,8 +90,10 @@ function PriorityExplanation({
           <li className="flex gap-2 text-heat-foreground">
             <span className="w-8 shrink-0 text-right font-mono">?</span>
             <span>
-              <span className="font-medium">À vérifier</span> ·{" "}
-              {NEEDS_CHECK_HINT}
+              <span className="font-medium">
+                {t.detail.priority.needsCheck}
+              </span>{" "}
+              · {t.detail.priority.needsCheckHint}
             </span>
           </li>
         )}
@@ -101,10 +104,11 @@ function PriorityExplanation({
 
 /** The author, big enough to recognise; the name on hover, for a missing photo. */
 function AuthorAvatar({ login, isPull }: { login: string; isPull: boolean }) {
+  const { t } = useI18n()
   return (
     <Hint
       instant
-      content={`${isPull ? "PR ouverte" : "Issue ouverte"} par @${login}`}
+      content={t.detail.panel.openedBy(isPull, login)}
       className="shrink-0"
     >
       <Avatar className="size-10">
@@ -121,16 +125,18 @@ function BranchName({
 }: {
   branches: { head: string; base: string }
 }) {
+  const { t } = useI18n()
   return (
-    <ActionHint content={`Copier « ${branches.head} »`}>
+    <ActionHint content={t.detail.panel.copyBranch(branches.head)}>
       <button
         type="button"
         onClick={() =>
-          void navigator.clipboard
-            .writeText(branches.head)
-            .then(() =>
-              toast.add({ title: "Branche copiée", description: branches.head })
-            )
+          void navigator.clipboard.writeText(branches.head).then(() =>
+            toast.add({
+              title: t.detail.panel.branchCopied,
+              description: branches.head,
+            })
+          )
         }
         className="inline-flex max-w-full min-w-0 items-center gap-1 rounded align-baseline font-mono text-xs text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
       >
@@ -162,6 +168,7 @@ export function DetailPanel({
   /** Opens the page's confirmation dialog for an approval or a change request. */
   onReview: (review: PendingReview) => void
 }) {
+  const { t, language } = useI18n()
   const { data, isPending, error } = useQuery(conversationQuery(item.key))
   const actions = useInboxActions()
   const [body, setBody] = useState("")
@@ -218,17 +225,17 @@ export function DetailPanel({
 
   const snoozeOptions = [
     {
-      label: "Dans 3 heures",
+      label: t.detail.panel.snoozeIn3Hours,
       until: () => new Date(Date.now() + 3 * 3600_000),
     },
-    { label: "Demain matin", until: () => nextMorning() },
-    { label: "Lundi matin", until: () => nextMorning(1) },
+    { label: t.detail.panel.snoozeTomorrowMorning, until: () => nextMorning() },
+    { label: t.detail.panel.snoozeMondayMorning, until: () => nextMorning(1) },
   ]
 
   return (
     <section
       className="flex h-full min-w-0 flex-1 flex-col bg-background"
-      aria-label="Détail"
+      aria-label={t.detail.panel.label}
     >
       {isPull && <ChecksBar itemKey={item.key} />}
       <header className="flex flex-col gap-3 border-b px-5 py-4">
@@ -249,12 +256,12 @@ export function DetailPanel({
               onToggle={onToggleFullscreen}
             />
           )}
-          <ActionHint content="Fermer le détail (Échap)">
+          <ActionHint content={t.detail.panel.closeHint}>
             <Button
               variant="ghost"
               size="icon-sm"
               onClick={onClose}
-              aria-label="Fermer"
+              aria-label={t.common.close}
             >
               <XIcon />
             </Button>
@@ -277,8 +284,8 @@ export function DetailPanel({
           <ActionHint
             content={
               item.awaitingUrl
-                ? "Ouvre GitHub directement sur le message qui attend ta réponse (o)."
-                : "Ouvre la PR ou l'issue sur GitHub dans un nouvel onglet (o)."
+                ? t.detail.panel.openOnGitHubAwaitingHint
+                : t.detail.panel.openOnGitHubHint
             }
           >
             <Button
@@ -288,7 +295,7 @@ export function DetailPanel({
               render={<a href={githubUrl} target="_blank" rel="noreferrer" />}
             >
               <GitHubIcon data-icon="inline-start" />
-              Ouvrir sur GitHub
+              {t.common.openOnGitHub}
               <Kbd>o</Kbd>
             </Button>
           </ActionHint>
@@ -296,9 +303,7 @@ export function DetailPanel({
             <>
               <ActionHint
                 content={
-                  isDone
-                    ? "Remet l'élément dans son dossier de l'inbox."
-                    : "Retire l'élément de l'inbox et le marque « Done » dans tes notifications GitHub. Il revient tout seul s'il y a du nouveau."
+                  isDone ? t.detail.panel.undoneHint : t.detail.panel.doneHint
                 }
               >
                 <Button
@@ -314,24 +319,26 @@ export function DetailPanel({
                   ) : (
                     <CheckIcon data-icon="inline-start" />
                   )}
-                  {isDone ? "Remettre dans l'inbox" : "Marquer comme traité"}
+                  {isDone ? t.detail.panel.undone : t.detail.panel.done}
                 </Button>
               </ActionHint>
               <DropdownMenu>
-                <ActionHint content="Cache l'élément jusqu'à l'heure choisie, puis le fait revenir dans son dossier. En attendant, il est rangé dans « En pause ». Rien ne change sur GitHub.">
+                <ActionHint content={t.detail.panel.snoozeHint}>
                   <DropdownMenuTrigger
                     render={<Button variant="outline" size="sm" />}
                   >
                     <ClockIcon data-icon="inline-start" />
                     {item.snoozedUntil && item.snoozedUntil > new Date()
-                      ? `En pause jusqu'à ${formatWhen(item.snoozedUntil)}`
-                      : "Mettre en pause"}
+                      ? t.detail.panel.snoozedUntil(
+                          formatWhen(item.snoozedUntil, language)
+                        )
+                      : t.detail.panel.snooze}
                   </DropdownMenuTrigger>
                 </ActionHint>
                 <DropdownMenuContent align="start" className="w-64">
                   <DropdownMenuGroup>
                     <DropdownMenuLabel>
-                      Faire revenir cet élément…
+                      {t.detail.panel.snoozeMenuLabel}
                     </DropdownMenuLabel>
                     {snoozeOptions.map((option) => (
                       <DropdownMenuItem
@@ -345,7 +352,7 @@ export function DetailPanel({
                       >
                         {option.label}
                         <span className="ml-auto text-xs text-muted-foreground">
-                          {formatWhen(option.until())}
+                          {formatWhen(option.until(), language)}
                         </span>
                       </DropdownMenuItem>
                     ))}
@@ -358,7 +365,7 @@ export function DetailPanel({
                           })
                         }
                       >
-                        Reprendre maintenant
+                        {t.detail.panel.unsnooze}
                       </DropdownMenuItem>
                     )}
                   </DropdownMenuGroup>
@@ -390,16 +397,18 @@ export function DetailPanel({
           className="border-b px-5"
         >
           <TabsList variant="line" className="h-9">
-            <TabsTrigger value="conversation">Conversation</TabsTrigger>
+            <TabsTrigger value="conversation">
+              {t.detail.panel.tabs.conversation}
+            </TabsTrigger>
             {linkedIssues.length > 0 && (
               <TabsTrigger value="issue">
                 {linkedIssues.length > 1
-                  ? `Issues ${linkedIssues.length}`
-                  : `Issue #${linkedIssues[0].number}`}
+                  ? t.detail.panel.tabs.issues(linkedIssues.length)
+                  : t.detail.panel.tabs.issue(linkedIssues[0].number)}
               </TabsTrigger>
             )}
             <TabsTrigger value="files">
-              Fichiers modifiés
+              {t.detail.panel.tabs.files}
               {item.additions !== null && (
                 <span className="font-mono text-xs tabular-nums">
                   <span className="text-diff-add-strong">
@@ -452,7 +461,9 @@ export function DetailPanel({
             {item.awaitingMe && item.awaitingExcerpt && (
               <Alert>
                 <MessageSquareReplyIcon />
-                <AlertTitle>@{item.awaitingFrom} attend ta réponse</AlertTitle>
+                <AlertTitle>
+                  {t.detail.panel.awaitingTitle(item.awaitingFrom)}
+                </AlertTitle>
                 <AlertDescription>
                   <p className="line-clamp-3">{item.awaitingExcerpt}</p>
                   {item.awaitingUrl && (
@@ -462,7 +473,7 @@ export function DetailPanel({
                       rel="noreferrer"
                       className="text-primary underline underline-offset-2"
                     >
-                      Voir le message sur GitHub
+                      {t.detail.panel.seeMessageOnGitHub}
                     </a>
                   )}
                 </AlertDescription>
@@ -488,7 +499,7 @@ export function DetailPanel({
             {target.type === "thread" ? (
               <>
                 <span className="truncate">
-                  Réponse dans le fil GitHub{" "}
+                  {t.detail.composer.replyInThread}{" "}
                   <span className="font-mono">{target.path}</span>
                   {target.author && ` (@${target.author})`}
                 </span>
@@ -497,15 +508,16 @@ export function DetailPanel({
                   size="xs"
                   onClick={() => setTarget({ type: "conversation" })}
                 >
-                  Répondre à la conversation
+                  {t.detail.composer.replyToConversation}
                 </Button>
               </>
             ) : (
-              <span>Commentaire sur la conversation GitHub</span>
+              <span>{t.detail.composer.commentOnConversation}</span>
             )}
             <span className="ml-auto hidden items-center gap-1 sm:flex">
-              <Kbd>r</Kbd> pour écrire, <Kbd>⌘</Kbd>
-              <Kbd>Entrée</Kbd> pour envoyer
+              <Kbd>r</Kbd> {t.detail.composer.keysWrite} <Kbd>⌘</Kbd>
+              <Kbd>{t.detail.composer.keysEnter}</Kbd>{" "}
+              {t.detail.composer.keysSend}
             </span>
           </div>
           <MentionTextarea
@@ -520,7 +532,7 @@ export function DetailPanel({
               }
               if (event.key === "Escape") event.currentTarget.blur()
             }}
-            placeholder="Écris ta réponse en Markdown…"
+            placeholder={t.detail.composer.placeholder}
             className="max-h-60 min-h-20"
           />
           <div className="flex flex-wrap items-center justify-end gap-2">
@@ -529,7 +541,7 @@ export function DetailPanel({
                 {/* The span keeps the hint visible on a disabled button. */}
                 <ActionHint
                   side="top"
-                  content="Envoie une review « Changes requested » avec ton texte comme commentaire : la PR ne peut plus être mergée sans nouvelle approbation. Écris d'abord ce qu'il faut changer."
+                  content={t.detail.composer.requestChangesHint}
                 >
                   <span className="inline-flex">
                     <Button
@@ -538,14 +550,11 @@ export function DetailPanel({
                       onClick={() => review("REQUEST_CHANGES")}
                       disabled={actions.review.isPending || !body.trim()}
                     >
-                      Demander des changements
+                      {t.detail.composer.requestChanges}
                     </Button>
                   </span>
                 </ActionHint>
-                <ActionHint
-                  side="top"
-                  content="Envoie une review « Approve » sur GitHub, avec ton texte en commentaire s'il y en a un."
-                >
+                <ActionHint side="top" content={t.detail.composer.approveHint}>
                   <span className="inline-flex">
                     <Button
                       variant="outline"
@@ -558,7 +567,7 @@ export function DetailPanel({
                       ) : (
                         <CheckIcon data-icon="inline-start" />
                       )}
-                      Approuver
+                      {t.detail.composer.approve}
                     </Button>
                   </span>
                 </ActionHint>
@@ -568,8 +577,8 @@ export function DetailPanel({
               side="top"
               content={
                 target.type === "thread"
-                  ? "Publie ta réponse dans ce fil de review sur GitHub (⌘ Entrée)."
-                  : "Publie ton texte comme commentaire sur la conversation GitHub, sans review (⌘ Entrée)."
+                  ? t.detail.composer.sendThreadHint
+                  : t.detail.composer.sendConversationHint
               }
             >
               <span className="inline-flex">
@@ -583,7 +592,7 @@ export function DetailPanel({
                   ) : (
                     <GitHubIcon data-icon="inline-start" />
                   )}
-                  Envoyer sur GitHub
+                  {t.detail.composer.sendOnGitHub}
                 </Button>
               </span>
             </ActionHint>

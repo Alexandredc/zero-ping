@@ -27,6 +27,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton"
 import { Spinner } from "@/components/ui/spinner"
 import { Textarea } from "@/components/ui/textarea"
+import { useI18n } from "@/hooks/use-i18n"
 
 export type ReviewEvent = "APPROVE" | "REQUEST_CHANGES"
 
@@ -37,23 +38,6 @@ export type PendingReview = {
   body: string
   /** Empties the panel's comment box once the review is sent. */
   onSent: () => void
-}
-
-const COPY: Record<
-  ReviewEvent,
-  { title: string; action: string; description: string }
-> = {
-  APPROVE: {
-    title: "Approuver la PR ?",
-    action: "Approuver",
-    description: "La review « Approve » part sur GitHub en ton nom.",
-  },
-  REQUEST_CHANGES: {
-    title: "Demander des changements ?",
-    action: "Demander des changements",
-    description:
-      "La review « Changes requested » part sur GitHub en ton nom : la PR ne pourra plus être mergée sans nouvelle approbation.",
-  },
 }
 
 /**
@@ -68,6 +52,7 @@ export function ReviewDialog({
   review: PendingReview
   onClose: () => void
 }) {
+  const { t } = useI18n()
   const actions = useInboxActions()
   const send = useSendReviewNotice()
   const { data: notice } = useQuery(reviewNoticeQuery(review.key, review.event))
@@ -75,7 +60,10 @@ export function ReviewDialog({
   const [notify, setNotify] = useState(review.event !== "APPROVE")
   const [message, setMessage] = useState("")
   const ready = notice?.enabled ? notice : null
-  const copy = COPY[review.event]
+  const copy =
+    review.event === "APPROVE"
+      ? t.detail.review.approve
+      : t.detail.review.requestChanges
 
   useEffect(() => {
     if (notice?.enabled) setMessage(notice.message)
@@ -138,19 +126,19 @@ export function ReviewDialog({
                   className="flex items-center gap-1.5"
                 >
                   <SlackIcon className="size-3.5" aria-hidden />
-                  Prévenir l'auteur sur Slack
+                  {t.detail.review.notifyAuthor}
                 </FieldLabel>
                 <FieldDescription>
                   {ready.threadPermalink
-                    ? `En réponse dans le fil de la PR sur #${ready.channel}.`
-                    : `Nouveau message dans #${ready.channel}.`}
+                    ? t.detail.review.inThread(ready.channel)
+                    : t.detail.review.newMessage(ready.channel)}
                 </FieldDescription>
               </FieldContent>
             </Field>
             {notify && (
               <Field>
                 <Textarea
-                  aria-label="Message Slack"
+                  aria-label={t.detail.review.slackMessage}
                   value={message}
                   onChange={(e) => setMessage(e.target.value)}
                   className="min-h-28"
@@ -158,10 +146,9 @@ export function ReviewDialog({
                 />
                 {ready.author && (
                   <FieldDescription>
-                    @{ready.author.login}
-                    {ready.author.name && ` (${ready.author.name})`} sera
-                    mentionné : l'agent retrouve son compte Slack, sinon il
-                    écrit son nom en clair.
+                    {t.detail.review.willBeMentioned(
+                      `@${ready.author.login}${ready.author.name ? ` (${ready.author.name})` : ""}`
+                    )}
                   </FieldDescription>
                 )}
               </Field>
@@ -171,7 +158,7 @@ export function ReviewDialog({
 
         <DialogFooter>
           <DialogClose render={<Button variant="outline" disabled={busy} />}>
-            Annuler
+            {t.common.cancel}
           </DialogClose>
           <Button
             onClick={() => void confirm().catch(() => undefined)}
@@ -185,11 +172,11 @@ export function ReviewDialog({
               <MessageSquareWarningIcon data-icon="inline-start" />
             )}
             {actions.review.isPending
-              ? "Envoi de la review…"
+              ? t.detail.review.sendingReview
               : send.isPending
-                ? "Message Slack… (20 à 40 s)"
+                ? t.detail.review.sendingSlack
                 : willNotify
-                  ? `${copy.action} et prévenir`
+                  ? t.detail.review.actionAndNotify(copy.action)
                   : copy.action}
           </Button>
         </DialogFooter>
