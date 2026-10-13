@@ -3,6 +3,7 @@ import type { ErrorComponentProps } from "@tanstack/react-router"
 import { InboxIcon, RotateCwIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { APP_NAME, LOGO_URL } from "@/lib/pings"
+import { useI18n } from "@/hooks/use-i18n"
 
 /** A full-page message with the app's logo, for errors and unknown addresses. */
 function StatusPage({
@@ -31,6 +32,7 @@ function StatusPage({
 }
 
 function BackToInbox() {
+  const { t } = useI18n()
   return (
     <Button
       variant="outline"
@@ -38,18 +40,19 @@ function BackToInbox() {
       render={<Link to="/" search={{ folder: "review" }} />}
     >
       <InboxIcon data-icon="inline-start" />
-      Retour à l'inbox
+      {t.nav.status.backToInbox}
     </Button>
   )
 }
 
 export function ErrorPage({ error, reset }: ErrorComponentProps) {
   const router = useRouter()
+  const { t } = useI18n()
   const message = error instanceof Error ? error.message : String(error)
   return (
     <StatusPage
-      title="Quelque chose a coincé"
-      description={`${APP_NAME} n'a pas pu afficher cette page. Souvent, GitHub ou la connexion a répondu de travers : réessaie dans un instant.`}
+      title={t.nav.status.errorTitle}
+      description={t.nav.status.errorDescription(APP_NAME)}
     >
       <div className="flex flex-wrap justify-center gap-2">
         <Button
@@ -59,14 +62,14 @@ export function ErrorPage({ error, reset }: ErrorComponentProps) {
           }}
         >
           <RotateCwIcon data-icon="inline-start" />
-          Réessayer
+          {t.common.retry}
         </Button>
         <BackToInbox />
       </div>
       {message && (
         <details className="w-full rounded-lg border bg-muted/40 p-3 text-left text-xs">
           <summary className="cursor-pointer text-muted-foreground">
-            Détail de l'erreur
+            {t.nav.status.errorDetail}
           </summary>
           <pre className="mt-2 font-mono break-words whitespace-pre-wrap">
             {message}
@@ -78,10 +81,11 @@ export function ErrorPage({ error, reset }: ErrorComponentProps) {
 }
 
 export function NotFoundPage() {
+  const { t } = useI18n()
   return (
     <StatusPage
-      title="Page introuvable"
-      description="Cette adresse ne correspond à aucune vue de l'app."
+      title={t.nav.status.notFoundTitle}
+      description={t.nav.status.notFoundDescription}
     >
       <BackToInbox />
     </StatusPage>

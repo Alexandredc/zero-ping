@@ -1,7 +1,13 @@
-const relative = new Intl.RelativeTimeFormat("fr", {
-  numeric: "auto",
-  style: "short",
-})
+import { DEFAULT_LANGUAGE } from "@/lib/i18n/core"
+import type { Language } from "@/lib/i18n/core"
+import { messagesFor } from "@/lib/i18n/messages"
+
+const relative = Object.fromEntries(
+  (["fr", "en"] as const).map((language) => [
+    language,
+    new Intl.RelativeTimeFormat(language, { numeric: "auto", style: "short" }),
+  ])
+) as Record<Language, Intl.RelativeTimeFormat>
 
 const UNITS: [Intl.RelativeTimeFormatUnit, number][] = [
   ["year", 365 * 24 * 3600],
@@ -12,17 +18,30 @@ const UNITS: [Intl.RelativeTimeFormatUnit, number][] = [
   ["minute", 60],
 ]
 
+/** "il y a 3 j" / "3 days ago". */
 export function timeAgo(
   date: Date | string | null,
+  language: Language = DEFAULT_LANGUAGE,
   now: Date = new Date()
 ): string {
   if (!date) return ""
   const seconds = Math.round((new Date(date).getTime() - now.getTime()) / 1000)
   for (const [unit, size] of UNITS) {
     if (Math.abs(seconds) >= size)
-      return relative.format(Math.round(seconds / size), unit)
+      return relative[language].format(Math.round(seconds / size), unit)
   }
-  return "à l'instant"
+  return messagesFor(language).common.justNow
+}
+
+/** The time elapsed without "il y a" / "ago", to read in a sentence: "depuis 3 j". */
+export function elapsed(
+  date: Date | string | null,
+  language: Language = DEFAULT_LANGUAGE,
+  now: Date = new Date()
+): string {
+  return timeAgo(date, language, now)
+    .replace(/^il y a\s/, "")
+    .replace(/\sago$/, "")
 }
 
 export function avatarUrl(login: string | null, size = 40): string | undefined {
@@ -42,17 +61,29 @@ export function nextMorning(weekday?: number, now: Date = new Date()): Date {
 }
 
 /** "aujourd'hui 17:30", "demain 09:00" or "lun. 13 oct. 09:00". */
-export function formatWhen(date: Date, now: Date = new Date()): string {
-  const time = date.toLocaleTimeString("fr", {
+export function formatWhen(
+  date: Date,
+  language: Language = DEFAULT_LANGUAGE,
+  now: Date = new Date()
+): string {
+  const { common } = messagesFor(language)
+  const time = date.toLocaleTimeString(language, {
     hour: "2-digit",
     minute: "2-digit",
   })
   const startOfDay = (d: Date) =>
     new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime()
   const days = Math.round((startOfDay(date) - startOfDay(now)) / 86_400_000)
-  if (days === 0) return `aujourd'hui ${time}`
-  if (days === 1) return `demain ${time}`
-  return `${date.toLocaleDateString("fr", { weekday: "short", day: "numeric", month: "short" })} ${time}`
+  if (days === 0) return common.atTime(common.today, time)
+  if (days === 1) return common.atTime(common.tomorrow, time)
+  return common.atTime(
+    date.toLocaleDateString(language, {
+      weekday: "short",
+      day: "numeric",
+      month: "short",
+    }),
+    time
+  )
 }
 
 export type PullSize = "XS" | "S" | "M" | "L" | "XL"

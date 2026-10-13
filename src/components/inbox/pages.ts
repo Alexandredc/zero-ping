@@ -7,11 +7,11 @@ import {
 } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
 
-/** Pages outside the inbox folders: one label and icon, shared by the sidebar and the page titles. */
-export const PAGE_META = {
-  dashboard: { label: "Vue d'ensemble", icon: GaugeIcon },
-  team: { label: "Équipe", icon: UsersIcon },
-  recap: { label: "Récap du jour", icon: SunriseIcon },
-  issues: { label: "Mes issues", icon: CircleDotIcon },
-  settings: { label: "Réglages", icon: SettingsIcon },
-} satisfies Record<string, { label: string; icon: LucideIcon }>
+/** Pages outside the inbox folders: one icon, shared by the sidebar and the page titles; labels live in `t.nav.pages`. */
+export const PAGE_ICONS = {
+  dashboard: GaugeIcon,
+  team: UsersIcon,
+  recap: SunriseIcon,
+  issues: CircleDotIcon,
+  settings: SettingsIcon,
+} satisfies Record<string, LucideIcon>

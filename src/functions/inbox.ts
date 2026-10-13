@@ -57,6 +57,7 @@ import {
 } from "@/server/inbox/actions"
 import { ensureSyncLoop, getSyncStatus, syncNow } from "@/server/inbox/loop"
 import { preferencesPatchSchema } from "@/server/preferences"
+import { getLanguage } from "@/server/i18n"
 
 const folderSchema = z.enum([
   "review",
@@ -185,6 +186,10 @@ export const postSlackReply = createServerFn({ method: "POST" })
 
 export const getAppSettings = createServerFn({ method: "GET" }).handler(() =>
   getSettings()
+)
+
+export const getLanguageSetting = createServerFn({ method: "GET" }).handler(
+  () => getLanguage()
 )
 
 export const setPreferences = createServerFn({ method: "POST" })

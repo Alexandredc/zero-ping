@@ -30,6 +30,7 @@ describe("preferences", () => {
 
   it("starts from the defaults", async () => {
     expect(await getPreferences(db)).toEqual({
+      language: "fr",
       slackExcludedChannels: [],
       slackAutoSearch: true,
       reviewNoticeEnabled: true,
@@ -67,11 +68,7 @@ describe("preferences", () => {
 
   it("normalises channels and keeps untouched options on partial updates", async () => {
     await updatePreferences(db, {
-      slackExcludedChannels: [
-        "#Eng-General",
-        "eng-general",
-        " #random ",
-      ],
+      slackExcludedChannels: ["#Eng-General", "eng-general", " #random "],
     })
     await updatePreferences(
       db,
