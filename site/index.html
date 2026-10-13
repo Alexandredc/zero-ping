@@ -1,0 +1,408 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Zéro Ping, a quiet GitHub inbox for lead devs</title>
+    <meta
+      name="description"
+      content="Zéro Ping replaces GitHub notification emails with one sorted list of what waits on you, with its Slack threads. Open source, runs on your machine."
+    />
+    <meta name="theme-color" content="#14123a" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Zéro Ping" />
+    <meta
+      property="og:description"
+      content="A quiet GitHub inbox for lead devs. Open source, runs on your machine."
+    />
+    <link rel="icon" href="assets/logo.svg" type="image/svg+xml" />
+    <link rel="preload" href="fonts/bricolage-grotesque-latin-standard-normal.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href="fonts/geist-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="stylesheet" href="styles.css" />
+    <script src="main.js" defer></script>
+  </head>
+  <body>
+    <a class="skip" href="#main" data-i18n="skip">Skip to content</a>
+
+    <header class="night" id="top">
+      <nav class="bar wrap" aria-label="Main">
+        <a class="brand" href="#top">
+          <img src="assets/logo.svg" alt="" width="32" height="32" />
+          <span>Zéro Ping</span>
+        </a>
+        <ul class="bar-links">
+          <li><a href="#inbox" data-i18n="nav.inbox">The inbox</a></li>
+          <li><a href="#private" data-i18n="nav.private">Local</a></li>
+          <li><a href="#start" data-i18n="nav.start">Quick start</a></li>
+          <li>
+            <a href="https://github.com/Alexandredc/github-management">GitHub</a>
+          </li>
+        </ul>
+        <div class="lang" role="group" aria-label="Language" data-i18n-label="lang">
+          <button type="button" data-lang="en" aria-pressed="true">EN</button>
+          <button type="button" data-lang="fr" aria-pressed="false">FR</button>
+        </div>
+      </nav>
+
+      <div class="hero wrap">
+        <div class="hero-copy">
+          <p class="eyebrow" data-i18n="hero.eyebrow">Local GitHub triage for lead devs</p>
+          <h1 data-i18n="hero.title">Silence the pings.<br />Keep what needs&nbsp;you.</h1>
+          <p class="lede" data-i18n="hero.lede">
+            Zéro Ping replaces GitHub notification emails with one sorted list of what waits on you:
+            reviews, replies, your pull requests and your team’s, each with its Slack threads. It runs
+            on your machine.
+          </p>
+          <div class="cta">
+            <a class="button button-primary" href="#start" data-i18n="hero.start">Run it locally</a>
+            <a class="button button-ghost" href="https://github.com/Alexandredc/github-management">
+              <svg aria-hidden="true" viewBox="0 0 16 16" width="16" height="16"><path fill="currentColor" d="M8 0a8 8 0 0 0-2.53 15.59c.4.07.55-.17.55-.38v-1.33c-2.23.48-2.7-1.07-2.7-1.07-.36-.92-.89-1.17-.89-1.17-.73-.5.06-.49.06-.49.8.06 1.23.83 1.23.83.72 1.23 1.88.87 2.34.67.07-.52.28-.87.5-1.07-1.78-.2-3.65-.89-3.65-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.6 7.6 0 0 1 4 0c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48v2.2c0 .21.15.46.55.38A8 8 0 0 0 8 0Z"/></svg>
+              <span data-i18n="hero.github">View on GitHub</span>
+            </a>
+          </div>
+          <p class="facts" data-i18n="hero.facts">Open source · No account · Data in a local database</p>
+        </div>
+
+        <figure class="filter" aria-labelledby="filter-caption">
+          <div class="tab" aria-hidden="true">
+            <img src="assets/logo.svg" alt="" width="14" height="14" />
+            <span>(3) Zéro Ping</span>
+          </div>
+          <div class="noise" aria-hidden="true">
+            <ul class="noise-reel">
+              <li><b>GH</b>[acme/web] Bump vite from 7.1.2 to 7.1.4 (#418)</li>
+              <li><b>GH</b>[acme/api] CI: all checks passed on main</li>
+              <li><b>#</b>#deploys · build 2291 finished</li>
+              <li><b>GH</b>[acme/api] Release v2.8.0</li>
+              <li><b>GH</b>[acme/web] Merged #412 into main</li>
+              <li><b>#</b>#general · lunch poll is open</li>
+              <li><b>GH</b>[acme/docs] renovate[bot] commented on #77</li>
+              <li><b>GH</b>[acme/mobile] Closed #85</li>
+              <li><b>GH</b>[acme/web] Bump vite from 7.1.2 to 7.1.4 (#418)</li>
+              <li><b>GH</b>[acme/api] CI: all checks passed on main</li>
+              <li><b>#</b>#deploys · build 2291 finished</li>
+              <li><b>GH</b>[acme/api] Release v2.8.0</li>
+              <li><b>GH</b>[acme/web] Merged #412 into main</li>
+              <li><b>#</b>#general · lunch poll is open</li>
+              <li><b>GH</b>[acme/docs] renovate[bot] commented on #77</li>
+              <li><b>GH</b>[acme/mobile] Closed #85</li>
+            </ul>
+          </div>
+          <div class="mask" aria-hidden="true">
+            <svg viewBox="0 0 120 20" width="120" height="20">
+              <path d="M22 8 Q34 18 46 8 M74 8 Q86 18 98 8" />
+            </svg>
+          </div>
+          <ol class="kept">
+            <li class="strip hot">
+              <span class="gauge" style="--level: 0.92"><span>92</span></span>
+              <span class="strip-body">
+                <span class="strip-meta">acme/api #233 · <span data-i18n="strip.review">review requested</span></span>
+                <span class="strip-title">Add rate limiting to public endpoints</span>
+              </span>
+            </li>
+            <li class="strip hot">
+              <span class="gauge" style="--level: 0.74"><span>74</span></span>
+              <span class="strip-body">
+                <span class="strip-meta">acme/web #409 · <span data-i18n="strip.reply">otto replied after you</span></span>
+                <span class="strip-title">Move checkout to server components</span>
+              </span>
+            </li>
+            <li class="strip">
+              <span class="gauge" style="--level: 0.41"><span>41</span></span>
+              <span class="strip-body">
+                <span class="strip-meta">acme/mobile #87 · <span data-i18n="strip.ci">your PR, CI failed</span></span>
+                <span class="strip-title">Cache avatars on device</span>
+              </span>
+            </li>
+          </ol>
+          <figcaption id="filter-caption" class="sr-only" data-i18n="hero.caption">
+            Bot updates, CI runs, releases and chatter are filed away. Three items stay, ranked by
+            priority score.
+          </figcaption>
+        </figure>
+      </div>
+    </header>
+
+    <main id="main">
+      <section class="why wrap" aria-labelledby="why-title">
+        <div class="why-copy">
+          <p class="eyebrow" data-i18n="why.eyebrow">Why</p>
+          <h2 id="why-title" data-i18n="why.title">The ping that matters arrives with all the ones that don’t.</h2>
+          <p data-i18n="why.body">
+            As a lead dev, every review request, mention, CI run, dependency bump and Slack thread
+            about a PR lands on you. Zéro Ping reads them all, files the noise, and keeps what waits on
+            you, ranked by a score it explains. It never files away something that waits on you.
+          </p>
+        </div>
+        <table class="triage">
+          <caption class="sr-only" data-i18n="why.caption">How incoming notifications are sorted</caption>
+          <thead>
+            <tr>
+              <th scope="col" data-i18n="why.in">Incoming</th>
+              <th scope="col" data-i18n="why.out">Lands in</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr class="filed">
+              <td>[acme/web] Bump vite from 7.1.2 to 7.1.4</td>
+              <td><span class="folder">Traités</span> <span data-i18n="why.bot">bot</span></td>
+            </tr>
+            <tr class="filed">
+              <td>[acme/api] CI: all checks passed on main</td>
+              <td><span class="folder">Traités</span> <span data-i18n="why.ci">CI activity</span></td>
+            </tr>
+            <tr class="filed">
+              <td>[acme/api] Release v2.8.0</td>
+              <td><span class="folder">Traités</span> <span data-i18n="why.release">release</span></td>
+            </tr>
+            <tr class="filed">
+              <td>[acme/web] Merged #412 into main</td>
+              <td><span class="folder">Traités</span> <span data-i18n="why.merged">merged</span></td>
+            </tr>
+            <tr>
+              <td>[acme/api] nadia requested your review on #233</td>
+              <td><span class="folder">À reviewer</span></td>
+            </tr>
+            <tr>
+              <td>[acme/web] otto replied in a review thread on #409</td>
+              <td><span class="folder">On t’attend</span></td>
+            </tr>
+            <tr>
+              <td>[acme/mobile] Checks failed on #87</td>
+              <td><span class="folder">Mes PR</span> <span data-i18n="why.red">red CI</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section class="inbox" id="inbox" aria-labelledby="inbox-title">
+        <div class="wrap">
+          <p class="eyebrow" data-i18n="inbox.eyebrow">The inbox</p>
+          <h2 id="inbox-title" data-i18n="inbox.title">One list, sorted by what to do next.</h2>
+        </div>
+
+        <figure class="app wrap">
+          <div class="window" role="img" aria-labelledby="app-caption">
+            <div class="chrome" aria-hidden="true">
+              <span class="dots"><i></i><i></i><i></i></span>
+              <span class="chrome-tab"><img src="assets/logo.svg" alt="" width="12" height="12" />(3) Zéro Ping</span>
+              <span class="chrome-url">inbox.localhost:4747</span>
+            </div>
+            <div class="panes" aria-hidden="true">
+              <aside class="side">
+                <div class="side-brand"><img src="assets/logo.svg" alt="" width="22" height="22" /><b>Zéro Ping</b><em>3</em></div>
+                <p class="side-label">Inbox</p>
+                <ul>
+                  <li class="on">À reviewer <em>2</em></li>
+                  <li>On t’attend <em>1</em></li>
+                  <li>Mes PR <em>3</em></li>
+                  <li>Équipe <em>4</em></li>
+                  <li class="dim">Traités</li>
+                </ul>
+                <p class="side-label">Pages</p>
+                <ul>
+                  <li>Vue d’ensemble</li>
+                  <li>Mes issues</li>
+                  <li>Récap du jour</li>
+                  <li>Réglages</li>
+                </ul>
+              </aside>
+              <div class="list">
+                <div class="list-head"><b>À reviewer</b><span>Priorité ▾</span></div>
+                <div class="row selected">
+                  <span class="gauge" style="--level: 0.92"><span>92</span></span>
+                  <div>
+                    <p class="row-meta">acme/api #233 · nadia · 2 j <span class="chip">M</span> <span class="chip slack">#</span></p>
+                    <p class="row-title">Add rate limiting to public endpoints</p>
+                  </div>
+                </div>
+                <div class="row">
+                  <span class="gauge" style="--level: 0.66"><span>66</span></span>
+                  <div>
+                    <p class="row-meta">acme/web #415 · priya · 5 h <span class="chip">S</span> <span class="chip new">Nouveaux commits</span></p>
+                    <p class="row-title">Fix flaky checkout test on Safari</p>
+                  </div>
+                </div>
+                <div class="row">
+                  <span class="gauge" style="--level: 0.38"><span>38</span></span>
+                  <div>
+                    <p class="row-meta">acme/docs #76 · kim · 1 j <span class="chip">XS</span></p>
+                    <p class="row-title">Document the webhook retry policy</p>
+                  </div>
+                </div>
+                <div class="row">
+                  <span class="gauge" style="--level: 0.21"><span>21</span></span>
+                  <div>
+                    <p class="row-meta">acme/mobile #88 · otto · 3 h <span class="chip">L</span></p>
+                    <p class="row-title">Draft: offline mode for the cart</p>
+                  </div>
+                </div>
+              </div>
+              <div class="detail">
+                <p class="row-meta">acme/api #233 · nadia → main · +184 −22</p>
+                <p class="detail-title">Add rate limiting to public endpoints</p>
+                <div class="tabs"><span class="on">Conversation</span><span>Fichiers modifiés</span></div>
+                <div class="card summary">
+                  <p class="card-label">✦ Résumé IA <span>court</span></p>
+                  <p>Ajoute une limite de 100 requêtes par minute et par clé ; nadia attend ta review, une question reste ouverte sur les clés internes.</p>
+                </div>
+                <div class="card thread">
+                  <p class="card-label"><span class="slack-mark">#</span> #api-team</p>
+                  <p><b>priya</b> On garde la même limite pour les clés internes ?</p>
+                  <p><b>nadia</b> Non, je les exclus, c’est dans la PR.</p>
+                </div>
+                <div class="actions">
+                  <span class="act primary">Approuver</span>
+                  <span class="act">Demander des changements</span>
+                  <span class="act">Traité <kbd>e</kbd></span>
+                </div>
+              </div>
+            </div>
+          </div>
+          <figcaption id="app-caption">
+            <span data-i18n="inbox.caption">A faithful mockup with demo data. The app’s interface is in French.</span>
+          </figcaption>
+        </figure>
+
+        <div class="notes wrap">
+          <p data-i18n="inbox.note1"><strong>A score you can open.</strong> Each item’s priority adds up its age, a missing last reviewer, size, CI, urgent labels and the urgency Jev estimates.</p>
+          <p data-i18n="inbox.note2"><strong>GitHub and Slack side by side.</strong> Read the conversation with the Slack threads that cite the PR, or the diff with its file tree and Viewed boxes synced to GitHub.</p>
+          <p data-i18n="inbox.note3"><strong>Act without leaving.</strong> Reply, approve, request changes, mark as done or snooze, one item or a batch.</p>
+        </div>
+      </section>
+
+      <section class="features wrap" aria-labelledby="folders-title">
+        <h2 id="folders-title" class="h3" data-i18n="folders.title">Four folders, and nothing else in your way</h2>
+        <dl class="folders">
+          <div>
+            <dt><span class="folder">À reviewer</span></dt>
+            <dd data-i18n="folders.review">Open PRs where your review is still requested, directly or through your team. When you asked for changes and new commits arrive, the PR comes back, and the diff can show only those commits.</dd>
+          </div>
+          <div>
+            <dt><span class="folder">On t’attend</span></dt>
+            <dd data-i18n="folders.awaiting">Mentions and review threads where someone answered after you.</dd>
+          </div>
+          <div>
+            <dt><span class="folder">Mes PR</span></dt>
+            <dd data-i18n="folders.mine">Your open PRs with CI and review decision. Merge with the method you pick, read failing jobs with their log, re-run the failed GitHub Actions jobs.</dd>
+          </div>
+          <div>
+            <dt><span class="folder">Équipe</span></dt>
+            <dd data-i18n="folders.team">PRs in watched repos with no reviewer, changes requested, red CI, conflicts or open too long. Take the review in one click.</dd>
+          </div>
+        </dl>
+
+        <h2 class="h3" data-i18n="around.title">Around the inbox</h2>
+        <ul class="around">
+          <li data-i18n="around.summary"><strong>AI summaries.</strong> Short, standard or detailed, from the GitHub conversation and the Slack threads found. Saved, and flagged when newer activity makes them stale.</li>
+          <li data-i18n="around.ask"><strong>Ask about a PR.</strong> The AI gets the conversation, Jev’s KPIs, the project status and priority, the uat deploy state and the diff.</li>
+          <li data-i18n="around.slack"><strong>Slack threads.</strong> An agent finds the messages that cite a PR using your own Slack access, shows full threads, and posts your reply in the thread when you send one.</li>
+          <li data-i18n="around.review"><strong>AI review in one click.</strong> <code>@codex review</code>, <code>@claude review</code> or <code>/gemini review</code>, configurable.</li>
+          <li data-i18n="around.recap"><strong>Daily recap.</strong> Each working day at the time you choose, a notification sums up what waits on you and <code>/standup:team</code> drafts the standup in Slack.</li>
+          <li data-i18n="around.issues"><strong>Your issues.</strong> The current sprint of your GitHub project, with status, priority and Jev urgency.</li>
+          <li data-i18n="around.overview"><strong>Overview.</strong> Review delay, your Zéro Ping streak, and what came in and went out each day.</li>
+          <li data-i18n="around.counter"><strong>A ping counter.</strong> What waits on you shows on the sidebar logo, the tab title and the favicon. At zero, it all disappears.</li>
+          <li data-i18n="around.notify"><strong>Notifications, on your terms.</strong> Review requests, replies, changes requested or red CI on your PR, with do-not-disturb hours.</li>
+        </ul>
+
+        <div class="keys" aria-labelledby="keys-title">
+          <h2 id="keys-title" class="h3" data-i18n="keys.title">Built for the keyboard</h2>
+          <ul>
+            <li><kbd>j</kbd><kbd>k</kbd> <span data-i18n="keys.move">next / previous</span></li>
+            <li><kbd>e</kbd> <span data-i18n="keys.done">mark as done</span></li>
+            <li><kbd>x</kbd> <span data-i18n="keys.select">select</span></li>
+            <li><kbd>r</kbd> <span data-i18n="keys.reply">reply</span></li>
+            <li><kbd>o</kbd> <span data-i18n="keys.open">open on GitHub</span></li>
+            <li><kbd>d</kbd> <span data-i18n="keys.diff">conversation / files</span></li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="private" id="private" aria-labelledby="private-title">
+        <div class="wrap private-grid">
+          <div>
+            <p class="eyebrow" data-i18n="private.eyebrow">Local and private</p>
+            <h2 id="private-title" data-i18n="private.title">Nothing to host. Nothing to sign up for.</h2>
+          </div>
+          <dl class="private-list">
+            <div>
+              <dt data-i18n="private.machine.t">Your machine</dt>
+              <dd data-i18n="private.machine.d">A Node server on localhost and an embedded PGlite database in the repo’s <code>.data</code> folder.</dd>
+            </div>
+            <div>
+              <dt data-i18n="private.github.t">Your GitHub token</dt>
+              <dd data-i18n="private.github.d">It reuses <code>gh auth token</code> (or <code>GITHUB_TOKEN</code>) and polls at GitHub’s pace with <code>If-Modified-Since</code>, so unchanged checks cost no quota.</dd>
+            </div>
+            <div>
+              <dt data-i18n="private.ai.t">Your AI</dt>
+              <dd data-i18n="private.ai.d">Summaries, questions and Slack search run through your own Claude Code or Codex CLI, non-interactively, on your account.</dd>
+            </div>
+            <div>
+              <dt data-i18n="private.slack.t">Your Slack access</dt>
+              <dd data-i18n="private.slack.d">Search is read-only. A message is posted only when you send a reply from the app.</dd>
+            </div>
+            <div>
+              <dt data-i18n="private.jev.t">Optional scoring</dt>
+              <dd data-i18n="private.jev.d">With a TypeSafe key, Jev estimates urgency when an item’s content changes. Without one, deterministic rules rank the list.</dd>
+            </div>
+          </dl>
+        </div>
+      </section>
+
+      <section class="start wrap" id="start" aria-labelledby="start-title">
+        <div class="needs">
+          <p class="eyebrow" data-i18n="start.eyebrow">Quick start</p>
+          <h2 id="start-title" data-i18n="start.title">Running in four commands.</h2>
+          <h3 data-i18n="start.needs">You need</h3>
+          <ul>
+            <li data-i18n="start.node">Node.js 22.12 or later, and pnpm</li>
+            <li data-i18n="start.gh">The GitHub CLI, signed in with <code>gh auth login</code> (or a <code>GITHUB_TOKEN</code>)</li>
+            <li data-i18n="start.agent">For AI and Slack: Claude Code with the Slack connector, or Codex with a Slack MCP server</li>
+            <li data-i18n="start.jev">Optional: a TypeSafe API key for Jev scoring</li>
+          </ul>
+        </div>
+        <div class="steps">
+          <ol>
+            <li>
+              <p data-i18n="start.s1">Clone the repository</p>
+              <pre><code>git clone https://github.com/Alexandredc/github-management.git
+cd github-management</code></pre>
+            </li>
+            <li>
+              <p data-i18n="start.s2">Install the dependencies</p>
+              <pre><code>pnpm install</code></pre>
+            </li>
+            <li>
+              <p data-i18n="start.s3">Create your <code>.env</code>, and add <code>TYPESAFE_AI_API_KEY</code> if you have one</p>
+              <pre><code>cp .env.example .env</code></pre>
+            </li>
+            <li>
+              <p data-i18n="start.s4">Start it, then open <code>http://localhost:3000</code></p>
+              <pre><code>pnpm dev</code></pre>
+            </li>
+          </ol>
+          <p class="after" data-i18n="start.after">The first sync fetches the last 30 days of notifications. On macOS, <code>scripts/macos-app.sh</code> creates a Dock app that starts the server on port 4747 and shows your ping count on its badge.</p>
+          <p class="after">
+            <a href="https://github.com/Alexandredc/github-management#readme" data-i18n="start.readme">Read the full setup in the README (French) →</a>
+          </p>
+        </div>
+      </section>
+    </main>
+
+    <footer class="night foot">
+      <div class="wrap foot-inner">
+        <a class="brand" href="#top">
+          <img src="assets/logo.svg" alt="" width="28" height="28" />
+          <span>Zéro Ping</span>
+        </a>
+        <p data-i18n="foot.line">For lead devs who would rather review code than read notification emails.</p>
+        <ul>
+          <li><a href="https://github.com/Alexandredc/github-management" data-i18n="foot.source">Source</a></li>
+          <li><a href="https://github.com/Alexandredc/github-management#readme">README</a></li>
+          <li><a href="https://github.com/Alexandredc/github-management/issues">Issues</a></li>
+        </ul>
+      </div>
+    </footer>
+  </body>
+</html>
