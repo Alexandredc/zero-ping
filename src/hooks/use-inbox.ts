@@ -20,6 +20,8 @@ import {
   getIssues,
   getWeek,
   postWorkItemStatus,
+  getItemProjectFields,
+  getItemUatStatus,
   postSlackRead,
   getMentions,
   getFolderCounts,
@@ -185,6 +187,8 @@ export function useInboxActions() {
             input.keys.length > 1
               ? `${input.keys.length} éléments marqués comme traités`
               : "Marqué comme traité",
+          description:
+            "Rangé dans « Traités » et marqué Done sur GitHub. Il revient tout seul s'il y a du nouveau.",
           actionProps: {
             children: "Annuler",
             onClick: () => done.mutate({ keys: input.keys, done: false }),
@@ -519,6 +523,75 @@ export const workConversationQuery = (
     queryFn: () => getWorkItemConversation({ data: { key, kind } }),
     staleTime: 30_000,
   })
+
+export const projectFieldsQuery = (key: string) =>
+  queryOptions({
+    queryKey: ["project-fields", key],
+    queryFn: () => getItemProjectFields({ data: { key } }),
+    staleTime: 60_000,
+  })
+
+export const uatStatusQuery = (key: string) =>
+  queryOptions({
+    queryKey: ["uat", key],
+    queryFn: () => getItemUatStatus({ data: { key } }),
+    staleTime: 2 * 60_000,
+  })
+
+/** Sets the status or priority of an item's card, showing it before GitHub answers. */
+export function useSetProjectField(key: string) {
+  const queryClient = useQueryClient()
+  const queryKey = projectFieldsQuery(key).queryKey
+  return useMutation({
+    mutationFn: (input: {
+      projectId: string
+      itemId: string
+      fieldId: string
+      optionId: string
+      field: "status" | "priority"
+      value: string
+    }) =>
+      postWorkItemStatus({
+        data: {
+          projectId: input.projectId,
+          itemId: input.itemId,
+          fieldId: input.fieldId,
+          optionId: input.optionId,
+        },
+      }),
+    onMutate: async (input) => {
+      await queryClient.cancelQueries({ queryKey })
+      const previous = queryClient.getQueryData(queryKey)
+      if (previous)
+        queryClient.setQueryData(queryKey, {
+          ...previous,
+          [input.field]: input.value,
+        })
+      return { previous }
+    },
+    onError: (error, _, context) => {
+      if (context?.previous)
+        queryClient.setQueryData(queryKey, context.previous)
+      toast.add({
+        title: "Champ du projet non modifié",
+        description: error.message,
+        type: "error",
+      })
+    },
+    onSuccess: (_, input) =>
+      toast.add({
+        title:
+          input.field === "status"
+            ? `Déplacée dans « ${input.value} »`
+            : `Priorité passée à ${input.value}`,
+        type: "success",
+      }),
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey })
+      void queryClient.invalidateQueries({ queryKey: ["issues"] })
+    },
+  })
+}
 
 /** Moves an item to another board column, showing the new status before GitHub answers. */
 export function useSetWorkItemStatus() {

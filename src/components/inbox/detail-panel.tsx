@@ -19,6 +19,8 @@ import { DiffView } from "./diff-view"
 import { MergeMenu } from "./merge-menu"
 import { MentionTextarea } from "./mention-textarea"
 import { ReviewersMenu } from "./reviewers-menu"
+import { ProjectFields } from "./project-fields"
+import { UatBadge } from "./uat-badge"
 import type { PendingReview, ReviewEvent } from "./review-dialog"
 import { FailedChecks } from "./failed-checks"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -178,6 +180,13 @@ export function DetailPanel({
             <h2 className="font-heading text-xl leading-tight font-semibold tracking-tight">
               {item.title}
             </h2>
+            {item.number !== null &&
+              (item.kind === "PullRequest" || item.kind === "Issue") && (
+                <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                  <ProjectFields itemKey={item.key} />
+                  {isPull && <UatBadge itemKey={item.key} />}
+                </div>
+              )}
           </div>
           <ActionHint content="Fermer le détail (Échap)">
             <Button
@@ -214,8 +223,8 @@ export function DetailPanel({
               <ActionHint
                 content={
                   isDone
-                    ? "Remet l'élément dans son dossier de l'inbox (e)."
-                    : "Retire l'élément de l'inbox et le marque « Done » dans tes notifications GitHub (e). Il revient tout seul s'il y a du nouveau."
+                    ? "Remet l'élément dans son dossier de l'inbox."
+                    : "Retire l'élément de l'inbox et le marque « Done » dans tes notifications GitHub. Il revient tout seul s'il y a du nouveau."
                 }
               >
                 <Button
@@ -232,7 +241,6 @@ export function DetailPanel({
                     <CheckIcon data-icon="inline-start" />
                   )}
                   {isDone ? "Remettre dans l'inbox" : "Marquer comme traité"}
-                  <Kbd>e</Kbd>
                 </Button>
               </ActionHint>
               <DropdownMenu>

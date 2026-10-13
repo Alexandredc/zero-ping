@@ -46,10 +46,30 @@ import {
 import {
   fetchAssignedIssues,
   fetchSprint,
+  fetchSprintBoard,
   listSprintProjects,
   setItemStatus,
 } from "@/server/issues/sprint"
 import type { Sprint, SprintProjectRef, WorkItem } from "@/server/issues/sprint"
+import { fetchProjectFields } from "@/server/issues/project-fields"
+import {
+  fetchPullForUat,
+  fetchUatCommits,
+  isOnUat,
+  uatLedger,
+  uatStatus,
+} from "@/server/github/uat"
+import type { UatEntry, UatStatus } from "@/server/github/uat"
+import {
+  MAX_CANDIDATES,
+  SEARCH_JSON_SCHEMA,
+  buildSearchInput,
+  buildSearchPrompt,
+  fetchBodies,
+  parseSearchAnswer,
+} from "@/server/search/smart-search"
+import type { SearchCandidate, SearchMatch } from "@/server/search/smart-search"
+import type { Octokit } from "octokit"
 import { buildRecap } from "@/server/recap/recap"
 import { fetchWeekSummary } from "@/server/recap/week"
 import {
@@ -1283,6 +1303,18 @@ async function sprintProjects(): Promise<SprintProjectRef[]> {
   return projects
 }
 
+/** The project chosen in the settings, else the first one with a sprint. */
+function pickSprintProject(
+  projects: SprintProjectRef[],
+  preference: string | null
+): SprintProjectRef | null {
+  return (
+    projects.find((p) => `${p.owner}/${p.number}` === preference) ??
+    projects.at(0) ??
+    null
+  )
+}
+
 /** « Mes issues »: the issues assigned to the viewer, and the current sprint of the team. */
 export async function listIssues() {
   const db = await getDb()
@@ -1292,12 +1324,7 @@ export async function listIssues() {
     getPreferences(db),
     sprintProjects(),
   ])
-  const project =
-    projects.find(
-      (p) => `${p.owner}/${p.number}` === preferences.sprintProject
-    ) ??
-    projects.at(0) ??
-    null
+  const project = pickSprintProject(projects, preferences.sprintProject)
   let sprint: Sprint | null = null
   let sprintError: string | null = null
   let fieldName: string | undefined
@@ -1330,6 +1357,154 @@ export async function listIssues() {
     sprintError,
     assigned: fetched.items.map(withUrgency),
   }
+}
+
+let boardCache: {
+  at: number
+  ref: string
+  board: Awaited<ReturnType<typeof fetchSprintBoard>>
+} | null = null
+
+/** The sprint project's board fields, cached like the project list. */
+async function sprintBoard(octokit: Octokit, project: SprintProjectRef) {
+  const ref = `${project.owner}/${project.number}`
+  if (
+    boardCache &&
+    boardCache.ref === ref &&
+    Date.now() - boardCache.at < PROJECTS_TTL_MS
+  )
+    return boardCache.board
+  const board = await fetchSprintBoard(octokit, project)
+  boardCache = { at: Date.now(), ref, board }
+  return board
+}
+
+/** The status and priority of a PR or an issue on the sprint project's board. */
+export async function getProjectFields(key: string) {
+  const db = await getDb()
+  const [octokit, preferences, projects] = await Promise.all([
+    getOctokit(),
+    getPreferences(db),
+    sprintProjects(),
+  ])
+  const project = pickSprintProject(projects, preferences.sprintProject)
+  if (!project) return null
+  const board = await sprintBoard(octokit, project)
+  const fields = await fetchProjectFields(octokit, key, project, {
+    status: "Status",
+    priority: board.priorityField?.name ?? "Priority",
+  })
+  if (!fields) return null
+  return {
+    ...fields,
+    projectId: board.project.id,
+    projectTitle: board.project.title,
+    statusField: board.statusFieldId
+      ? { id: board.statusFieldId, options: board.statuses }
+      : null,
+    priorityField: board.priorityField,
+  }
+}
+
+const UAT_TTL_MS = 2 * 60 * 1000
+const uatCache = new Map<
+  string,
+  { at: number; ledger: Promise<Map<string, UatEntry> | null> }
+>()
+
+/** uat's history for a repo, read once for every PR opened in the next minutes. */
+function uatLedgerOf(octokit: Octokit, repo: string) {
+  const cached = uatCache.get(repo)
+  if (cached && Date.now() - cached.at < UAT_TTL_MS) return cached.ledger
+  const ledger = fetchUatCommits(octokit, repo).then(
+    (commits) => commits && uatLedger(commits)
+  )
+  ledger.catch(() => uatCache.delete(repo))
+  uatCache.set(repo, { at: Date.now(), ledger })
+  return ledger
+}
+
+/** Whether a PR runs on uat; null for a repo without a uat branch. */
+export async function getUatStatus(key: string): Promise<UatStatus | null> {
+  const ref = parseSubjectKey(key)
+  if (!ref) return null
+  const octokit = await getOctokit()
+  const [ledger, pull] = await Promise.all([
+    uatLedgerOf(octokit, `${ref.owner}/${ref.repo}`),
+    fetchPullForUat(octokit, ref),
+  ])
+  if (!ledger || !pull) return null
+  const status = uatStatus(pull, ledger)
+  if (
+    status.state !== "deployed" &&
+    pull.mergeCommit &&
+    (await isOnUat(octokit, ref, pull.mergeCommit))
+  )
+    return { state: "merged" }
+  return status
+}
+
+const BODIES_TTL_MS = 10 * 60 * 1000
+const bodiesCache = new Map<string, { at: number; body: string }>()
+
+/** Descriptions of the items, from the cache or in one GitHub query for the rest. */
+async function bodiesOf(octokit: Octokit, keys: string[]) {
+  const fresh = (key: string) => {
+    const cached = bodiesCache.get(key)
+    return cached && Date.now() - cached.at < BODIES_TTL_MS ? cached : null
+  }
+  const missing = keys.filter((key) => !fresh(key))
+  if (missing.length > 0) {
+    const fetched = await fetchBodies(octokit, missing).catch(
+      () => new Map<string, string>()
+    )
+    for (const [key, body] of fetched)
+      bodiesCache.set(key, { at: Date.now(), body })
+  }
+  return new Map(keys.map((key) => [key, fresh(key)?.body ?? null]))
+}
+
+/** Claude picks, among the items of a list, those that answer a search in plain words. */
+export async function searchItems(input: {
+  kind: "PR" | "issue"
+  query: string
+  candidates: SearchCandidate[]
+}): Promise<SearchMatch[]> {
+  const db = await getDb()
+  const candidates = input.candidates.slice(0, MAX_CANDIDATES)
+  const keys = candidates.map((candidate) => candidate.key)
+  const [octokit, preferences, summaryRows] = await Promise.all([
+    getOctokit(),
+    getPreferences(db),
+    keys.length > 0
+      ? db.select().from(summaries).where(inArray(summaries.itemKey, keys))
+      : Promise.resolve([]),
+  ])
+  const bodies = await bodiesOf(octokit, keys)
+  const summaryOf = new Map(
+    summaryRows.map((row) => [row.itemKey, row.content.tldr])
+  )
+  const answer = await runAgent(
+    {
+      prompt: buildSearchPrompt(input.kind),
+      input: buildSearchInput(
+        input.query,
+        candidates.map((candidate) => ({
+          ...candidate,
+          body: bodies.get(candidate.key) ?? null,
+          summary: summaryOf.get(candidate.key) ?? null,
+        }))
+      ),
+      schema: SEARCH_JSON_SCHEMA,
+      allowedTools: [],
+      timeoutMs: 2 * 60_000,
+    },
+    getAgentConfig(process.env, {
+      agentCli: "claude",
+      agentModel: preferences.summaryModel ?? DEFAULT_SUMMARY_MODEL,
+    })
+  )
+  return parseSearchAnswer(answer, new Set(keys))
 }
 
 export async function moveWorkItem(input: {

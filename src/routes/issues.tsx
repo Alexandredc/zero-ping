@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query"
 import { createFileRoute, useNavigate } from "@tanstack/react-router"
-import { useEffect, useRef, useState } from "react"
+import { Fragment, useEffect, useRef, useState } from "react"
 import {
   ChevronDownIcon,
   ChevronRightIcon,
@@ -42,6 +42,11 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { Switch } from "@/components/ui/switch"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { useHotkeys } from "@/hooks/use-hotkeys"
+import {
+  MatchReason,
+  SmartSearchBar,
+  useSmartSearch,
+} from "@/components/inbox/smart-search"
 import { issuesQuery, useSavePreferences } from "@/hooks/use-inbox"
 import { avatarUrl, timeAgo } from "@/lib/format"
 import { cn } from "@/lib/utils"
@@ -346,6 +351,26 @@ function SprintStrip({ sprint, items }: { sprint: Sprint; items: WorkItem[] }) {
   )
 }
 
+function workCandidate(item: WorkItem) {
+  return {
+    key: item.key,
+    title: item.title,
+    author: null,
+    labels: item.labels.map((label) => label.name),
+    facts: [
+      item.repo,
+      item.kind === "pull"
+        ? "pull request"
+        : item.kind === "draft"
+          ? "draft"
+          : null,
+      item.status && `status: ${item.status}`,
+      item.sprint && `sprint: ${item.sprint}`,
+      item.assignees.length > 0 && `assignees: ${item.assignees.join(", ")}`,
+    ].filter((fact): fact is string => Boolean(fact)),
+  }
+}
+
 function IssuesPage() {
   const search = Route.useSearch()
   const tab = search.tab
@@ -385,35 +410,59 @@ function IssuesPage() {
         ? unassigned
         : sprintItems.filter((item) => item.assignees.includes(person))
 
-  const groups: Group[] =
-    tab === "assigned"
+  const smart = useSmartSearch({
+    kind: "issue",
+    items: tab === "assigned" ? assigned : tab === "mine" ? mine : teamItems,
+    toCandidate: workCandidate,
+    resetKey: tab,
+  })
+  const kept = new Set(smart.visible.map((item) => item.key))
+  const shown = (list: WorkItem[]) =>
+    smart.query ? list.filter((item) => kept.has(item.key)) : list
+
+  const groups: Group[] = smart.ai
+    ? // Claude's order is the answer: one group, not split by column.
+      [
+        {
+          name: "Trouvées par la recherche IA",
+          color: null,
+          items: smart.visible,
+        },
+      ]
+    : tab === "assigned"
       ? [
           {
             name: currentSprint ? `Dans le ${currentSprint}` : "Assignées",
             color: null,
-            items: assigned.filter(
+            items: shown(assigned).filter(
               (item) => currentSprint && item.sprint === currentSprint
             ),
           },
           {
             name: "Hors sprint",
             color: null,
-            items: assigned.filter(
+            items: shown(assigned).filter(
               (item) => !currentSprint || item.sprint !== currentSprint
             ),
           },
         ].filter((group) => group.items.length > 0)
-      : groupByStatus(tab === "mine" ? mine : teamItems, statuses)
-  const sortedGroups = groups.map((group) => ({
-    ...group,
-    items: sortItems(group.items, search.sort),
-  }))
+      : groupByStatus(shown(tab === "mine" ? mine : teamItems), statuses)
+  const sortedGroups = smart.ai
+    ? groups
+    : groups.map((group) => ({
+        ...group,
+        items: sortItems(group.items, search.sort),
+      }))
   // Collapsed groups drop out of the keyboard navigation.
   const flat = sortedGroups
     .filter((group) => !collapsed.has(group.name))
     .flatMap((group) => group.items)
   const selectedIndex = flat.findIndex((item) => item.key === search.item)
-  const selected = selectedIndex >= 0 ? flat[selectedIndex] : undefined
+  // A search that hides the open issue keeps its preview open.
+  const selected =
+    selectedIndex >= 0
+      ? flat[selectedIndex]
+      : [...assigned, ...sprintItems].find((item) => item.key === search.item)
 
   const select = (key: string | undefined) =>
     navigate({ search: (prev) => ({ ...prev, item: key }), replace: true })
@@ -561,6 +610,7 @@ function IssuesPage() {
             </ToggleGroup>
           </div>
         </header>
+        <SmartSearchBar search={smart} noun="issues" />
 
         {sprint && tab !== "assigned" && (
           <>
@@ -657,7 +707,7 @@ function IssuesPage() {
               </Alert>
             )}
             {/* Collapsed groups are not empty: the message is for an empty list only. */}
-            {data && sortedGroups.length === 0 && (
+            {data && sortedGroups.length === 0 && !smart.query && (
               <Empty className="py-16">
                 <EmptyHeader>
                   <EmptyMedia variant="icon">
@@ -698,15 +748,17 @@ function IssuesPage() {
                 </h2>
                 {!collapsed.has(group.name) &&
                   group.items.map((item) => (
-                    <WorkStrip
-                      key={item.key}
-                      item={item}
-                      statuses={statuses}
-                      selected={item.key === selected?.key}
-                      showStatus={tab === "assigned"}
-                      showAssignees={tab === "team"}
-                      onSelect={() => void select(item.key)}
-                    />
+                    <Fragment key={item.key}>
+                      <WorkStrip
+                        item={item}
+                        statuses={statuses}
+                        selected={item.key === selected?.key}
+                        showStatus={tab === "assigned" || Boolean(smart.ai)}
+                        showAssignees={tab === "team"}
+                        onSelect={() => void select(item.key)}
+                      />
+                      <MatchReason reason={smart.reasonOf(item.key)} />
+                    </Fragment>
                   ))}
               </section>
             ))}
@@ -729,7 +781,7 @@ function IssuesPage() {
       ) : (
         <div className="hidden flex-1 items-center justify-center lg:flex">
           <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
-            Choisis une issue ou utilise <Kbd>j</Kbd> pour parcourir la liste.
+            Choisis une issue ou utilise <Kbd>↓</Kbd> pour parcourir la liste.
           </p>
         </div>
       )}

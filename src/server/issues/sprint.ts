@@ -186,7 +186,7 @@ const CONTENT_FIELDS = `
   }
 `
 
-type RawField =
+export type RawField =
   | {
       __typename: "ProjectV2IterationField"
       name: string
@@ -310,10 +310,8 @@ export async function fetchSprintBoard(
     throw new Error(`Projet ${project.owner}/${project.number} introuvable.`)
   const fields = board.fields.nodes
   const field = sprintField(fields)
-  const statusField = fields.find(
-    (f): f is Extract<RawField, { __typename: "ProjectV2SingleSelectField" }> =>
-      f.__typename === "ProjectV2SingleSelectField" && f.name === "Status"
-  )
+  const statusField = selectField(fields, /^status$/i)
+  const priorityField = selectField(fields, /^priorit/i)
   return {
     project: { ...project, id: board.id, title: board.title },
     statusFieldId: statusField?.id ?? null,
@@ -322,12 +320,31 @@ export async function fetchSprintBoard(
       field?.__typename === "ProjectV2IterationField"
         ? currentIteration(field.configuration.iterations, today)
         : null,
-    statuses: (statusField?.options ?? []).map((option) => ({
-      id: option.id,
-      name: option.name,
-      color: OPTION_COLOR[option.color] ?? OPTION_COLOR.GRAY,
-    })),
+    statuses: statusField?.options ?? [],
+    priorityField: priorityField ?? null,
   }
+}
+
+/** A single-select field of the board, with its options in the board's colors. */
+export function selectField(
+  fields: RawField[],
+  name: RegExp
+): { id: string; name: string; options: SprintStatus[] } | undefined {
+  const field = fields.find(
+    (f): f is Extract<RawField, { __typename: "ProjectV2SingleSelectField" }> =>
+      f.__typename === "ProjectV2SingleSelectField" && name.test(f.name)
+  )
+  return (
+    field && {
+      id: field.id,
+      name: field.name,
+      options: field.options.map((option) => ({
+        id: option.id,
+        name: option.name,
+        color: OPTION_COLOR[option.color] ?? OPTION_COLOR.GRAY,
+      })),
+    }
+  )
 }
 
 export async function fetchSprint(
@@ -335,7 +352,11 @@ export async function fetchSprint(
   project: Pick<SprintProjectRef, "owner" | "number">,
   today: Date = new Date()
 ): Promise<Sprint & { fieldName: string | null; subjects: ScoreSubject[] }> {
-  const board = await fetchSprintBoard(octokit, project, today)
+  const { priorityField: _, ...board } = await fetchSprintBoard(
+    octokit,
+    project,
+    today
+  )
   const { fieldName, iteration } = board
   if (!fieldName || !iteration) return { ...board, items: [], subjects: [] }
 

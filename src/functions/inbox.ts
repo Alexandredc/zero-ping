@@ -18,6 +18,9 @@ import {
   listIssues,
   getWeekSummary,
   moveWorkItem,
+  getProjectFields,
+  getUatStatus,
+  searchItems,
   getWorkConversation,
   setReviewers,
   getConversation,
@@ -271,6 +274,32 @@ export const getWorkItemConversation = createServerFn({ method: "GET" })
     z.object({ key: z.string(), kind: z.enum(["Issue", "PullRequest"]) })
   )
   .handler(({ data }) => getWorkConversation(data.key, data.kind))
+
+export const getItemProjectFields = createServerFn({ method: "GET" })
+  .validator(z.object({ key: z.string() }))
+  .handler(({ data }) => getProjectFields(data.key))
+
+export const getItemUatStatus = createServerFn({ method: "GET" })
+  .validator(z.object({ key: z.string() }))
+  .handler(({ data }) => getUatStatus(data.key))
+
+export const postSearch = createServerFn({ method: "POST" })
+  .validator(
+    z.object({
+      kind: z.enum(["PR", "issue"]),
+      query: z.string().trim().min(1).max(500),
+      candidates: z.array(
+        z.object({
+          key: z.string(),
+          title: z.string(),
+          author: z.string().nullable(),
+          labels: z.array(z.string()),
+          facts: z.array(z.string()),
+        })
+      ),
+    })
+  )
+  .handler(({ data }) => searchItems(data))
 
 export const postWorkItemStatus = createServerFn({ method: "POST" })
   .validator(

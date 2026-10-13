@@ -8,6 +8,12 @@ import { ReviewDialog } from "@/components/inbox/review-dialog"
 import type { PendingReview } from "@/components/inbox/review-dialog"
 import { FOLDER_META } from "@/components/inbox/folders"
 import { ItemStrip } from "@/components/inbox/item-strip"
+import {
+  MatchReason,
+  SmartSearchBar,
+  useSmartSearch,
+} from "@/components/inbox/smart-search"
+import type { InboxItem } from "@/server/inbox/actions"
 import { Sidebar } from "@/components/inbox/sidebar"
 import {
   Empty,
@@ -71,6 +77,22 @@ const EMPTY_COPY = {
   done: "Rien de traité pour l'instant. Utilise e pour marquer un élément comme traité.",
 }
 
+function pullCandidate(item: InboxItem) {
+  return {
+    key: item.key,
+    title: item.title,
+    author: item.author,
+    labels: item.labels,
+    facts: [
+      item.repoFullName,
+      item.isDraft ? "draft" : null,
+      item.ciState && `CI: ${item.ciState}`,
+      item.reviewDecision && `review: ${item.reviewDecision}`,
+      `updated ${new Date(item.updatedAt).toISOString().slice(0, 10)}`,
+    ].filter((fact): fact is string => Boolean(fact)),
+  }
+}
+
 function InboxPage() {
   const search = Route.useSearch()
   const navigate = useNavigate({ from: "/" })
@@ -85,7 +107,13 @@ function InboxPage() {
   // Kept by the page: an approved PR leaves its folder and closes the panel.
   const [pendingReview, setPendingReview] = useState<PendingReview | null>(null)
 
-  const items = data?.items ?? []
+  const smart = useSmartSearch({
+    kind: "PR",
+    items: data?.items ?? [],
+    toCandidate: pullCandidate,
+    resetKey: `${search.folder}:${search.scope}:${search.repo ?? ""}`,
+  })
+  const items = allPulls ? smart.visible : (data?.items ?? [])
   // Items that left the folder (done, synced away) drop out of the selection.
   const selection = items.filter(
     (item) => item.inInbox && checked.has(item.key)
@@ -117,7 +145,11 @@ function InboxPage() {
     clearSelection()
   }
   const selectedIndex = items.findIndex((item) => item.key === search.item)
-  const selected = selectedIndex >= 0 ? items[selectedIndex] : undefined
+  // A search that hides the open item keeps its panel open.
+  const selected =
+    selectedIndex >= 0
+      ? items[selectedIndex]
+      : data?.items.find((item) => item.key === search.item)
 
   const select = (key: string | undefined) =>
     navigate({ search: (prev) => ({ ...prev, item: key }), replace: true })
@@ -145,17 +177,6 @@ function InboxPage() {
     ArrowUp: () => move(-1),
     Escape: () => (selecting ? clearSelection() : void select(undefined)),
     x: () => selected && toggleChecked(selected.key),
-    e: () => {
-      if (selecting) return bulkDone()
-      if (!selected?.inInbox) return
-      // Moves to the next item so triage keeps flowing.
-      const next = items.at(selectedIndex + 1) ?? items.at(selectedIndex - 1)
-      actions.done.mutate({
-        keys: [selected.key],
-        done: selected.doneAt === null,
-      })
-      void select(next?.key)
-    },
     o: () =>
       selected &&
       window.open(selected.awaitingUrl ?? selected.htmlUrl, "_blank"),
@@ -236,6 +257,7 @@ function InboxPage() {
             </ToggleGroup>
           )}
         </header>
+        {allPulls && <SmartSearchBar search={smart} noun="PR" />}
         {items.length > 0 && (
           <div
             className={cn(
@@ -263,7 +285,6 @@ function InboxPage() {
                   <Button size="xs" onClick={bulkDone}>
                     <CheckIcon data-icon="inline-start" />
                     {search.folder === "done" ? "Remettre" : "Traités"}
-                    <Kbd>e</Kbd>
                   </Button>
                   {search.folder !== "done" && (
                     <DropdownMenu>
@@ -305,8 +326,8 @@ function InboxPage() {
               </>
             ) : (
               <span className="flex items-center gap-1">
-                <Kbd>x</Kbd> pour sélectionner, <Kbd>j</Kbd>
-                <Kbd>k</Kbd> pour naviguer
+                <Kbd>↑</Kbd>
+                <Kbd>↓</Kbd> naviguer · <Kbd>x</Kbd> sélectionner
               </span>
             )}
           </div>
@@ -323,7 +344,7 @@ function InboxPage() {
                   </div>
                 </div>
               ))}
-            {!isPending && items.length === 0 && (
+            {!isPending && items.length === 0 && !smart.query && (
               <Empty className="py-16">
                 <EmptyHeader>
                   <EmptyMedia variant="icon">
@@ -337,14 +358,19 @@ function InboxPage() {
               </Empty>
             )}
             {items.map((item) => (
-              <div key={item.key} data-key={item.key} className="flex">
-                <ItemStrip
-                  item={item}
-                  selected={item.key === selected?.key}
-                  checked={checked.has(item.key)}
-                  onCheck={() => toggleChecked(item.key)}
-                  onSelect={() => void select(item.key)}
-                  gauge={allPulls ? "jev" : "priority"}
+              <div key={item.key} data-key={item.key} className="flex flex-col">
+                <div className="flex">
+                  <ItemStrip
+                    item={item}
+                    selected={item.key === selected?.key}
+                    checked={checked.has(item.key)}
+                    onCheck={() => toggleChecked(item.key)}
+                    onSelect={() => void select(item.key)}
+                    gauge={allPulls ? "jev" : "priority"}
+                  />
+                </div>
+                <MatchReason
+                  reason={allPulls ? smart.reasonOf(item.key) : null}
                 />
               </div>
             ))}
@@ -363,7 +389,7 @@ function InboxPage() {
       ) : (
         <div className="hidden flex-1 items-center justify-center lg:flex">
           <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
-            Choisis un élément ou utilise <Kbd>j</Kbd> pour commencer par le
+            Choisis un élément ou utilise <Kbd>↓</Kbd> pour commencer par le
             plus prioritaire.
           </p>
         </div>
