@@ -123,7 +123,7 @@ PLIST="$APP/Contents/Info.plist"
 plutil -remove CFBundleIconName "$PLIST" 2>/dev/null || true
 plutil -replace CFBundleName -string "Zéro Ping" "$PLIST"
 plutil -replace CFBundleDisplayName -string "Zéro Ping" "$PLIST"
-plutil -replace CFBundleIdentifier -string "com.alexandredc.zero-ping" "$PLIST"
+plutil -replace CFBundleIdentifier -string "app.zeroping.inbox" "$PLIST"
 
 # Editing the bundle breaks the signature osacompile made: sign it again, ad hoc.
 codesign --force --deep -s - "$APP"

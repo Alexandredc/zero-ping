@@ -86,7 +86,7 @@ function AddChannel({
           <CommandInput
             value={query}
             onValueChange={setQuery}
-            placeholder="Nom du canal, par exemple tech-team-general"
+            placeholder="Nom du canal, par exemple eng-general"
           />
           <CommandList>
             <CommandEmpty>

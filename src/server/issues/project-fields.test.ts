@@ -6,7 +6,7 @@ const project = { owner: "acme", number: 1, title: "Roadmap" }
 function card(id: string, projectNumber: number, status: string | null) {
   return {
     id,
-    project: { number: projectNumber, owner: { login: "acme" } },
+    project: { number: projectNumber, owner: { login: "Acme" } },
     status: status ? { name: status } : null,
     priority: { name: "P1" },
   }
@@ -35,7 +35,7 @@ describe("pickProjectFields", () => {
             nodes: [
               {
                 number: 7,
-                repository: { nameWithOwner: "acme/bo" },
+                repository: { nameWithOwner: "acme/api" },
                 projectItems: { nodes: [card("issue", 1, null)] },
               },
             ],
@@ -47,7 +47,7 @@ describe("pickProjectFields", () => {
       itemId: "issue",
       status: null,
       priority: "P1",
-      via: { key: "acme/bo#7", number: 7 },
+      via: { key: "acme/api#7", number: 7 },
     })
   })
 

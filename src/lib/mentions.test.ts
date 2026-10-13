@@ -12,13 +12,13 @@ describe("mentionQueryAt", () => {
 
 describe("insertMention", () => {
   it("replaces the typed word and puts the caret after the mention", () => {
-    expect(insertMention("Merci @ma pour", 6, 9, "teammate")).toEqual({
-      value: "Merci @teammate pour",
-      caret: 17,
+    expect(insertMention("Merci @ma pour", 6, 9, "jdoe")).toEqual({
+      value: "Merci @jdoe pour",
+      caret: 12,
     })
-    expect(insertMention("Merci @ma", 6, 9, "teammate")).toEqual({
-      value: "Merci @teammate ",
-      caret: 17,
+    expect(insertMention("Merci @ma", 6, 9, "jdoe")).toEqual({
+      value: "Merci @jdoe ",
+      caret: 12,
     })
   })
 })
@@ -26,14 +26,14 @@ describe("insertMention", () => {
 describe("rankMentions", () => {
   it("puts login prefixes first, then first-name prefixes", () => {
     const people = [
-      { login: "dupont-jean", name: "Jean Dupont" },
-      { login: "teammate", name: "Robin G" },
-      { login: "lena-lopez", name: "Lena Lopez" },
+      { login: "roux-paul", name: "Paul Roux" },
+      { login: "jdoe", name: "Jane Doe" },
+      { login: "lmartin", name: "Louise Martin" },
     ]
     expect(rankMentions(people, "ro").map((p) => p.login)).toEqual([
-      "dupont-jean",
+      "roux-paul",
     ])
-    expect(rankMentions(people, "lo").map((p) => p.login)).toEqual(["lena-lopez"])
+    expect(rankMentions(people, "lo").map((p) => p.login)).toEqual(["lmartin"])
     expect(rankMentions(people, "").length).toBe(3)
   })
 })

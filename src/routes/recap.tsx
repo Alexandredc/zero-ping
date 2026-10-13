@@ -127,9 +127,12 @@ function TopList({
 function PublishStandup({
   kind,
   blocker,
+  where,
 }: {
   kind: StandupKind
   blocker: string | null
+  /** Where the message goes, as a sentence ends: « dans le fil … sur #canal ». */
+  where: string
 }) {
   const [open, setOpen] = useState(false)
   const publish = usePublishStandup(kind)
@@ -139,7 +142,7 @@ function PublishStandup({
       <ActionHint
         content={
           blocker ??
-          `Publie ${STANDUP_COPY[kind].subject} en ton nom dans le fil du « Daily standup reminder » d'aujourd'hui, sur #tech-team-general. Une confirmation est demandée avant l'envoi.`
+          `Publie ${STANDUP_COPY[kind].subject} en ton nom ${where}. Une confirmation est demandée avant l'envoi.`
         }
       >
         {/* The span keeps the hint on a disabled button. */}
@@ -156,8 +159,7 @@ function PublishStandup({
         <DialogHeader>
           <DialogTitle>Publier {STANDUP_COPY[kind].subject} ?</DialogTitle>
           <DialogDescription>
-            Le message part en ton nom dans le fil du « Daily standup reminder »
-            d'aujourd'hui, sur #tech-team-general.
+            Le message part en ton nom {where}.
             {kind === "team" &&
               " Chaque personne citée reçoit une notification Slack."}
           </DialogDescription>
@@ -187,18 +189,16 @@ function PublishStandup({
 
 const STANDUP_COPY: Record<
   StandupKind,
-  { title: string; subject: string; command: string; duration: string }
+  { title: string; subject: string; duration: string }
 > = {
   me: {
     title: "Mon standup",
     subject: "ton standup",
-    command: "/standup",
     duration: "la lecture de tes PR prend une à deux minutes",
   },
   team: {
     title: "Standup de l'équipe",
     subject: "le standup de l'équipe",
-    command: "/standup:team",
     duration: "l'export du board prend environ 6 minutes",
   },
 }
@@ -221,14 +221,18 @@ function StandupCard({ kind }: { kind: StandupKind }) {
           {running
             ? `Lancé ${timeAgo(standup.startedAt)} : ${copy.duration}.`
             : standup.finishedAt
-              ? `Généré ${timeAgo(standup.finishedAt)} par ${copy.command}.`
+              ? `Généré ${timeAgo(standup.finishedAt)} par ${data.standupCommands[kind]}.`
               : enabled
                 ? `Lancé automatiquement les jours ouvrés à ${data.recapTime}, ou à la main.`
                 : "Le lancement automatique est coupé dans les réglages."}
         </CardDescription>
         <CardAction className="flex items-center gap-2">
           {standup.message && !running && !standup.postedAt && (
-            <PublishStandup kind={kind} blocker={publishBlocker} />
+            <PublishStandup
+              kind={kind}
+              blocker={publishBlocker}
+              where={`dans le fil du « ${data.standupReminder} » d'aujourd'hui, sur #${data.standupChannel}`}
+            />
           )}
           <Button
             variant="outline"

@@ -7,6 +7,9 @@ import type { SlackDiscussion } from "@/server/db/schema"
 /** A local time of day, `HH:MM`. */
 const TIME = /^([01]\d|2[0-3]):[0-5]\d$/
 
+/** A slash command, `/name` or `/folder:name`. */
+const COMMAND = /^\/[\w.-]+(:[\w.-]+)*$/
+
 /** Options edited in the settings page. `null` falls back to the `.env` value. */
 export const preferencesSchema = z.object({
   slackExcludedChannels: z.array(z.string()).default([]),
@@ -30,8 +33,16 @@ export const preferencesSchema = z.object({
   autoDoneAuthors: z.array(z.string().trim().min(1)).default([]),
   recapEnabled: z.boolean().default(true),
   recapTime: z.string().regex(TIME).default("09:05"),
-  standupEnabled: z.boolean().default(true),
-  myStandupEnabled: z.boolean().default(true),
+  // Off until a channel is chosen: a fresh install has no standup to post.
+  standupEnabled: z.boolean().default(false),
+  myStandupEnabled: z.boolean().default(false),
+  /** The Slack channel of the daily reminder whose thread gets the standups. */
+  standupChannel: z.string().trim().default(""),
+  /** The text that tells today's reminder apart in that channel. */
+  standupReminder: z.string().trim().min(1).default("Daily standup reminder"),
+  /** The coding-agent commands that write the team's and the user's standup. */
+  teamStandupCommand: z.string().trim().regex(COMMAND).default("/standup:team"),
+  myStandupCommand: z.string().trim().regex(COMMAND).default("/standup"),
   teamStaleDays: z.number().int().min(1).max(90).default(7),
   reviewSlaHours: z.number().int().min(1).max(240).default(24),
   /** `owner/number` of the project whose sprint « Mes issues » shows; null picks one. */
@@ -76,6 +87,10 @@ export const preferencesPatchSchema = z.object({
   recapTime: z.string().regex(TIME).optional(),
   standupEnabled: z.boolean().optional(),
   myStandupEnabled: z.boolean().optional(),
+  standupChannel: z.string().trim().optional(),
+  standupReminder: z.string().trim().min(1).optional(),
+  teamStandupCommand: z.string().trim().regex(COMMAND).optional(),
+  myStandupCommand: z.string().trim().regex(COMMAND).optional(),
   teamStaleDays: z.number().int().min(1).max(90).optional(),
   reviewSlaHours: z.number().int().min(1).max(240).optional(),
   sprintProject: z.string().nullable().optional(),
@@ -90,7 +105,7 @@ const KEY = "preferences"
 
 export { doNotDisturb } from "@/lib/quiet"
 
-/** `#Tech-Team-General`, `tech-team-general` and ` #tech-team-general ` are the same channel. */
+/** `#Eng-General`, `eng-general` and ` #eng-general ` are the same channel. */
 export function normalizeChannel(channel: string): string {
   return channel.trim().replace(/^#/, "").toLowerCase()
 }
@@ -121,6 +136,7 @@ export async function updatePreferences(
       next.slackExcludedChannels.map(normalizeChannel).filter(Boolean)
     ),
   ].sort()
+  next.standupChannel = normalizeChannel(next.standupChannel)
   next.autoDoneAuthors = [
     ...new Set(
       next.autoDoneAuthors.map((login) => login.replace(/^@/, "").toLowerCase())

@@ -48,8 +48,12 @@ describe("preferences", () => {
       autoDoneAuthors: [],
       recapEnabled: true,
       recapTime: "09:05",
-      standupEnabled: true,
-      myStandupEnabled: true,
+      standupEnabled: false,
+      myStandupEnabled: false,
+      standupChannel: "",
+      standupReminder: "Daily standup reminder",
+      teamStandupCommand: "/standup:team",
+      myStandupCommand: "/standup",
       teamStaleDays: 7,
       reviewSlaHours: 24,
       sprintProject: null,
@@ -64,8 +68,8 @@ describe("preferences", () => {
   it("normalises channels and keeps untouched options on partial updates", async () => {
     await updatePreferences(db, {
       slackExcludedChannels: [
-        "#Tech-Team-General",
-        "tech-team-general",
+        "#Eng-General",
+        "eng-general",
         " #random ",
       ],
     })
@@ -74,7 +78,7 @@ describe("preferences", () => {
       preferencesPatchSchema.parse({ agentCli: "codex" })
     )
     expect(await getPreferences(db)).toMatchObject({
-      slackExcludedChannels: ["random", "tech-team-general"],
+      slackExcludedChannels: ["eng-general", "random"],
       agentCli: "codex",
     })
   })
@@ -82,10 +86,10 @@ describe("preferences", () => {
 
 describe("withoutExcludedChannels", () => {
   it("hides threads from excluded channels whatever their spelling", () => {
-    expect(normalizeChannel(" #Tech-Team-General")).toBe("tech-team-general")
+    expect(normalizeChannel(" #Eng-General")).toBe("eng-general")
     const visible = withoutExcludedChannels(
-      [thread("#tech-team-general"), thread("#pull-requests")],
-      ["tech-team-general"]
+      [thread("#eng-general"), thread("#pull-requests")],
+      ["eng-general"]
     )
     expect(visible.map((t) => t.channel)).toEqual(["#pull-requests"])
   })

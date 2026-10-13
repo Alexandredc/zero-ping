@@ -7,7 +7,7 @@ const pull = {
   number: 12,
   title: "feat: export",
   htmlUrl: "https://github.com/acme/app/pull/12",
-  author: "robin",
+  author: "jdoe",
   isDraft: false,
   createdAt: new Date("2026-10-01T10:00:00Z"),
   updatedAt: new Date("2026-10-12T10:00:00Z"),
@@ -23,7 +23,7 @@ const pull = {
 
 describe("teamPullToItem", () => {
   it("files the viewer's own PR under « mine », whatever the case of the login", () => {
-    expect(teamPullToItem(pull, "Robin").view).toBe("mine")
+    expect(teamPullToItem(pull, "Jdoe").view).toBe("mine")
     expect(teamPullToItem(pull, "lead").view).toBe("other")
   })
 
@@ -34,7 +34,7 @@ describe("teamPullToItem", () => {
       number: 12,
       title: "feat: export",
       htmlUrl: "https://github.com/acme/app/pull/12",
-      author: "robin",
+      author: "jdoe",
       isDraft: false,
       createdAt: new Date("2026-10-01T10:00:00Z"),
       updatedAt: new Date("2026-10-12T10:00:00Z"),
@@ -53,7 +53,7 @@ describe("teamPullToItem", () => {
       state: "OPEN",
       view: "other",
       unread: false,
-      author: "robin",
+      author: "jdoe",
       ciState: "FAILURE",
       pendingReviewers: 1,
       priority: 0,

@@ -143,7 +143,7 @@ describe("requestLookup", () => {
   it("tells the agent to skip excluded channels", async () => {
     const item = await insertPull(db)
     await updatePreferences(db, {
-      slackExcludedChannels: ["#tech-team-general"],
+      slackExcludedChannels: ["#eng-general"],
     })
     const runner = vi
       .fn<AgentRunner>()
@@ -151,7 +151,7 @@ describe("requestLookup", () => {
     await requestLookup(db, item, { runner })
     await drainLookups()
     expect(runner.mock.calls[0][0].prompt).toContain(
-      "Ignore these channels entirely, matched by name or by channel ID (the ID is in the permalink, after /archives/): tech-team-general."
+      "Ignore these channels entirely, matched by name or by channel ID (the ID is in the permalink, after /archives/): eng-general."
     )
   })
 })

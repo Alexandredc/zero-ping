@@ -24,6 +24,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { Switch } from "@/components/ui/switch"
 import { useSavePreferences } from "@/hooks/use-inbox"
+import { cn } from "@/lib/utils"
 
 type Settings = Awaited<ReturnType<typeof getSettings>>
 
@@ -60,21 +61,28 @@ function SwitchField({
   label,
   description,
   checked,
+  disabled,
   onChange,
 }: {
   id: string
   label: string
   description: string
   checked: boolean
+  disabled?: boolean
   onChange: (checked: boolean) => void
 }) {
   return (
-    <Field orientation="horizontal">
+    <Field orientation="horizontal" data-disabled={disabled || undefined}>
       <FieldContent>
         <FieldLabel htmlFor={id}>{label}</FieldLabel>
         <FieldDescription>{description}</FieldDescription>
       </FieldContent>
-      <Switch id={id} checked={checked} onCheckedChange={onChange} />
+      <Switch
+        id={id}
+        checked={checked}
+        disabled={disabled}
+        onCheckedChange={onChange}
+      />
     </Field>
   )
 }
@@ -224,6 +232,58 @@ export function TriageSettings({ settings }: { settings: Settings }) {
   )
 }
 
+const isCommand = (value: string) => /^\/[\w.-]+(:[\w.-]+)*$/.test(value)
+
+/** A text setting saved when the field loses focus or on Entrée. */
+function TextField({
+  id,
+  label,
+  description,
+  value,
+  placeholder,
+  prefix,
+  mono,
+  onSave,
+}: {
+  id: string
+  label: string
+  description: string
+  value: string
+  placeholder: string
+  prefix?: string
+  mono?: boolean
+  onSave: (value: string) => void
+}) {
+  const commit = (next: string) => {
+    const trimmed = next.trim().replace(/^#/, "")
+    if (trimmed !== value) onSave(trimmed)
+  }
+  return (
+    <Field orientation="horizontal">
+      <FieldContent>
+        <FieldLabel htmlFor={id}>{label}</FieldLabel>
+        <FieldDescription>{description}</FieldDescription>
+      </FieldContent>
+      <div className="flex items-center gap-1">
+        {prefix && (
+          <span className="text-sm text-muted-foreground">{prefix}</span>
+        )}
+        <Input
+          id={id}
+          key={value}
+          defaultValue={value}
+          placeholder={placeholder}
+          className={cn("w-56", mono && "font-mono")}
+          onBlur={(event) => commit(event.target.value)}
+          onKeyDown={(event) =>
+            event.key === "Enter" && commit(event.currentTarget.value)
+          }
+        />
+      </div>
+    </Field>
+  )
+}
+
 export function RecapSettings({ settings }: { settings: Settings }) {
   const save = useSavePreferences()
   const { preferences } = settings
@@ -255,8 +315,8 @@ export function RecapSettings({ settings }: { settings: Settings }) {
             <FieldContent>
               <FieldLabel htmlFor="recap-time">Heure</FieldLabel>
               <FieldDescription>
-                Après le « Daily standup reminder » de 9 h, pour que le standup
-                trouve son fil Slack.
+                Après le message « {preferences.standupReminder} » du jour, pour
+                que le standup trouve son fil Slack.
               </FieldDescription>
             </FieldContent>
             <Input
@@ -276,20 +336,65 @@ export function RecapSettings({ settings }: { settings: Settings }) {
             />
           </Field>
           <FieldSeparator />
+          <TextField
+            id="standup-channel"
+            label="Canal du standup"
+            description="Le canal Slack où un message de rappel ouvre chaque jour le fil des standups. Sans canal, les standups ne se lancent pas."
+            value={preferences.standupChannel}
+            placeholder="daily-standup"
+            prefix="#"
+            onSave={(standupChannel) => save.mutate({ standupChannel })}
+          />
+          <TextField
+            id="standup-reminder"
+            label="Message de rappel"
+            description="Le texte qui distingue le rappel du jour dans ce canal, par exemple celui d'un rappel Slack automatique."
+            value={preferences.standupReminder}
+            placeholder="Daily standup reminder"
+            onSave={(standupReminder) =>
+              standupReminder && save.mutate({ standupReminder })
+            }
+          />
+          <FieldSeparator />
           <SwitchField
             id="standup-enabled"
-            label="Lancer /standup:team avec le récap"
-            description="L'IA principale exporte le board et rédige le standup. Tu le relis dans le récap du jour, puis tu le publies d'un clic dans le fil du jour de #tech-team-general."
+            label={`Lancer ${preferences.teamStandupCommand} avec le récap`}
+            description={`L'IA principale exporte le board et rédige le standup de l'équipe. Tu le relis dans le récap du jour, puis tu le publies d'un clic dans le fil du jour${preferences.standupChannel ? ` de #${preferences.standupChannel}` : ""}.`}
             checked={preferences.standupEnabled}
+            disabled={!preferences.standupChannel}
             onChange={(checked) => save.mutate({ standupEnabled: checked })}
+          />
+          <TextField
+            id="team-standup-command"
+            label="Commande du standup d'équipe"
+            description="Une commande de ~/.claude/commands. Codex en suit le texte."
+            value={preferences.teamStandupCommand}
+            placeholder="/standup:team"
+            mono
+            onSave={(teamStandupCommand) =>
+              isCommand(teamStandupCommand) &&
+              save.mutate({ teamStandupCommand })
+            }
           />
           <FieldSeparator />
           <SwitchField
             id="my-standup-enabled"
-            label="Lancer /standup avec le récap"
+            label={`Lancer ${preferences.myStandupCommand} avec le récap`}
             description="L'IA principale rédige ton propre standup à partir de tes PR et de tes reviews. Tu le relis dans le récap du jour, puis tu le publies d'un clic dans le même fil."
             checked={preferences.myStandupEnabled}
+            disabled={!preferences.standupChannel}
             onChange={(checked) => save.mutate({ myStandupEnabled: checked })}
+          />
+          <TextField
+            id="my-standup-command"
+            label="Commande de ton standup"
+            description="Une commande de ~/.claude/commands. Codex en suit le texte."
+            value={preferences.myStandupCommand}
+            placeholder="/standup"
+            mono
+            onSave={(myStandupCommand) =>
+              isCommand(myStandupCommand) && save.mutate({ myStandupCommand })
+            }
           />
         </FieldGroup>
       </CardContent>

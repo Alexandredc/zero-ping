@@ -1707,6 +1707,12 @@ export async function getRecap() {
       },
     },
     recapTime: preferences.recapTime,
+    standupChannel: preferences.standupChannel,
+    standupReminder: preferences.standupReminder,
+    standupCommands: {
+      team: preferences.teamStandupCommand,
+      me: preferences.myStandupCommand,
+    },
   }
 }
 

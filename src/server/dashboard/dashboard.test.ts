@@ -188,14 +188,14 @@ describe("teamWeather", () => {
       [
         {
           number: 1,
-          author: "robin",
+          author: "jdoe",
           isDraft: false,
           reviewers: ["lead", "team:leads"],
           problems: ["ci"],
         },
         {
           number: 2,
-          author: "robin",
+          author: "jdoe",
           isDraft: false,
           reviewers: ["chloe"],
           problems: ["conflict"],
@@ -211,20 +211,20 @@ describe("teamWeather", () => {
           number: 4,
           author: "chloe",
           isDraft: true,
-          reviewers: ["robin"],
+          reviewers: ["jdoe"],
           problems: [],
         },
       ],
       { login: "Lead", reviewsDue: 7, openPulls: 2, blocked: 0 }
     )
     expect(rows.map((row) => [row.login, row.weather])).toEqual([
-      ["robin", "stormy"],
+      ["jdoe", "stormy"],
       ["lead", "stormy"],
       ["chloe", "sunny"],
     ])
-    const robin = rows[0]
-    expect(robin.blocked).toHaveLength(2)
-    expect(robin.waitingOn).toEqual(["lead", "team:leads", "chloe"])
+    const jdoe = rows[0]
+    expect(jdoe.blocked).toHaveLength(2)
+    expect(jdoe.waitingOn).toEqual(["lead", "team:leads", "chloe"])
     expect(rows[1]).toMatchObject({
       isViewer: true,
       reviewsDue: 7,

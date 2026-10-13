@@ -4,7 +4,7 @@ import type { RawReviewerOptions } from "./reviewers"
 
 const raw: RawReviewerOptions = {
   pullRequest: {
-    author: { login: "robin" },
+    author: { login: "jdoe" },
     suggestedReviewers: [{ reviewer: { login: "Zoe", name: "Zoé" } }],
     reviewRequests: {
       nodes: [
@@ -18,7 +18,7 @@ const raw: RawReviewerOptions = {
   },
   assignableUsers: {
     nodes: [
-      { login: "robin", name: null },
+      { login: "jdoe", name: null },
       { login: "bob", name: "" },
       { login: "alice", name: "Alice" },
       { login: "zoe", name: "Zoé" },

@@ -4,7 +4,7 @@ import { ballHolder, diagnose } from "./diagnosis"
 const NOW = new Date("2026-10-12T12:00:00Z")
 
 const pull = {
-  author: "robin",
+  author: "jdoe",
   createdAt: new Date("2026-09-20T12:00:00Z"),
   updatedAt: new Date("2026-10-09T12:00:00Z"),
   reviewers: ["lead", "team:leads"],
@@ -27,16 +27,16 @@ describe("diagnose", () => {
       NOW
     )
     expect(diagnoses.map((d) => d.holder)).toEqual([
-      { kind: "author", login: "robin" },
-      { kind: "author", login: "robin" },
-      { kind: "author", login: "robin" },
+      { kind: "author", login: "jdoe" },
+      { kind: "author", login: "jdoe" },
+      { kind: "author", login: "jdoe" },
     ])
     // Intl separates the number and the unit with a no-break space.
     expect(diagnoses[0].reason).toMatch(
       /^Des changements ont été demandés et rien n'a été poussé depuis 3\sj\.$/
     )
     expect(diagnoses[1].nextStep).toBe(
-      "@robin doit la corriger avant toute review."
+      "@jdoe doit la corriger avant toute review."
     )
   })
 
@@ -64,7 +64,7 @@ describe("ballHolder", () => {
   it("follows the most blocking problem, else the reviewers", () => {
     expect(ballHolder({ ...pull, problems: ["ci", "stale"] }, NOW)).toEqual({
       kind: "author",
-      login: "robin",
+      login: "jdoe",
     })
     expect(ballHolder(pull, NOW)).toEqual({
       kind: "reviewers",

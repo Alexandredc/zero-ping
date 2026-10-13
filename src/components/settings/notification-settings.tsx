@@ -78,7 +78,7 @@ export function NotificationSettings({ settings }: { settings: Settings }) {
     const sentAt = new Date().toLocaleTimeString("fr")
     const notification = showNotification("Review demandée", {
       // The time keeps two tests from looking identical, which some browsers drop.
-      body: `acme-web#1234 · Notification de test envoyée à ${sentAt}`,
+      body: `acme-api#1234 · Notification de test envoyée à ${sentAt}`,
       tag: `test-${Date.now()}`,
       renotify: true,
     } as NotificationOptions)

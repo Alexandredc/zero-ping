@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest"
-import { commandInstructions, parseStandup, publishBlocker } from "./standup"
+import {
+  commandInstructions,
+  parseStandup,
+  publishBlocker,
+  standupCommand,
+  standupSetupBlocker,
+  standupSystemPrompt,
+} from "./standup"
 import type { StandupState } from "./standup"
 
 describe("parseStandup", () => {
@@ -8,7 +15,7 @@ describe("parseStandup", () => {
       parseStandup({
         message: " **Point équipe** ",
         slackMessage: "<@U1> : livré",
-        channelId: "C08P7R8BLCA",
+        channelId: "C0123456789",
         threadTs: "1791800000.000100",
         alreadyPosted: false,
         note: "",
@@ -16,7 +23,7 @@ describe("parseStandup", () => {
     ).toEqual({
       message: "**Point équipe**",
       slackMessage: "<@U1> : livré",
-      channelId: "C08P7R8BLCA",
+      channelId: "C0123456789",
       threadTs: "1791800000.000100",
       alreadyPosted: false,
       note: null,
@@ -78,5 +85,33 @@ describe("commandInstructions", () => {
         "---\ndescription: Team standup\n---\nExport the board.$ARGUMENTS\n"
       )
     ).toBe("Export the board.")
+  })
+})
+
+describe("standup settings", () => {
+  const settings = {
+    standupChannel: "eng-daily",
+    standupReminder: "Daily standup reminder",
+    teamStandupCommand: "/standup:team",
+    myStandupCommand: "/standup",
+  }
+
+  it("runs the command chosen for each standup", () => {
+    expect(standupCommand("team", settings)).toBe("/standup:team")
+    expect(standupCommand("me", settings)).toBe("/standup")
+  })
+
+  it("points the agent at the configured channel and reminder", () => {
+    const prompt = standupSystemPrompt("me", settings)
+    expect(prompt).toContain(
+      'today\'s "Daily standup reminder" message in #eng-daily'
+    )
+  })
+
+  it("asks for a channel before any run", () => {
+    expect(standupSetupBlocker(settings)).toBeNull()
+    expect(standupSetupBlocker({ ...settings, standupChannel: "" })).toMatch(
+      /Réglages > Récap/
+    )
   })
 })

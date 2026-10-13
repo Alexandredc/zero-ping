@@ -7,6 +7,7 @@ import { settings } from "@/server/db/schema"
 import { getAgentConfig, runAgent } from "@/server/agents/runner"
 import type { AgentConfig } from "@/server/agents/runner"
 import { getPreferences } from "@/server/preferences"
+import type { Preferences } from "@/server/preferences"
 import { recordAttention } from "@/server/inbox/attention"
 import {
   REPLY_JSON_SCHEMA,
@@ -114,8 +115,6 @@ const KIND_CONFIG: Record<
   {
     /** Settings row holding the last run. */
     key: string
-    command: string
-    systemPrompt: string
     timeoutMs: number
     readyTitle: string
     alreadyPosted: string
@@ -123,12 +122,6 @@ const KIND_CONFIG: Record<
 > = {
   team: {
     key: "standup",
-    command: "/standup:team",
-    systemPrompt: [
-      UNATTENDED,
-      "Override for step 5: find today's reminder and read its thread (steps 5.1 and 5.2), but do not create the Slack draft. Zéro Ping shows the standup to the user and posts it in that thread when they click to publish.",
-      "Your final structured answer reports the standup message in both forms, the reminder thread and any note for the user.",
-    ].join(" "),
     // The board export alone takes about six minutes.
     timeoutMs: 25 * 60_000,
     readyTitle: "Standup d'équipe prêt",
@@ -136,16 +129,50 @@ const KIND_CONFIG: Record<
   },
   me: {
     key: "standup:me",
-    command: "/standup",
-    systemPrompt: [
-      UNATTENDED,
-      'Override for the Slack draft: do not create it. Instead, find today\'s "Daily standup reminder" message in #tech-team-general (channel C08P7R8BLCA) with slack_read_channel, read its thread with slack_read_thread, and tell whether the user already posted their own standup there. Zéro Ping shows the standup to the user and posts it in that thread when they click to publish.',
-      "Your final structured answer reports the standup message (Markdown for the chat, Slack mrkdwn for Slack), the reminder thread and any note for the user.",
-    ].join(" "),
     timeoutMs: 10 * 60_000,
     readyTitle: "Ton standup est prêt",
     alreadyPosted: "Ton standup est déjà dans le fil d'aujourd'hui.",
   },
+}
+
+export type StandupSettings = Pick<
+  Preferences,
+  | "standupChannel"
+  | "standupReminder"
+  | "teamStandupCommand"
+  | "myStandupCommand"
+>
+
+/** The command that writes the standup, as the settings name it. */
+export function standupCommand(
+  kind: StandupKind,
+  settings: StandupSettings
+): string {
+  return kind === "team"
+    ? settings.teamStandupCommand
+    : settings.myStandupCommand
+}
+
+/** What the agent must do around the command: find the reminder's thread, draft nothing. */
+export function standupSystemPrompt(
+  kind: StandupKind,
+  settings: StandupSettings
+): string {
+  const reminder = `today's ${JSON.stringify(settings.standupReminder)} message in #${settings.standupChannel}`
+  return [
+    UNATTENDED,
+    `Do not create any Slack draft or post anything. Instead, find ${reminder} (look the channel up with the channel search tool when you need its id), read its thread, and tell whether ${kind === "team" ? "a team standup" : "the user's own standup"} is already there. Zéro Ping shows the standup to the user and posts it in that thread when they click to publish.`,
+    kind === "team"
+      ? "Your final structured answer reports the standup message in both forms, the reminder thread and any note for the user."
+      : "Your final structured answer reports the standup message (Markdown for the chat, Slack mrkdwn for Slack), the reminder thread and any note for the user.",
+  ].join(" ")
+}
+
+/** Why a standup cannot run yet, or null when it can. */
+export function standupSetupBlocker(settings: StandupSettings): string | null {
+  return settings.standupChannel
+    ? null
+    : "Choisis le canal Slack du standup dans Réglages > Récap."
 }
 
 const globalForStandup = globalThis as unknown as {
@@ -298,6 +325,19 @@ export function startStandup(
   const config = KIND_CONFIG[kind]
   runs[kind] ??= (async () => {
     const startedAt = new Date().toISOString()
+    const preferences = await getPreferences(db)
+    const blocker = standupSetupBlocker(preferences)
+    if (blocker) {
+      await writeStandup(db, kind, {
+        ...(await readStandup(db, kind)),
+        status: "error",
+        date,
+        startedAt,
+        finishedAt: startedAt,
+        error: blocker,
+      })
+      return
+    }
     await writeStandup(db, kind, {
       ...(await readStandup(db, kind)),
       status: "running",
@@ -309,13 +349,13 @@ export function startStandup(
     try {
       // The command needs the user's default model, gh, jq and the Slack connector.
       const agent: AgentConfig = {
-        ...getAgentConfig(process.env, await getPreferences(db)),
+        ...getAgentConfig(process.env, preferences),
         model: undefined,
       }
       const answer = await runAgent(
         {
-          prompt: await standupPrompt(agent, config.command),
-          appendSystemPrompt: config.systemPrompt,
+          prompt: await standupPrompt(agent, standupCommand(kind, preferences)),
+          appendSystemPrompt: standupSystemPrompt(kind, preferences),
           schema: standupJsonSchema(kind),
           allowedTools: ["Bash", "Read", "Write", ...SLACK_READ_TOOLS],
           sandbox: "workspace-write",
