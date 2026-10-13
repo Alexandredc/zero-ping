@@ -19,6 +19,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { Switch } from "@/components/ui/switch"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
+import { useI18n } from "@/hooks/use-i18n"
 import { quietQuery, useSavePreferences } from "@/hooks/use-inbox"
 import { formatWhen } from "@/lib/format"
 import { doNotDisturb, isForever } from "@/lib/quiet"
@@ -51,6 +52,8 @@ function TimeInput({
 
 /** « Ne pas déranger » now, and the hours muted every day. */
 export function QuietSettings() {
+  const { t, language } = useI18n()
+  const m = t.settings.quiet
   const { data } = useQuery(quietQuery())
   const save = useSavePreferences()
   if (!data) return null
@@ -60,28 +63,25 @@ export function QuietSettings() {
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <BellOffIcon className="size-4" />
-          Ne pas déranger
+          {m.title}
         </CardTitle>
-        <CardDescription>
-          Coupe les notifications sans rien changer à l'inbox : ce qui arrive
-          pendant ce temps reste dans ses dossiers mais n'est pas notifié
-          ensuite. Le récap du jour aussi se tait. Active-le vite depuis la
-          barre latérale.
-        </CardDescription>
+        <CardDescription>{m.description}</CardDescription>
       </CardHeader>
       <CardContent>
         <FieldGroup>
           <Field orientation="horizontal">
             <FieldContent>
-              <FieldLabel>En ce moment</FieldLabel>
+              <FieldLabel>{m.now}</FieldLabel>
               <FieldDescription>
                 {reason === "dnd" && data.dndUntil
                   ? isForever(data.dndUntil)
-                    ? "Notifications coupées jusqu'à ce que tu les réactives."
-                    : `Notifications coupées jusqu'à ${formatWhen(new Date(data.dndUntil))}.`
+                    ? m.mutedForever
+                    : m.mutedUntil(
+                        formatWhen(new Date(data.dndUntil), language)
+                      )
                   : reason === "quiet"
-                    ? `Heures calmes, jusqu'à ${data.quietEnd}.`
-                    : "Les notifications passent."}
+                    ? m.quietUntil(data.quietEnd)
+                    : m.passing}
               </FieldDescription>
             </FieldContent>
             {reason === "dnd" && (
@@ -90,18 +90,15 @@ export function QuietSettings() {
                 size="sm"
                 onClick={() => save.mutate({ dndUntil: null })}
               >
-                Réactiver
+                {m.resume}
               </Button>
             )}
           </Field>
           <FieldSeparator />
           <Field orientation="horizontal">
             <FieldContent>
-              <FieldLabel htmlFor="quiet-hours">Heures calmes</FieldLabel>
-              <FieldDescription>
-                Chaque jour, aucune notification entre ces deux heures. La fin
-                peut tomber le lendemain (19:00 → 09:00).
-              </FieldDescription>
+              <FieldLabel htmlFor="quiet-hours">{m.hours}</FieldLabel>
+              <FieldDescription>{m.hoursDescription}</FieldDescription>
             </FieldContent>
             <Switch
               id="quiet-hours"
@@ -112,7 +109,7 @@ export function QuietSettings() {
             />
           </Field>
           <Field orientation="horizontal">
-            <FieldLabel htmlFor="quiet-start">De</FieldLabel>
+            <FieldLabel htmlFor="quiet-start">{m.from}</FieldLabel>
             <div className="flex items-center gap-2">
               <TimeInput
                 id="quiet-start"
@@ -120,7 +117,7 @@ export function QuietSettings() {
                 disabled={!data.quietHoursEnabled}
                 onSave={(time) => save.mutate({ quietStart: time })}
               />
-              <FieldLabel htmlFor="quiet-end">à</FieldLabel>
+              <FieldLabel htmlFor="quiet-end">{m.to}</FieldLabel>
               <TimeInput
                 id="quiet-end"
                 value={data.quietEnd}
@@ -135,18 +132,12 @@ export function QuietSettings() {
   )
 }
 
-const INTERVALS = [
-  { value: "auto", label: "Auto" },
-  { value: "60", label: "1 min" },
-  { value: "120", label: "2 min" },
-  { value: "300", label: "5 min" },
-  { value: "600", label: "10 min" },
-  { value: "900", label: "15 min" },
-  { value: "1800", label: "30 min" },
-]
+const INTERVAL_SECONDS = [60, 120, 300, 600, 900, 1800]
 
 /** How often the app asks GitHub for news. */
 export function SyncSettings() {
+  const { t } = useI18n()
+  const m = t.settings.sync
   const { data } = useQuery(quietQuery())
   const save = useSavePreferences()
   if (!data) return null
@@ -160,18 +151,13 @@ export function SyncSettings() {
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <RefreshCwIcon className="size-4" />
-          Synchronisation GitHub
+          {m.title}
         </CardTitle>
-        <CardDescription>
-          À quel rythme l'app interroge GitHub pour les notifications, les PR et
-          les reviews. Plus espacé, l'app est moins réactive mais consomme moins
-          de quota d'API. Le bouton Sync de la barre latérale force une
-          synchronisation à tout moment.
-        </CardDescription>
+        <CardDescription>{m.description}</CardDescription>
       </CardHeader>
       <CardContent>
         <Field>
-          <FieldLabel>Intervalle</FieldLabel>
+          <FieldLabel>{m.interval}</FieldLabel>
           <ToggleGroup
             value={[value]}
             onValueChange={(next) => {
@@ -183,21 +169,17 @@ export function SyncSettings() {
             }}
             variant="outline"
             size="sm"
-            aria-label="Intervalle de synchronisation"
+            aria-label={m.intervalLabel}
             className="flex-wrap"
           >
-            {INTERVALS.map((interval) => (
-              <ToggleGroupItem key={interval.value} value={interval.value}>
-                {interval.label}
+            <ToggleGroupItem value="auto">{m.auto}</ToggleGroupItem>
+            {INTERVAL_SECONDS.map((seconds) => (
+              <ToggleGroupItem key={seconds} value={String(seconds)}>
+                {seconds / 60} min
               </ToggleGroupItem>
             ))}
           </ToggleGroup>
-          <FieldDescription>
-            Auto suit le rythme que GitHub demande
-            {github ? ` (en ce moment ${github} s)` : ""}, qu'aucun réglage ne
-            peut raccourcir. Le changement s'applique dès la prochaine
-            synchronisation.
-          </FieldDescription>
+          <FieldDescription>{m.autoDescription(github)}</FieldDescription>
         </Field>
       </CardContent>
     </Card>

@@ -25,48 +25,23 @@ import {
   FieldLegend,
 } from "@/components/ui/field"
 import { Switch } from "@/components/ui/switch"
+import { useI18n } from "@/hooks/use-i18n"
 import { useSavePreferences } from "@/hooks/use-inbox"
 import { useNotificationPermission } from "@/hooks/use-notification-permission"
 import { toast } from "@/components/ui/toast"
 
 type Settings = Awaited<ReturnType<typeof getSettings>>
 
-const KINDS: { kind: AttentionKind; label: string; description: string }[] = [
-  {
-    kind: "review",
-    label: "Review demandée",
-    description: "On te demande une review, à toi ou à ton équipe.",
-  },
-  {
-    kind: "awaiting",
-    label: "On attend ta réponse",
-    description:
-      "Une mention ou une réponse dans un fil où tu n'as pas encore réagi.",
-  },
-  {
-    kind: "changes",
-    label: "Changements demandés sur ta PR",
-    description: "Un reviewer demande des changements sur une de tes PR.",
-  },
-  {
-    kind: "ci",
-    label: "CI en échec sur ta PR",
-    description: "La CI d'une de tes PR échoue.",
-  },
-]
-
-/** The browser can accept a notification that macOS then hides. */
-const MACOS_HINT =
-  "Tu ne la vois pas ? Autorise ton navigateur dans Réglages Système > Notifications (Dia, Chrome…) et vérifie qu'aucun mode Concentration n'est actif."
-
-const PERMISSION_LABEL = {
-  granted: "autorisées",
-  denied: "bloquées",
-  default: "pas encore autorisées",
-  unsupported: "non prises en charge",
-}
+const KINDS = [
+  "review",
+  "awaiting",
+  "changes",
+  "ci",
+] as const satisfies AttentionKind[]
 
 export function NotificationSettings({ settings }: { settings: Settings }) {
+  const { t, language } = useI18n()
+  const m = t.settings.notifications
   const save = useSavePreferences()
   const { permission, request } = useNotificationPermission()
   const lastTest = useRef<Notification | null>(null)
@@ -75,31 +50,32 @@ export function NotificationSettings({ settings }: { settings: Settings }) {
   const sendTest = () => {
     // The previous test may still sit on screen: macOS then folds the new one into it.
     lastTest.current?.close()
-    const sentAt = new Date().toLocaleTimeString("fr")
-    const notification = showNotification("Review demandée", {
+    const sentAt = new Date().toLocaleTimeString(language)
+    const notification = showNotification(m.kinds.review.label, {
       // The time keeps two tests from looking identical, which some browsers drop.
-      body: `acme-api#1234 · Notification de test envoyée à ${sentAt}`,
+      body: m.testBody(sentAt),
       tag: `test-${Date.now()}`,
       renotify: true,
     } as NotificationOptions)
     lastTest.current = notification
     if (!notification) {
       toast.add({
-        title: "Notification impossible",
-        description: "Le navigateur ne l'autorise pas pour cette page.",
+        title: m.unavailable,
+        description: m.unavailableDescription,
         type: "error",
       })
       return
     }
     notification.onshow = () =>
       toast.add({
-        title: "Notification transmise à macOS",
-        description: MACOS_HINT,
+        title: m.delivered,
+        // The browser can accept a notification that macOS then hides.
+        description: m.macosHint,
       })
     notification.onerror = () =>
       toast.add({
-        title: "Notification refusée",
-        description: MACOS_HINT,
+        title: m.refused,
+        description: m.macosHint,
         type: "error",
       })
   }
@@ -116,16 +92,12 @@ export function NotificationSettings({ settings }: { settings: Settings }) {
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <BellIcon className="size-4" />
-          Notifications du navigateur
+          {m.title}
         </CardTitle>
-        <CardDescription>
-          Une notification apparaît quand une PR ou une issue demande ton
-          attention, tant qu'un onglet Zéro Ping est ouvert. Clique dessus pour
-          ouvrir l'élément.
-        </CardDescription>
+        <CardDescription>{m.description}</CardDescription>
         <CardAction>
           <Badge variant={permission === "granted" ? "secondary" : "outline"}>
-            {PERMISSION_LABEL[permission]}
+            {m.permission[permission]}
           </Badge>
         </CardAction>
       </CardHeader>
@@ -133,35 +105,27 @@ export function NotificationSettings({ settings }: { settings: Settings }) {
         {permission === "default" && (
           <Alert>
             <BellIcon />
-            <AlertTitle>Autorise les notifications</AlertTitle>
+            <AlertTitle>{m.allowTitle}</AlertTitle>
             <AlertDescription className="flex flex-col items-start gap-2">
-              Le navigateur te demandera une seule fois ton accord.
+              {m.allowDescription}
               <Button size="sm" onClick={() => void request()}>
-                Autoriser les notifications
+                {m.allow}
               </Button>
             </AlertDescription>
           </Alert>
         )}
         {permission === "denied" && (
           <Alert variant="destructive">
-            <AlertTitle>Notifications bloquées par le navigateur</AlertTitle>
-            <AlertDescription>
-              Clique sur l'icône à gauche de l'adresse, autorise les
-              notifications pour inbox.localhost, puis recharge la page.
-            </AlertDescription>
+            <AlertTitle>{m.blockedTitle}</AlertTitle>
+            <AlertDescription>{m.blockedDescription}</AlertDescription>
           </Alert>
         )}
 
         <FieldGroup>
           <Field orientation="horizontal">
             <FieldContent>
-              <FieldLabel htmlFor="notify-enabled">
-                Activer les notifications
-              </FieldLabel>
-              <FieldDescription>
-                Rien n'est notifié pendant la première synchronisation, ni pour
-                un élément traité ou en pause.
-              </FieldDescription>
+              <FieldLabel htmlFor="notify-enabled">{m.enable}</FieldLabel>
+              <FieldDescription>{m.enableDescription}</FieldDescription>
             </FieldContent>
             <Switch
               id="notify-enabled"
@@ -173,16 +137,20 @@ export function NotificationSettings({ settings }: { settings: Settings }) {
           </Field>
           <FieldSeparator />
           <FieldSet disabled={!notifyEnabled}>
-            <FieldLegend variant="label">Me prévenir pour</FieldLegend>
-            {KINDS.map(({ kind, label, description }) => (
+            <FieldLegend variant="label">{m.notifyFor}</FieldLegend>
+            {KINDS.map((kind) => (
               <Field
                 key={kind}
                 orientation="horizontal"
                 data-disabled={!notifyEnabled || undefined}
               >
                 <FieldContent>
-                  <FieldLabel htmlFor={`notify-${kind}`}>{label}</FieldLabel>
-                  <FieldDescription>{description}</FieldDescription>
+                  <FieldLabel htmlFor={`notify-${kind}`}>
+                    {m.kinds[kind].label}
+                  </FieldLabel>
+                  <FieldDescription>
+                    {m.kinds[kind].description}
+                  </FieldDescription>
                 </FieldContent>
                 <Switch
                   id={`notify-${kind}`}
@@ -196,11 +164,8 @@ export function NotificationSettings({ settings }: { settings: Settings }) {
           <FieldSeparator />
           <Field orientation="horizontal">
             <FieldContent>
-              <FieldLabel>Tester</FieldLabel>
-              <FieldDescription>
-                Affiche une notification d'exemple pour vérifier que ton
-                navigateur et macOS les laissent passer.
-              </FieldDescription>
+              <FieldLabel>{m.test}</FieldLabel>
+              <FieldDescription>{m.testDescription}</FieldDescription>
             </FieldContent>
             <Button
               variant="outline"
@@ -208,7 +173,7 @@ export function NotificationSettings({ settings }: { settings: Settings }) {
               disabled={permission !== "granted"}
               onClick={sendTest}
             >
-              Envoyer un test
+              {m.sendTest}
             </Button>
           </Field>
         </FieldGroup>

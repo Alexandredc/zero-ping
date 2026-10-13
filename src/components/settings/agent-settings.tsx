@@ -20,29 +20,28 @@ import {
 } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
+import { useI18n } from "@/hooks/use-i18n"
 import { useSavePreferences } from "@/hooks/use-inbox"
-import { LENGTH_LABEL } from "@/components/inbox/summary-card"
 import { AGENT_LABEL } from "@/lib/agents"
 import type { AgentKind } from "@/lib/agents"
+import type { Messages } from "@/lib/i18n/messages"
 import { SUMMARY_LENGTHS } from "@/server/db/schema"
 import type { SummaryLength } from "@/server/db/schema"
 
 type Settings = Awaited<ReturnType<typeof getSettings>>
 
-const DEFAULT_MODEL_HINT: Record<
-  AgentKind,
-  { fast: string; smart: string; examples: string }
-> = {
-  claude: {
-    fast: "haiku",
-    smart: "sonnet",
-    examples: "Exemples : haiku, sonnet, opus.",
-  },
-  codex: {
-    fast: "celui de ta config Codex",
-    smart: "celui de ta config Codex",
-    examples: "Indique un nom accepté par codex --model.",
-  },
+function defaultModelHint(
+  kind: AgentKind,
+  t: Messages
+): { fast: string; smart: string; examples: string } {
+  const { agent } = t.settings
+  return kind === "claude"
+    ? { fast: "haiku", smart: "sonnet", examples: agent.claudeExamples }
+    : {
+        fast: agent.codexConfigModel,
+        smart: agent.codexConfigModel,
+        examples: agent.codexExamples,
+      }
 }
 
 function ModelInput({
@@ -76,6 +75,7 @@ function ModelInput({
 }
 
 function ReviewCommandsCard({ commands }: { commands: string[] }) {
+  const { t } = useI18n()
   const save = useSavePreferences()
   const [draft, setDraft] = useState("")
   const add = () => {
@@ -89,12 +89,10 @@ function ReviewCommandsCard({ commands }: { commands: string[] }) {
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <BotIcon className="size-4" />
-          Reviews IA en un clic
+          {t.settings.agent.reviewCommandsTitle}
         </CardTitle>
         <CardDescription>
-          Le bouton « Review IA » d'une PR poste l'une de ces commandes en
-          commentaire, pour déclencher le bot correspondant installé sur le
-          repo.
+          {t.settings.agent.reviewCommandsDescription}
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
@@ -109,7 +107,7 @@ function ReviewCommandsCard({ commands }: { commands: string[] }) {
               <Button
                 variant="ghost"
                 size="icon-xs"
-                aria-label={`Retirer ${command}`}
+                aria-label={t.settings.remove(command)}
                 onClick={() =>
                   save.mutate({
                     reviewCommands: commands.filter((c) => c !== command),
@@ -122,7 +120,7 @@ function ReviewCommandsCard({ commands }: { commands: string[] }) {
           ))}
           {commands.length === 0 && (
             <span className="text-sm text-muted-foreground">
-              Aucune commande : le bouton est masqué.
+              {t.settings.agent.noReviewCommand}
             </span>
           )}
         </div>
@@ -133,10 +131,10 @@ function ReviewCommandsCard({ commands }: { commands: string[] }) {
             onKeyDown={(event) => event.key === "Enter" && add()}
             placeholder="@copilot review"
             className="font-mono"
-            aria-label="Nouvelle commande de review"
+            aria-label={t.settings.agent.newReviewCommand}
           />
           <Button variant="outline" onClick={add} disabled={!draft.trim()}>
-            Ajouter
+            {t.settings.add}
           </Button>
         </div>
       </CardContent>
@@ -160,11 +158,12 @@ function Fact({
 }
 
 export function AgentSettings({ settings }: { settings: Settings }) {
+  const { t } = useI18n()
   const save = useSavePreferences()
   const { preferences, env } = settings
   const agent = preferences.agentCli ?? "default"
   const kind = preferences.agentCli ?? env.agent.kind
-  const defaults = DEFAULT_MODEL_HINT[kind]
+  const defaults = defaultModelHint(kind, t)
   const envFast =
     kind === env.agent.kind && env.agent.model ? env.agent.model : null
 
@@ -174,20 +173,14 @@ export function AgentSettings({ settings }: { settings: Settings }) {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <SparklesIcon className="size-4" />
-            IA principale
+            {t.settings.agent.mainTitle}
           </CardTitle>
-          <CardDescription>
-            L'agent en ligne de commande derrière toutes les fonctions IA : les
-            résumés, les questions sur une PR ou une issue, la recherche IA, les
-            fils et messages Slack et les standups. Il tourne en arrière-plan
-            sur ton Mac, dans un dossier temporaire vide. Jev, qui classe et
-            note les PR, reste à part.
-          </CardDescription>
+          <CardDescription>{t.settings.agent.mainDescription}</CardDescription>
         </CardHeader>
         <CardContent>
           <FieldGroup>
             <Field>
-              <FieldLabel>IA</FieldLabel>
+              <FieldLabel>{t.settings.agent.ai}</FieldLabel>
               <ToggleGroup
                 value={[agent]}
                 onValueChange={(value) => {
@@ -202,48 +195,51 @@ export function AgentSettings({ settings }: { settings: Settings }) {
                 }}
                 variant="outline"
                 size="sm"
-                aria-label="IA principale"
+                aria-label={t.settings.agent.mainTitle}
               >
                 <ToggleGroupItem value="default">
-                  Selon .env ({AGENT_LABEL[env.agent.kind]})
+                  {t.settings.agent.fromEnv(AGENT_LABEL[env.agent.kind])}
                 </ToggleGroupItem>
                 <ToggleGroupItem value="claude">Claude Code</ToggleGroupItem>
                 <ToggleGroupItem value="codex">Codex</ToggleGroupItem>
               </ToggleGroup>
               <FieldDescription>
                 {kind === "claude"
-                  ? "Claude Code utilise le connecteur Slack de ton compte claude.ai et lance tes commandes /standup et /standup:team."
-                  : "Codex a besoin de son propre serveur MCP Slack dans ~/.codex/config.toml (voir le README). Pour les standups, il suit le texte de tes commandes ~/.claude/commands/standup.md et standup/team.md, avec accès au réseau."}{" "}
-                Changer d'IA remet les modèles sur ses valeurs par défaut.
+                  ? t.settings.agent.claudeHint
+                  : t.settings.agent.codexHint}{" "}
+                {t.settings.agent.switchResetsModels}
               </FieldDescription>
             </Field>
             <FieldSeparator />
             <Field>
-              <FieldLabel htmlFor="agent-model">Modèle rapide</FieldLabel>
+              <FieldLabel htmlFor="agent-model">
+                {t.settings.agent.fastModel}
+              </FieldLabel>
               <ModelInput
                 id="agent-model"
                 value={preferences.agentModel}
-                placeholder={`${envFast ?? defaults.fast} (par défaut)`}
+                placeholder={t.settings.agent.defaultModel(
+                  envFast ?? defaults.fast
+                )}
                 onSave={(model) => save.mutate({ agentModel: model })}
               />
               <FieldDescription>
-                Pour les recherches et messages Slack. Laisse vide pour la
-                valeur par défaut. {defaults.examples}
+                {t.settings.agent.fastModelDescription(defaults.examples)}
               </FieldDescription>
             </Field>
             <FieldSeparator />
             <Field>
-              <FieldLabel htmlFor="summary-model">Modèle de lecture</FieldLabel>
+              <FieldLabel htmlFor="summary-model">
+                {t.settings.agent.readingModel}
+              </FieldLabel>
               <ModelInput
                 id="summary-model"
                 value={preferences.summaryModel}
-                placeholder={`${defaults.smart} (par défaut)`}
+                placeholder={t.settings.agent.defaultModel(defaults.smart)}
                 onSave={(model) => save.mutate({ summaryModel: model })}
               />
               <FieldDescription>
-                Pour les résumés, les questions et la recherche IA, qui lisent
-                toute la conversation. Les standups gardent le modèle par défaut
-                de ton {AGENT_LABEL[kind]}.
+                {t.settings.agent.readingModelDescription(AGENT_LABEL[kind])}
               </FieldDescription>
             </Field>
           </FieldGroup>
@@ -254,18 +250,16 @@ export function AgentSettings({ settings }: { settings: Settings }) {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <SparklesIcon className="size-4" />
-            Résumés
+            {t.settings.agent.summariesTitle}
           </CardTitle>
           <CardDescription>
-            Le bouton « Résumer avec l'IA » d'une PR ou d'une issue utilise l'IA
-            principale et son modèle de lecture. Chaque résumé est enregistré et
-            reste affiché jusqu'à ce que tu le régénères.
+            {t.settings.agent.summariesDescription}
           </CardDescription>
         </CardHeader>
         <CardContent>
           <FieldGroup>
             <Field>
-              <FieldLabel>Longueur par défaut</FieldLabel>
+              <FieldLabel>{t.settings.agent.defaultLength}</FieldLabel>
               <ToggleGroup
                 value={[preferences.summaryLength]}
                 onValueChange={(value) => {
@@ -276,19 +270,16 @@ export function AgentSettings({ settings }: { settings: Settings }) {
                 }}
                 variant="outline"
                 size="sm"
-                aria-label="Longueur par défaut des résumés"
+                aria-label={t.settings.agent.defaultLengthLabel}
               >
                 {SUMMARY_LENGTHS.map((length) => (
                   <ToggleGroupItem key={length} value={length}>
-                    {LENGTH_LABEL[length]}
+                    {t.settings.agent.lengths[length]}
                   </ToggleGroupItem>
                 ))}
               </ToggleGroup>
               <FieldDescription>
-                Court : l'essentiel en une phrase. Standard : les points clés.
-                Détaillé : toutes les décisions et points en suspens. Tu peux
-                changer de longueur sur chaque PR ou issue ; chaque version
-                reste enregistrée.
+                {t.settings.agent.lengthsDescription}
               </FieldDescription>
             </Field>
           </FieldGroup>
@@ -299,29 +290,33 @@ export function AgentSettings({ settings }: { settings: Settings }) {
 
       <Card>
         <CardHeader>
-          <CardTitle>Priorité et connexions</CardTitle>
+          <CardTitle>{t.settings.agent.connectionsTitle}</CardTitle>
           <CardDescription>
-            Ces valeurs viennent de <code>.env</code> et du CLI <code>gh</code>{" "}
-            : modifie-les là-bas, puis relance l'app.
+            {t.settings.agent.connectionsDescription(
+              <code key="env">.env</code>,
+              <code key="gh">gh</code>
+            )}
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <Fact label="Modèle de priorité">
+          <Fact label={t.settings.agent.decisionModel}>
             <span className="font-mono">{env.decisionModel}</span>
           </Fact>
-          <Fact label="Clé Jev (TYPESAFE_AI_API_KEY)">
+          <Fact label={t.settings.agent.jevKey}>
             {env.jevConfigured ? (
-              <Badge variant="secondary">configurée</Badge>
+              <Badge variant="secondary">
+                {t.settings.agent.jevConfigured}
+              </Badge>
             ) : (
-              <Badge variant="destructive">absente : règles seules</Badge>
+              <Badge variant="destructive">{t.settings.agent.jevMissing}</Badge>
             )}
           </Fact>
-          <Fact label="Compte GitHub">
+          <Fact label={t.settings.agent.githubAccount}>
             <span className="inline-flex items-center gap-1.5">
               <GitHubIcon className="size-3.5" />
-              {env.githubLogin ?? "non connecté"}
+              {env.githubLogin ?? t.settings.agent.notConnected}
               <span className="text-muted-foreground">
-                via {env.githubTokenSource}
+                {t.settings.agent.via(env.githubTokenSource)}
               </span>
             </span>
           </Fact>
