@@ -5,6 +5,7 @@ import { tmpdir } from "node:os"
 import path from "node:path"
 
 import type { AgentKind } from "@/lib/agents"
+import { DemoOfflineError, isDemo } from "@/server/demo/mode"
 
 export type { AgentKind } from "@/lib/agents"
 export { AGENT_LABEL } from "@/lib/agents"
@@ -206,6 +207,7 @@ export async function runAgent(
   task: AgentTask,
   config: AgentConfig = getAgentConfig()
 ): Promise<unknown> {
+  if (isDemo()) throw new DemoOfflineError()
   const workdir = await mkdtemp(path.join(tmpdir(), "zero-ping-agent-"))
   const timeoutMs = task.timeoutMs ?? DEFAULT_TIMEOUT_MS
   try {

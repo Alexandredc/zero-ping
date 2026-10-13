@@ -26,7 +26,37 @@ export function timeAgo(
 }
 
 export function avatarUrl(login: string | null, size = 40): string | undefined {
-  return login ? `https://github.com/${login}.png?size=${size}` : undefined
+  if (!login) return undefined
+  // The demo's people are fictional: their logins may be real GitHub accounts.
+  if (import.meta.env.VITE_DEMO === "1") return demoAvatar(login)
+  return `https://github.com/${login}.png?size=${size}`
+}
+
+const AVATAR_COLORS = [
+  "#6366f1",
+  "#0ea5e9",
+  "#10b981",
+  "#f59e0b",
+  "#ef4444",
+  "#ec4899",
+  "#8b5cf6",
+]
+
+/** Initials on a color picked from the login, drawn locally. */
+export function demoAvatar(login: string): string {
+  const hash = [...login].reduce(
+    (sum, char) => (sum * 31 + char.charCodeAt(0)) >>> 0,
+    7
+  )
+  const color = AVATAR_COLORS[hash % AVATAR_COLORS.length]
+  const initials = login
+    .replace(/\[bot\]$/, "")
+    .split(/[-_]/)
+    .slice(0, 2)
+    .map((part) => part.charAt(0).toUpperCase())
+    .join("")
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40"><rect width="40" height="40" fill="${color}"/><text x="20" y="25.5" font-family="system-ui,sans-serif" font-size="15" font-weight="600" fill="#fff" text-anchor="middle">${initials}</text></svg>`
+  return `data:image/svg+xml,${encodeURIComponent(svg)}`
 }
 
 /** Next occurrence of the given weekday (0 = Sunday) at 9:00, or tomorrow when omitted. */
