@@ -4,7 +4,7 @@ import type { Item, TeamPull } from "@/server/db/schema"
  * A teammate's PR shaped like an inbox item, so that the detail panel can show
  * it although no notification brought it into the inbox.
  */
-export function teamPullToItem(pull: TeamPull): Item {
+export function teamPullToItem(pull: TeamPull, viewerLogin?: string): Item {
   return {
     key: pull.key,
     repoFullName: pull.repoFullName,
@@ -16,7 +16,11 @@ export function teamPullToItem(pull: TeamPull): Item {
     threadId: null,
     reason: "team",
     unread: false,
-    view: "other",
+    // The viewer's own PR keeps its merge box and has no review to give.
+    view:
+      viewerLogin && pull.author?.toLowerCase() === viewerLogin.toLowerCase()
+        ? "mine"
+        : "other",
     updatedAt: pull.updatedAt,
     state: "OPEN",
     isDraft: pull.isDraft,

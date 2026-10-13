@@ -24,6 +24,8 @@ export type SyncStatus = {
   lastSyncAt: string | null
   lastError: string | null
   nextSyncAt: string | null
+  /** The shortest wait GitHub allows between two notification polls. */
+  githubIntervalS: number | null
 }
 
 type LoopState = {
@@ -45,6 +47,7 @@ function state(): LoopState {
       lastSyncAt: null,
       lastError: null,
       nextSyncAt: null,
+      githubIntervalS: null,
     },
     timer: null,
     current: null,
@@ -87,7 +90,29 @@ async function runOnce(forceSearch: boolean): Promise<number> {
   void prefetchLookups(db).catch((error: unknown) =>
     console.error("[slack]", error)
   )
-  return Math.max(MIN_INTERVAL_S, pollInterval)
+  loop.status.githubIntervalS = pollInterval
+  return syncInterval(pollInterval, preferences.syncIntervalSeconds)
+}
+
+/** The wait before the next sync: the chosen one, never shorter than GitHub allows. */
+export function syncInterval(
+  githubIntervalS: number,
+  chosenS: number | null
+): number {
+  return Math.max(MIN_INTERVAL_S, githubIntervalS, chosenS ?? 0)
+}
+
+/** Moves the waiting sync to the new interval, counted from the last one. */
+export async function rescheduleSync() {
+  const loop = state()
+  if (loop.current || !loop.status.lastSyncAt) return
+  const preferences = await getPreferences(await getDb())
+  const wait = syncInterval(
+    loop.status.githubIntervalS ?? MIN_INTERVAL_S,
+    preferences.syncIntervalSeconds
+  )
+  const elapsed = (Date.now() - Date.parse(loop.status.lastSyncAt)) / 1000
+  schedule(Math.max(1, wait - elapsed))
 }
 
 function schedule(seconds: number) {

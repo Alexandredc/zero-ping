@@ -4,7 +4,10 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
 
-export type AgentKind = "claude" | "codex"
+import type { AgentKind } from "@/lib/agents"
+
+export type { AgentKind } from "@/lib/agents"
+export { AGENT_LABEL } from "@/lib/agents"
 
 export type AgentTask = {
   prompt: string
@@ -15,8 +18,10 @@ export type AgentTask = {
   timeoutMs?: number
   /** Long material for the agent, sent on stdin rather than in the arguments. */
   input?: string
-  /** Extra instructions for Claude Code, kept out of the prompt (a slash command must stay alone there). */
+  /** Extra instructions, kept out of Claude Code's prompt (a slash command must stay alone there); Codex reads them after the prompt. */
   appendSystemPrompt?: string
+  /** Codex only: a task that runs commands and writes files needs a writable sandbox with network. */
+  sandbox?: "read-only" | "workspace-write"
 }
 
 export type AgentConfig = {
@@ -26,25 +31,37 @@ export type AgentConfig = {
 }
 
 const DEFAULT_TIMEOUT_MS = 3 * 60_000
-const DEFAULT_MODELS: Record<AgentKind, string | undefined> = {
-  claude: "haiku",
-  codex: undefined,
+/**
+ * The two kinds of work: `fast` for short tool runs (Slack searches and
+ * messages), `smart` for reading a whole conversation (summaries, questions,
+ * search). Codex falls back on the model of its own config.
+ */
+export type AgentRole = "fast" | "smart"
+
+export const DEFAULT_MODELS: Record<
+  AgentKind,
+  Record<AgentRole, string | undefined>
+> = {
+  claude: { fast: "haiku", smart: "sonnet" },
+  codex: { fast: undefined, smart: undefined },
 }
 
 export type AgentOverrides = {
   agentCli?: AgentKind | null
   agentModel?: string | null
+  summaryModel?: string | null
 }
 
 /**
- * Coding-agent CLI used for tasks that need the user's own connectors, such as
- * Slack. The settings page overrides AGENT_CLI and AGENT_MODEL; AGENT_COMMAND
- * sets the binary when it is not on the PATH. A model from `.env` only applies
- * to the agent it was written for.
+ * The app's main AI: the coding-agent CLI behind every AI feature. The settings
+ * page overrides AGENT_CLI and the models; AGENT_COMMAND sets the binary when it
+ * is not on the PATH. A model from `.env` only applies to the agent it was
+ * written for, and to its fast work.
  */
 export function getAgentConfig(
   env: NodeJS.ProcessEnv = process.env,
-  overrides: AgentOverrides = {}
+  overrides: AgentOverrides = {},
+  role: AgentRole = "fast"
 ): AgentConfig {
   const envKind: AgentKind = env.AGENT_CLI === "codex" ? "codex" : "claude"
   const kind = overrides.agentCli ?? envKind
@@ -52,7 +69,10 @@ export function getAgentConfig(
   return {
     kind,
     command: (kind === envKind ? env.AGENT_COMMAND : undefined) ?? kind,
-    model: overrides.agentModel ?? envModel ?? DEFAULT_MODELS[kind],
+    model:
+      role === "fast"
+        ? (overrides.agentModel ?? envModel ?? DEFAULT_MODELS[kind].fast)
+        : (overrides.summaryModel ?? DEFAULT_MODELS[kind].smart),
   }
 }
 
@@ -83,18 +103,22 @@ export function buildCodexArgs(
   model: string | undefined,
   files: { schema: string; output: string }
 ): string[] {
+  const writable = task.sandbox === "workspace-write"
   return [
     "exec",
     "--skip-git-repo-check",
     "--ephemeral",
     "--sandbox",
-    "read-only",
+    task.sandbox ?? "read-only",
+    ...(writable ? ["-c", "sandbox_workspace_write.network_access=true"] : []),
     "--output-schema",
     files.schema,
     "--output-last-message",
     files.output,
     ...(model ? ["--model", model] : []),
-    task.prompt,
+    task.appendSystemPrompt
+      ? `${task.prompt}\n\n${task.appendSystemPrompt}`
+      : task.prompt,
   ]
 }
 

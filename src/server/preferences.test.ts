@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest"
 import {
   getPreferences,
   channelIdOf,
+  doNotDisturb,
   normalizeChannel,
   resolveExclusions,
   preferencesPatchSchema,
@@ -52,6 +53,11 @@ describe("preferences", () => {
       teamStaleDays: 7,
       reviewSlaHours: 24,
       sprintProject: null,
+      syncIntervalSeconds: null,
+      dndUntil: null,
+      quietHoursEnabled: false,
+      quietStart: "19:00",
+      quietEnd: "09:00",
     })
   })
 
@@ -164,5 +170,34 @@ describe("triage preferences", () => {
     await expect(
       updatePreferences(db, { recapTime: "25:00" })
     ).rejects.toThrow()
+  })
+})
+
+describe("doNotDisturb", () => {
+  const off = {
+    dndUntil: null,
+    quietHoursEnabled: false,
+    quietStart: "19:00",
+    quietEnd: "09:00",
+  }
+  const at = (time: string) => new Date(`2026-10-13T${time}:00`)
+
+  it("mutes until « Ne pas déranger » ends", () => {
+    const until = { ...off, dndUntil: at("15:00").toISOString() }
+    expect(doNotDisturb(until, at("14:59"))).toEqual({
+      muted: true,
+      reason: "dnd",
+    })
+    expect(doNotDisturb(until, at("15:00")).muted).toBe(false)
+  })
+
+  it("mutes the quiet hours, across midnight or within a day", () => {
+    const night = { ...off, quietHoursEnabled: true }
+    expect(doNotDisturb(night, at("22:30")).reason).toBe("quiet")
+    expect(doNotDisturb(night, at("08:59")).muted).toBe(true)
+    expect(doNotDisturb(night, at("09:00")).muted).toBe(false)
+    const lunch = { ...night, quietStart: "12:00", quietEnd: "13:30" }
+    expect(doNotDisturb(lunch, at("12:45")).muted).toBe(true)
+    expect(doNotDisturb(lunch, at("14:00")).muted).toBe(false)
   })
 })

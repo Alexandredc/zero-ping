@@ -131,7 +131,7 @@ export function SmartSearchBar({
                 search.clear()
               }
             }}
-            placeholder={`Chercher, ou décrire ${noun === "PR" ? "la PR" : "l'issue"} pour la recherche IA…`}
+            placeholder={`Chercher ou décrire ${noun === "PR" ? "une PR" : "une issue"}…`}
             aria-label={`Chercher des ${noun}`}
           />
           <InputGroupAddon align="inline-end">

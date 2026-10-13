@@ -30,6 +30,8 @@ export type Conversation = {
   state: string
   description: ConversationComment
   entries: ConversationEntry[]
+  /** A PR's branches: its own and the one it merges into. */
+  branches: { head: string; base: string } | null
 }
 
 const COMMENT_FIELDS = `id databaseId author { login avatarUrl } body createdAt url`
@@ -67,6 +69,7 @@ export async function fetchConversation(
   const isPull = ref.kind === "PullRequest"
   const pullFields = isPull
     ? `
+      headRefName baseRefName
       reviews(first: 50) { nodes { state ${COMMENT_FIELDS} } }
       reviewThreads(first: 50) {
         nodes { id path line isResolved comments(first: 50) { nodes { ${COMMENT_FIELDS} } } }
@@ -83,6 +86,8 @@ export async function fetchConversation(
         body: string
         createdAt: string
         comments: { nodes: RawComment[] }
+        headRefName?: string
+        baseRefName?: string
         reviews?: { nodes: (RawComment & { state: string })[] }
         reviewThreads?: {
           nodes: {
@@ -153,5 +158,9 @@ export async function fetchConversation(
     state: subject.state,
     description: toComment({ ...subject, databaseId: null }),
     entries,
+    branches:
+      subject.headRefName && subject.baseRefName
+        ? { head: subject.headRefName, base: subject.baseRefName }
+        : null,
   }
 }

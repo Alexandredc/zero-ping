@@ -32,6 +32,7 @@ const comment = (author: string, body: string, createdAt: string) => ({
 
 const conversation: Conversation = {
   kind: "PullRequest",
+  branches: { head: "feat/retries", base: "development" },
   title: "Add retries",
   url: "https://github.com/acme/api/pull/8",
   state: "OPEN",

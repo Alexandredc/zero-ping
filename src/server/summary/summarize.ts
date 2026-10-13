@@ -10,9 +10,6 @@ import type {
   ConversationComment,
 } from "@/server/github/conversation"
 
-/** Summaries always use Claude Code; Sonnet balances quality and speed. */
-export const DEFAULT_SUMMARY_MODEL = "sonnet"
-
 /** Keeps the agent input bounded on very long conversations. */
 const MAX_INPUT_CHARS = 120_000
 

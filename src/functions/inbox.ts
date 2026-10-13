@@ -20,6 +20,8 @@ import {
   moveWorkItem,
   getProjectFields,
   getUatStatus,
+  getLinkedIssues,
+  getQuietState,
   searchItems,
   getWorkConversation,
   setReviewers,
@@ -278,6 +280,14 @@ export const getWorkItemConversation = createServerFn({ method: "GET" })
 export const getItemProjectFields = createServerFn({ method: "GET" })
   .validator(z.object({ key: z.string() }))
   .handler(({ data }) => getProjectFields(data.key))
+
+export const getQuiet = createServerFn({ method: "GET" }).handler(() =>
+  getQuietState()
+)
+
+export const getItemLinkedIssues = createServerFn({ method: "GET" })
+  .validator(z.object({ key: z.string() }))
+  .handler(({ data }) => getLinkedIssues(data.key))
 
 export const getItemUatStatus = createServerFn({ method: "GET" })
   .validator(z.object({ key: z.string() }))

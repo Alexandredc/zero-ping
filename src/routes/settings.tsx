@@ -13,6 +13,10 @@ import { Sidebar } from "@/components/inbox/sidebar"
 import { PAGE_META } from "@/components/inbox/pages"
 import { AgentSettings } from "@/components/settings/agent-settings"
 import { NotificationSettings } from "@/components/settings/notification-settings"
+import {
+  QuietSettings,
+  SyncSettings,
+} from "@/components/settings/quiet-settings"
 import { ReposSettings } from "@/components/settings/repos-settings"
 import { SlackSettings } from "@/components/settings/slack-settings"
 import {
@@ -149,7 +153,11 @@ function SettingsPage() {
               </TabsContent>
               <TabsContent value="notifications">
                 {settings ? (
-                  <NotificationSettings settings={settings} />
+                  <div className="flex flex-col gap-4">
+                    <NotificationSettings settings={settings} />
+                    <QuietSettings />
+                    <SyncSettings />
+                  </div>
                 ) : (
                   <Skeleton className="h-64" />
                 )}

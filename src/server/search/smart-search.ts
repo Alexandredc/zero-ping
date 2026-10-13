@@ -78,7 +78,7 @@ export function buildSearchInput(
   return lines.join("\n")
 }
 
-/** The matches, kept to the items that were asked about and in Claude's order. */
+/** The matches, kept to the items that were asked about and in the AI's order. */
 export function parseSearchAnswer(
   answer: unknown,
   keys: Set<string>

@@ -22,12 +22,28 @@ import { Input } from "@/components/ui/input"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { useSavePreferences } from "@/hooks/use-inbox"
 import { LENGTH_LABEL } from "@/components/inbox/summary-card"
+import { AGENT_LABEL } from "@/lib/agents"
+import type { AgentKind } from "@/lib/agents"
 import { SUMMARY_LENGTHS } from "@/server/db/schema"
 import type { SummaryLength } from "@/server/db/schema"
 
 type Settings = Awaited<ReturnType<typeof getSettings>>
 
-const AGENT_LABEL = { claude: "Claude Code", codex: "Codex" }
+const DEFAULT_MODEL_HINT: Record<
+  AgentKind,
+  { fast: string; smart: string; examples: string }
+> = {
+  claude: {
+    fast: "haiku",
+    smart: "sonnet",
+    examples: "Exemples : haiku, sonnet, opus.",
+  },
+  codex: {
+    fast: "celui de ta config Codex",
+    smart: "celui de ta config Codex",
+    examples: "Indique un nom accepté par codex --model.",
+  },
+}
 
 function ModelInput({
   id,
@@ -147,7 +163,10 @@ export function AgentSettings({ settings }: { settings: Settings }) {
   const save = useSavePreferences()
   const { preferences, env } = settings
   const agent = preferences.agentCli ?? "default"
-  const effectiveKind = preferences.agentCli ?? env.agent.kind
+  const kind = preferences.agentCli ?? env.agent.kind
+  const defaults = DEFAULT_MODEL_HINT[kind]
+  const envFast =
+    kind === env.agent.kind && env.agent.model ? env.agent.model : null
 
   return (
     <div className="flex flex-col gap-4">
@@ -155,31 +174,35 @@ export function AgentSettings({ settings }: { settings: Settings }) {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <SparklesIcon className="size-4" />
-            Agent en ligne de commande
+            IA principale
           </CardTitle>
           <CardDescription>
-            Utilisé pour Slack (recherche et réponses) avec tes propres
-            connecteurs. Il tourne en arrière-plan sur ton Mac, dans un dossier
-            temporaire vide.
+            L'agent en ligne de commande derrière toutes les fonctions IA : les
+            résumés, les questions sur une PR ou une issue, la recherche IA, les
+            fils et messages Slack et les standups. Il tourne en arrière-plan
+            sur ton Mac, dans un dossier temporaire vide. Jev, qui classe et
+            note les PR, reste à part.
           </CardDescription>
         </CardHeader>
         <CardContent>
           <FieldGroup>
             <Field>
-              <FieldLabel>Agent</FieldLabel>
+              <FieldLabel>IA</FieldLabel>
               <ToggleGroup
                 value={[agent]}
                 onValueChange={(value) => {
                   const next = value[0]
                   if (!next || next === agent) return
+                  // Model names belong to one provider: a new one starts on its defaults.
                   save.mutate({
-                    agentCli:
-                      next === "default" ? null : (next as "claude" | "codex"),
+                    agentCli: next === "default" ? null : (next as AgentKind),
+                    agentModel: null,
+                    summaryModel: null,
                   })
                 }}
                 variant="outline"
                 size="sm"
-                aria-label="Agent"
+                aria-label="IA principale"
               >
                 <ToggleGroupItem value="default">
                   Selon .env ({AGENT_LABEL[env.agent.kind]})
@@ -188,28 +211,39 @@ export function AgentSettings({ settings }: { settings: Settings }) {
                 <ToggleGroupItem value="codex">Codex</ToggleGroupItem>
               </ToggleGroup>
               <FieldDescription>
-                Codex a besoin de son propre serveur MCP Slack (voir le README).
-                Claude Code utilise le connecteur Slack de ton compte claude.ai.
+                {kind === "claude"
+                  ? "Claude Code utilise le connecteur Slack de ton compte claude.ai et lance tes commandes /standup et /standup:team."
+                  : "Codex a besoin de son propre serveur MCP Slack dans ~/.codex/config.toml (voir le README). Pour les standups, il suit le texte de tes commandes ~/.claude/commands/standup.md et standup/team.md, avec accès au réseau."}{" "}
+                Changer d'IA remet les modèles sur ses valeurs par défaut.
               </FieldDescription>
             </Field>
             <FieldSeparator />
             <Field>
-              <FieldLabel htmlFor="agent-model">Modèle</FieldLabel>
+              <FieldLabel htmlFor="agent-model">Modèle rapide</FieldLabel>
               <ModelInput
                 id="agent-model"
                 value={preferences.agentModel}
-                placeholder={
-                  effectiveKind === env.agent.kind && env.agent.model
-                    ? `${env.agent.model} (par défaut)`
-                    : effectiveKind === "claude"
-                      ? "haiku (par défaut)"
-                      : "celui de ta config Codex"
-                }
+                placeholder={`${envFast ?? defaults.fast} (par défaut)`}
                 onSave={(model) => save.mutate({ agentModel: model })}
               />
               <FieldDescription>
-                Laisse vide pour la valeur par défaut. Exemples : haiku, sonnet,
-                opus pour Claude Code.
+                Pour les recherches et messages Slack. Laisse vide pour la
+                valeur par défaut. {defaults.examples}
+              </FieldDescription>
+            </Field>
+            <FieldSeparator />
+            <Field>
+              <FieldLabel htmlFor="summary-model">Modèle de lecture</FieldLabel>
+              <ModelInput
+                id="summary-model"
+                value={preferences.summaryModel}
+                placeholder={`${defaults.smart} (par défaut)`}
+                onSave={(model) => save.mutate({ summaryModel: model })}
+              />
+              <FieldDescription>
+                Pour les résumés, les questions et la recherche IA, qui lisent
+                toute la conversation. Les standups gardent le modèle par défaut
+                de ton {AGENT_LABEL[kind]}.
               </FieldDescription>
             </Field>
           </FieldGroup>
@@ -223,10 +257,9 @@ export function AgentSettings({ settings }: { settings: Settings }) {
             Résumés
           </CardTitle>
           <CardDescription>
-            Le bouton « Résumer avec Claude » d'une PR ou d'une issue utilise
-            toujours Claude Code, quel que soit l'agent choisi ci-dessus. Chaque
-            résumé est enregistré et reste affiché jusqu'à ce que tu le
-            régénères.
+            Le bouton « Résumer avec l'IA » d'une PR ou d'une issue utilise l'IA
+            principale et son modèle de lecture. Chaque résumé est enregistré et
+            reste affiché jusqu'à ce que tu le régénères.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -256,22 +289,6 @@ export function AgentSettings({ settings }: { settings: Settings }) {
                 Détaillé : toutes les décisions et points en suspens. Tu peux
                 changer de longueur sur chaque PR ou issue ; chaque version
                 reste enregistrée.
-              </FieldDescription>
-            </Field>
-            <FieldSeparator />
-            <Field>
-              <FieldLabel htmlFor="summary-model">
-                Modèle des résumés
-              </FieldLabel>
-              <ModelInput
-                id="summary-model"
-                value={preferences.summaryModel}
-                placeholder="sonnet (par défaut)"
-                onSave={(model) => save.mutate({ summaryModel: model })}
-              />
-              <FieldDescription>
-                haiku est plus rapide et moins cher, opus plus fin sur les
-                longues discussions.
               </FieldDescription>
             </Field>
           </FieldGroup>

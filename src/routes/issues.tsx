@@ -36,17 +36,24 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "@/components/ui/empty"
-import { Kbd } from "@/components/ui/kbd"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Switch } from "@/components/ui/switch"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { useHotkeys } from "@/hooks/use-hotkeys"
+import { DetailPlaceholder } from "@/components/inbox/detail-placeholder"
 import {
   MatchReason,
   SmartSearchBar,
   useSmartSearch,
 } from "@/components/inbox/smart-search"
+import {
+  ActiveFilters,
+  ListMenus,
+  useListFilters,
+} from "@/components/inbox/list-controls"
+import { applyFilters, byDate } from "@/lib/list-filters"
+import type { FilterDef } from "@/lib/list-filters"
 import { issuesQuery, useSavePreferences } from "@/hooks/use-inbox"
 import { avatarUrl, timeAgo } from "@/lib/format"
 import { cn } from "@/lib/utils"
@@ -60,7 +67,9 @@ export const Route = createFileRoute("/issues")({
   validateSearch: z.object({
     tab: z.enum(TABS).default("assigned"),
     item: z.string().optional(),
-    sort: z.enum(["jev", "recent"]).default("jev"),
+    sort: z.enum(["jev", "recent", "oldest"]).default("jev"),
+    /** The open issue takes the whole window. */
+    full: z.boolean().optional(),
   }),
   loader: ({ context }) => context.queryClient.ensureQueryData(issuesQuery()),
   component: IssuesPage,
@@ -81,7 +90,52 @@ const sameLogin = (a: string, b: string) => a.toLowerCase() === b.toLowerCase()
 
 type Group = { name: string; color: string | null; items: WorkItem[] }
 
-type Sort = "jev" | "recent"
+type Sort = "jev" | "recent" | "oldest"
+
+const SORTS: { value: Sort; label: string }[] = [
+  { value: "jev", label: "Priorité (Jev)" },
+  { value: "recent", label: "Activité récente" },
+  { value: "oldest", label: "Sans activité depuis longtemps" },
+]
+
+const URGENCY = ["Peut attendre", "Normale", "Importante", "Bloquante"]
+
+const ISSUE_FILTERS: FilterDef<WorkItem>[] = [
+  {
+    id: "kind",
+    label: "Type",
+    valuesOf: (item) => [item.kind],
+    options: [
+      { value: "issue", label: "Issue" },
+      { value: "pull", label: "PR" },
+      { value: "draft", label: "Brouillon du board" },
+    ],
+  },
+  {
+    id: "status",
+    label: "Statut",
+    valuesOf: (item) => [item.status ?? "Sans statut"],
+  },
+  {
+    id: "jev",
+    label: "Urgence Jev",
+    valuesOf: (item) => (item.urgency === null ? [] : [String(item.urgency)]),
+    options: [3, 2, 1, 0].map((level) => ({
+      value: String(level),
+      label: URGENCY[level],
+    })),
+  },
+  {
+    id: "repo",
+    label: "Repo",
+    valuesOf: (item) => (item.repo ? [item.repo.split("/")[1]] : []),
+  },
+  {
+    id: "label",
+    label: "Label",
+    valuesOf: (item) => item.labels.map((label) => label.name),
+  },
+]
 
 /** Jev's most urgent first, unscored tickets after; the most recent breaks ties. */
 function sortItems(items: WorkItem[], sort: Sort): WorkItem[] {
@@ -90,7 +144,9 @@ function sortItems(items: WorkItem[], sort: Sort): WorkItem[] {
   return [...items].sort((a, b) =>
     sort === "jev"
       ? (b.urgency ?? -1) - (a.urgency ?? -1) || recent(a, b)
-      : recent(a, b)
+      : sort === "oldest"
+        ? byDate<WorkItem>((item) => item.updatedAt, "asc")(a, b)
+        : recent(a, b)
   )
 }
 
@@ -410,15 +466,19 @@ function IssuesPage() {
         ? unassigned
         : sprintItems.filter((item) => item.assignees.includes(person))
 
+  const filters = useListFilters(`issues:${tab}`)
+  const tabItems =
+    tab === "assigned" ? assigned : tab === "mine" ? mine : teamItems
+  const filtered = applyFilters(tabItems, ISSUE_FILTERS, filters.selection)
   const smart = useSmartSearch({
     kind: "issue",
-    items: tab === "assigned" ? assigned : tab === "mine" ? mine : teamItems,
+    items: filtered,
     toCandidate: workCandidate,
     resetKey: tab,
   })
+  // What the filters and the search keep, in the groups' own order.
   const kept = new Set(smart.visible.map((item) => item.key))
-  const shown = (list: WorkItem[]) =>
-    smart.query ? list.filter((item) => kept.has(item.key)) : list
+  const shown = (list: WorkItem[]) => list.filter((item) => kept.has(item.key))
 
   const groups: Group[] = smart.ai
     ? // Claude's order is the answer: one group, not split by column.
@@ -465,7 +525,20 @@ function IssuesPage() {
       : [...assigned, ...sprintItems].find((item) => item.key === search.item)
 
   const select = (key: string | undefined) =>
-    navigate({ search: (prev) => ({ ...prev, item: key }), replace: true })
+    navigate({
+      search: (prev) => ({
+        ...prev,
+        item: key,
+        full: key ? prev.full : undefined,
+      }),
+      replace: true,
+    })
+  const fullscreen = Boolean(search.full && selected)
+  const toggleFullscreen = () =>
+    void navigate({
+      search: (prev) => ({ ...prev, full: prev.full ? undefined : true }),
+      replace: true,
+    })
 
   useEffect(() => {
     if (!selected) return
@@ -488,7 +561,8 @@ function IssuesPage() {
     k: () => move(-1),
     ArrowDown: () => move(1),
     ArrowUp: () => move(-1),
-    Escape: () => void select(undefined),
+    Escape: () => (fullscreen ? toggleFullscreen() : void select(undefined)),
+    f: () => selected && toggleFullscreen(),
     o: () => selected?.url && window.open(selected.url, "_blank"),
     r: () => composerRef.current?.focus(),
   })
@@ -507,8 +581,13 @@ function IssuesPage() {
 
   return (
     <div className="flex h-svh overflow-hidden">
-      <Sidebar page="issues" />
-      <main className="flex w-[26rem] shrink-0 flex-col border-r bg-card/40 max-lg:flex-1">
+      {!fullscreen && <Sidebar page="issues" />}
+      <main
+        className={cn(
+          "flex w-[26rem] shrink-0 flex-col border-r bg-card/40 max-lg:flex-1",
+          fullscreen && "hidden"
+        )}
+      >
         <header className="flex flex-col gap-2 border-b px-4 py-3">
           <div className="flex items-start justify-between gap-2">
             <div className="min-w-0">
@@ -562,54 +641,60 @@ function IssuesPage() {
               </DropdownMenu>
             )}
           </div>
-          <ToggleGroup
-            size="sm"
-            value={[tab]}
-            onValueChange={(value) => {
-              if (value[0])
-                void navigate({
-                  search: { tab: value[0] as Tab, item: undefined },
-                })
-            }}
-            aria-label="Choisir la liste"
-            className="flex-wrap"
-          >
-            <ToggleGroupItem value="assigned">
-              Assignées
-              <span className="font-mono text-xs tabular-nums">
-                {assigned.length}
-              </span>
-            </ToggleGroupItem>
-            <ToggleGroupItem value="mine" disabled={!currentSprint}>
-              Mon sprint
-              <span className="font-mono text-xs tabular-nums">
-                {mine.length}
-              </span>
-            </ToggleGroupItem>
-            <ToggleGroupItem value="team" disabled={!currentSprint}>
-              Équipe
-              <span className="font-mono text-xs tabular-nums">
-                {sprintItems.length}
-              </span>
-            </ToggleGroupItem>
-          </ToggleGroup>
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            Trier par
+          <div className="flex flex-wrap items-center justify-between gap-2">
             <ToggleGroup
               size="sm"
-              value={[search.sort]}
+              value={[tab]}
               onValueChange={(value) => {
-                const sort = value[0] as Sort | undefined
-                if (sort)
-                  void navigate({ search: (prev) => ({ ...prev, sort }) })
+                if (value[0])
+                  void navigate({
+                    search: { tab: value[0] as Tab, item: undefined },
+                  })
               }}
-              aria-label="Trier les tickets"
+              aria-label="Choisir la liste"
+              className="flex-wrap"
             >
-              <ToggleGroupItem value="jev">Priorité Jev</ToggleGroupItem>
-              <ToggleGroupItem value="recent">Récents</ToggleGroupItem>
+              <ToggleGroupItem value="assigned">
+                Assignées
+                <span className="font-mono text-xs tabular-nums">
+                  {assigned.length}
+                </span>
+              </ToggleGroupItem>
+              <ToggleGroupItem value="mine" disabled={!currentSprint}>
+                Mon sprint
+                <span className="font-mono text-xs tabular-nums">
+                  {mine.length}
+                </span>
+              </ToggleGroupItem>
+              <ToggleGroupItem value="team" disabled={!currentSprint}>
+                Équipe
+                <span className="font-mono text-xs tabular-nums">
+                  {sprintItems.length}
+                </span>
+              </ToggleGroupItem>
             </ToggleGroup>
+            <ListMenus
+              sort={search.sort}
+              sorts={SORTS}
+              onSort={(sort) =>
+                void navigate({ search: (prev) => ({ ...prev, sort }) })
+              }
+              items={tabItems}
+              filters={ISSUE_FILTERS}
+              selection={filters.selection}
+              onToggle={filters.toggle}
+              onClear={filters.clear}
+            />
           </div>
         </header>
+        <ActiveFilters
+          filters={ISSUE_FILTERS}
+          selection={filters.selection}
+          onToggle={filters.toggle}
+          onClear={filters.clear}
+          shown={filtered.length}
+          total={tabItems.length}
+        />
         <SmartSearchBar search={smart} noun="issues" />
 
         {sprint && tab !== "assigned" && (
@@ -707,23 +792,26 @@ function IssuesPage() {
               </Alert>
             )}
             {/* Collapsed groups are not empty: the message is for an empty list only. */}
-            {data && sortedGroups.length === 0 && !smart.query && (
-              <Empty className="py-16">
-                <EmptyHeader>
-                  <EmptyMedia variant="icon">
-                    <CircleDotIcon />
-                  </EmptyMedia>
-                  <EmptyTitle>Rien ici</EmptyTitle>
-                  <EmptyDescription>
-                    {!project && tab !== "assigned"
-                      ? "Aucun projet GitHub de tes repos suivis n'a de champ itération (le token doit avoir le scope read:project)."
-                      : tab === "assigned"
-                        ? "Aucune issue ouverte ne t'est assignée."
-                        : "Aucune tâche dans le sprint courant pour ce filtre."}
-                  </EmptyDescription>
-                </EmptyHeader>
-              </Empty>
-            )}
+            {data &&
+              sortedGroups.length === 0 &&
+              !smart.query &&
+              Object.keys(filters.selection).length === 0 && (
+                <Empty className="py-16">
+                  <EmptyHeader>
+                    <EmptyMedia variant="icon">
+                      <CircleDotIcon />
+                    </EmptyMedia>
+                    <EmptyTitle>Rien ici</EmptyTitle>
+                    <EmptyDescription>
+                      {!project && tab !== "assigned"
+                        ? "Aucun projet GitHub de tes repos suivis n'a de champ itération (le token doit avoir le scope read:project)."
+                        : tab === "assigned"
+                          ? "Aucune issue ouverte ne t'est assignée."
+                          : "Aucune tâche dans le sprint courant pour ce filtre."}
+                    </EmptyDescription>
+                  </EmptyHeader>
+                </Empty>
+              )}
             {sortedGroups.map((group) => (
               <section key={group.name}>
                 <h2 className="sticky top-0 z-10 border-b bg-muted/80 backdrop-blur">
@@ -777,13 +865,21 @@ function IssuesPage() {
           }
           composerRef={composerRef}
           onClose={() => void select(undefined)}
+          fullscreen={fullscreen}
+          onToggleFullscreen={toggleFullscreen}
         />
       ) : (
-        <div className="hidden flex-1 items-center justify-center lg:flex">
-          <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
-            Choisis une issue ou utilise <Kbd>↓</Kbd> pour parcourir la liste.
-          </p>
-        </div>
+        <DetailPlaceholder
+          title={
+            flat.length > 0
+              ? `${flat.length} ticket${flat.length > 1 ? "s" : ""} dans la liste`
+              : "Rien à ouvrir ici"
+          }
+        >
+          {flat.length > 0
+            ? "Choisis-en un à gauche pour lire sa conversation et changer son statut, ou appuie sur ↓ pour commencer par le premier."
+            : "Change d'onglet ou de filtres pour retrouver tes tickets."}
+        </DetailPlaceholder>
       )}
     </div>
   )

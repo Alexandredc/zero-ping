@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query"
 import { useState } from "react"
 import { ChevronRightIcon, RefreshCwIcon, SparklesIcon } from "lucide-react"
 import { ActionHint, Hint } from "./hint"
-import { AskClaude } from "./ask-claude"
+import { AskAi } from "./ask-ai"
 import { Markdown } from "./markdown"
 import type { SummaryLength } from "@/server/db/schema"
 import {
@@ -137,15 +137,15 @@ export function SummaryCard({
         <div className="flex flex-wrap items-center gap-3">
           <SparklesIcon className="size-4 text-primary" />
           <p className="min-w-48 flex-1 text-sm text-muted-foreground">
-            Pas le temps de tout lire ? Claude résume la {kind}, ses fils Slack
-            et ce qu'on attend de toi.
+            Pas le temps de tout lire ? L'IA résume la {kind}, ses fils Slack et
+            ce qu'on attend de toi.
           </p>
           <LengthPicker value={length} onChange={setChosen} ready={ready} />
           <Button size="sm" onClick={() => summarize.mutate(length)}>
-            Résumer avec Claude
+            Résumer avec l'IA
           </Button>
         </div>
-        <AskClaude itemKey={itemKey} kind={kind} />
+        <AskAi itemKey={itemKey} kind={kind} />
       </section>
     )
   }
@@ -201,7 +201,7 @@ export function SummaryCard({
               <RefreshCwIcon data-icon="inline-start" />
             )}
             {generating
-              ? `Claude résume… (${LENGTH_DURATION[length]})`
+              ? `L'IA résume… (${LENGTH_DURATION[length]})`
               : "Régénérer"}
           </Button>
         )}
@@ -237,7 +237,7 @@ export function SummaryCard({
           {generating && !summary && (
             <div className="flex flex-col gap-2">
               <p className="text-xs text-muted-foreground">
-                Claude lit la conversation… ({LENGTH_DURATION[length]})
+                L'IA lit la conversation… ({LENGTH_DURATION[length]})
               </p>
               <Skeleton className="h-4 w-full" />
               <Skeleton className="h-4 w-2/3" />
@@ -276,7 +276,7 @@ export function SummaryCard({
               <List title="Points de vigilance" items={summary.content.risks} />
             </div>
           )}
-          <AskClaude itemKey={itemKey} kind={kind} />
+          <AskAi itemKey={itemKey} kind={kind} />
         </>
       )}
     </section>

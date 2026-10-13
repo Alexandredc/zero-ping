@@ -1,4 +1,5 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query"
+import { FullscreenToggle } from "@/components/inbox/fullscreen-toggle"
 import { useEffect, useState } from "react"
 import { ChevronDownIcon, FileTextIcon, XIcon } from "lucide-react"
 import { GitHubIcon } from "@/components/brand-icons"
@@ -115,12 +116,16 @@ export function WorkItemPreview({
   board,
   composerRef,
   onClose,
+  fullscreen = false,
+  onToggleFullscreen,
 }: {
   item: WorkItem
   statuses: SprintStatus[]
   board: { projectId: string; fieldId: string } | null
   composerRef: React.RefObject<HTMLTextAreaElement | null>
   onClose: () => void
+  fullscreen?: boolean
+  onToggleFullscreen?: () => void
 }) {
   const kind = item.kind === "pull" ? "PullRequest" : "Issue"
   const readable = item.kind !== "draft"
@@ -177,6 +182,12 @@ export function WorkItemPreview({
               {item.title}
             </h2>
           </div>
+          {onToggleFullscreen && (
+            <FullscreenToggle
+              fullscreen={fullscreen}
+              onToggle={onToggleFullscreen}
+            />
+          )}
           <ActionHint content="Fermer l'aperçu (Échap)">
             <Button
               variant="ghost"

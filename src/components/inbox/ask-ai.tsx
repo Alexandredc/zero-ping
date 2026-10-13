@@ -7,7 +7,7 @@ import {
 } from "lucide-react"
 import { Hint } from "./hint"
 import { Markdown } from "./markdown"
-import { chatQuery, useAskClaude, useClearChat } from "@/hooks/use-inbox"
+import { chatQuery, useAskAi, useClearChat } from "@/hooks/use-inbox"
 import { Button } from "@/components/ui/button"
 import { Kbd } from "@/components/ui/kbd"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -29,10 +29,10 @@ const SUGGESTIONS: Record<"PR" | "issue", string[]> = {
 }
 
 /**
- * Questions to Claude about the item, under its summary. Claude reads the
+ * Questions to the AI about the item, under its summary. It reads the
  * conversation, the Slack threads and, for a PR, the diff; the thread is kept.
  */
-export function AskClaude({
+export function AskAi({
   itemKey,
   kind,
 }: {
@@ -40,7 +40,7 @@ export function AskClaude({
   kind: "PR" | "issue"
 }) {
   const { data, isPending } = useQuery(chatQuery(itemKey))
-  const ask = useAskClaude(itemKey)
+  const ask = useAskAi(itemKey)
   const clear = useClearChat(itemKey)
   const [question, setQuestion] = useState("")
   const bottomRef = useRef<HTMLDivElement>(null)
@@ -68,7 +68,7 @@ export function AskClaude({
       <header className="flex items-center gap-2">
         <MessageCircleQuestionIcon className="size-4 text-muted-foreground" />
         <h4 className="text-xs font-medium text-muted-foreground">
-          Demander à Claude
+          Demander à l'IA
         </h4>
         {messages.length > 0 && (
           <Hint content="Efface les questions et les réponses de cet élément.">
@@ -113,7 +113,7 @@ export function AskClaude({
             {question}
           </p>
           <p className="flex items-center gap-2 text-xs text-muted-foreground">
-            <Spinner /> Claude lit{" "}
+            <Spinner /> L'IA lit{" "}
             {kind === "PR" ? "la PR et son diff" : "l'issue"}… (15 à 60 s)
           </p>
         </>
@@ -153,7 +153,7 @@ export function AskClaude({
         <Hint
           content={
             <>
-              Envoyer à Claude (<Kbd>Entrée</Kbd>, <Kbd>Maj</Kbd>{" "}
+              Envoyer à l'IA (<Kbd>Entrée</Kbd>, <Kbd>Maj</Kbd>{" "}
               <Kbd>Entrée</Kbd> pour aller à la ligne)
             </>
           }

@@ -36,6 +36,20 @@ export const preferencesSchema = z.object({
   reviewSlaHours: z.number().int().min(1).max(240).default(24),
   /** `owner/number` of the project whose sprint « Mes issues » shows; null picks one. */
   sprintProject: z.string().nullable().default(null),
+  /** Seconds between GitHub syncs; null follows GitHub's own poll interval. */
+  syncIntervalSeconds: z
+    .number()
+    .int()
+    .min(30)
+    .max(3600)
+    .nullable()
+    .default(null),
+  /** « Ne pas déranger » until then (ISO); null when off. */
+  dndUntil: z.string().datetime().nullable().default(null),
+  /** Quiet hours every day, `HH:MM` to `HH:MM`, across midnight when the end comes first. */
+  quietHoursEnabled: z.boolean().default(false),
+  quietStart: z.string().regex(TIME).default("19:00"),
+  quietEnd: z.string().regex(TIME).default("09:00"),
 })
 
 export type Preferences = z.infer<typeof preferencesSchema>
@@ -65,9 +79,16 @@ export const preferencesPatchSchema = z.object({
   teamStaleDays: z.number().int().min(1).max(90).optional(),
   reviewSlaHours: z.number().int().min(1).max(240).optional(),
   sprintProject: z.string().nullable().optional(),
+  syncIntervalSeconds: z.number().int().min(30).max(3600).nullable().optional(),
+  dndUntil: z.string().datetime().nullable().optional(),
+  quietHoursEnabled: z.boolean().optional(),
+  quietStart: z.string().regex(TIME).optional(),
+  quietEnd: z.string().regex(TIME).optional(),
 })
 
 const KEY = "preferences"
+
+export { doNotDisturb } from "@/lib/quiet"
 
 /** `#Tech-Team-General`, `tech-team-general` and ` #tech-team-general ` are the same channel. */
 export function normalizeChannel(channel: string): string {

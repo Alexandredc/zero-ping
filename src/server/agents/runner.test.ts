@@ -40,6 +40,24 @@ describe("getAgentConfig", () => {
     })
     expect(getAgentConfig({ AGENT_CLI: "codex" }).model).toBeUndefined()
   })
+
+  it("picks the model of the role, for the main AI of the settings", () => {
+    expect(getAgentConfig({}, {}, "smart").model).toBe("sonnet")
+    expect(
+      getAgentConfig({ AGENT_MODEL: "opus" }, { summaryModel: null }, "smart")
+        .model
+    ).toBe("sonnet")
+    expect(
+      getAgentConfig({}, { agentCli: "codex" }, "smart").model
+    ).toBeUndefined()
+    expect(
+      getAgentConfig(
+        {},
+        { agentCli: "codex", agentModel: "gpt-6-mini", summaryModel: "gpt-6" },
+        "smart"
+      )
+    ).toEqual({ kind: "codex", command: "codex", model: "gpt-6" })
+  })
 })
 
 describe("agent arguments", () => {
@@ -85,6 +103,30 @@ describe("agent arguments", () => {
       "/t/o.json",
       "Find threads",
     ])
+  })
+})
+
+describe("Codex tasks", () => {
+  const files = { schema: "/t/s.json", output: "/t/o.json" }
+
+  it("reads the system instructions after the prompt", () => {
+    expect(
+      buildCodexArgs(
+        { ...task, appendSystemPrompt: "Do not post." },
+        undefined,
+        files
+      ).at(-1)
+    ).toBe("Find threads\n\nDo not post.")
+  })
+
+  it("opens the sandbox with network for a task that runs commands", () => {
+    const args = buildCodexArgs(
+      { ...task, sandbox: "workspace-write" },
+      undefined,
+      files
+    )
+    expect(args).toContain("workspace-write")
+    expect(args).toContain("sandbox_workspace_write.network_access=true")
   })
 })
 

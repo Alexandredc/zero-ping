@@ -1,9 +1,10 @@
 import { useQuery } from "@tanstack/react-query"
+import { FullscreenToggle } from "@/components/inbox/fullscreen-toggle"
 import { useEffect, useRef, useState } from "react"
 import {
   CheckIcon,
-  ChevronDownIcon,
   ClockIcon,
+  GitBranchIcon,
   MessageSquareReplyIcon,
   Undo2Icon,
   XIcon,
@@ -13,7 +14,7 @@ import { SummaryCard } from "./summary-card"
 import { ItemInsights } from "./item-insights"
 import { GitHubConversation } from "./github-conversation"
 import type { ReplyTarget } from "./github-conversation"
-import { ActionHint } from "./hint"
+import { ActionHint, Hint } from "./hint"
 import { AiReviewMenu } from "./ai-review-menu"
 import { DiffView } from "./diff-view"
 import { MergeMenu } from "./merge-menu"
@@ -23,20 +24,26 @@ import { ProjectFields } from "./project-fields"
 import { UatBadge } from "./uat-badge"
 import type { PendingReview, ReviewEvent } from "./review-dialog"
 import { FailedChecks } from "./failed-checks"
+import { ChecksBar, ChecksIndicator } from "./checks-indicator"
+import { LinkedIssues } from "./linked-issues"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { toast } from "@/components/ui/toast"
 import { useHotkeys } from "@/hooks/use-hotkeys"
-import { GitHubIcon, SlackIcon } from "@/components/brand-icons"
-import { useConversationSources } from "@/hooks/use-conversation-sources"
+import { GitHubIcon } from "@/components/brand-icons"
 import { NEEDS_CHECK_HINT } from "@/server/inbox/priority"
 import type { PriorityReason } from "@/server/inbox/priority"
 import type { Item } from "@/server/db/schema"
-import { conversationQuery, useInboxActions } from "@/hooks/use-inbox"
+import {
+  conversationQuery,
+  linkedIssuesQuery,
+  useInboxActions,
+} from "@/hooks/use-inbox"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuCheckboxItem,
   DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
@@ -45,7 +52,7 @@ import {
 import { Kbd } from "@/components/ui/kbd"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Spinner } from "@/components/ui/spinner"
-import { formatWhen, nextMorning } from "@/lib/format"
+import { avatarUrl, formatWhen, nextMorning } from "@/lib/format"
 
 function PriorityExplanation({
   priority,
@@ -92,11 +99,57 @@ function PriorityExplanation({
   )
 }
 
+/** The author, big enough to recognise; the name on hover, for a missing photo. */
+function AuthorAvatar({ login, isPull }: { login: string; isPull: boolean }) {
+  return (
+    <Hint
+      instant
+      content={`${isPull ? "PR ouverte" : "Issue ouverte"} par @${login}`}
+      className="mt-0.5 shrink-0"
+    >
+      <Avatar className="size-11">
+        <AvatarImage src={avatarUrl(login, 88)} alt={login} />
+        <AvatarFallback>{login.slice(0, 2).toUpperCase()}</AvatarFallback>
+      </Avatar>
+    </Hint>
+  )
+}
+
+/** The PR's branch into its base; a click copies the branch, for a checkout. */
+function BranchName({
+  branches,
+}: {
+  branches: { head: string; base: string }
+}) {
+  return (
+    <ActionHint content={`Copier « ${branches.head} »`}>
+      <button
+        type="button"
+        onClick={() =>
+          void navigator.clipboard
+            .writeText(branches.head)
+            .then(() =>
+              toast.add({ title: "Branche copiée", description: branches.head })
+            )
+        }
+        className="inline-flex min-w-0 items-center gap-1 rounded font-mono text-xs text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+      >
+        <GitBranchIcon className="size-3.5 shrink-0" />
+        <span className="max-w-64 truncate">{branches.head}</span>
+        <span aria-hidden>→</span>
+        <span className="truncate">{branches.base}</span>
+      </button>
+    </ActionHint>
+  )
+}
+
 export function DetailPanel({
   item,
   inInbox = true,
   composerRef,
   onClose,
+  fullscreen = false,
+  onToggleFullscreen,
   onReview,
 }: {
   item: Item
@@ -104,6 +157,8 @@ export function DetailPanel({
   inInbox?: boolean
   composerRef: React.RefObject<HTMLTextAreaElement | null>
   onClose: () => void
+  fullscreen?: boolean
+  onToggleFullscreen?: () => void
   /** Opens the page's confirmation dialog for an approval or a change request. */
   onReview: (review: PendingReview) => void
 }) {
@@ -111,10 +166,16 @@ export function DetailPanel({
   const actions = useInboxActions()
   const [body, setBody] = useState("")
   const [target, setTarget] = useState<ReplyTarget>({ type: "conversation" })
-  const [tab, setTab] = useState<"conversation" | "files">("conversation")
+  const [tab, setTab] = useState<"conversation" | "files" | "issue">(
+    "conversation"
+  )
   const bottomRef = useRef<HTMLDivElement>(null)
   const isPull = item.kind === "PullRequest"
-  const { sources, toggle: toggleSource } = useConversationSources()
+  const linked = useQuery({
+    ...linkedIssuesQuery(item.key),
+    enabled: isPull,
+  })
+  const linkedIssues = linked.data ?? []
 
   useEffect(() => {
     setBody("")
@@ -130,10 +191,9 @@ export function DetailPanel({
 
   const conversation = data?.conversation ?? null
   const canReply = item.kind === "PullRequest" || item.kind === "Issue"
+  // Anyone can review an open PR but its author: no review request needed.
   const canReview =
-    item.kind === "PullRequest" &&
-    item.state === "OPEN" &&
-    item.view === "review"
+    item.kind === "PullRequest" && item.state === "OPEN" && item.view !== "mine"
   const isDone = item.doneAt !== null
   const githubUrl = item.awaitingUrl ?? item.htmlUrl
 
@@ -170,13 +230,21 @@ export function DetailPanel({
       className="flex h-full min-w-0 flex-1 flex-col bg-background"
       aria-label="Détail"
     >
+      {isPull && <ChecksBar itemKey={item.key} />}
       <header className="flex flex-col gap-3 border-b px-5 py-4">
         <div className="flex items-start gap-3">
+          {item.author && <AuthorAvatar login={item.author} isPull={isPull} />}
           <div className="flex min-w-0 flex-1 flex-col gap-1">
-            <p className="font-mono text-xs text-muted-foreground">
-              {item.repoFullName}
-              {item.number !== null && `#${item.number}`}
-            </p>
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+              <p className="font-mono text-xs text-muted-foreground">
+                {item.repoFullName}
+                {item.number !== null && `#${item.number}`}
+              </p>
+              {conversation?.branches && (
+                <BranchName branches={conversation.branches} />
+              )}
+              {isPull && <ChecksIndicator itemKey={item.key} />}
+            </div>
             <h2 className="font-heading text-xl leading-tight font-semibold tracking-tight">
               {item.title}
             </h2>
@@ -188,6 +256,12 @@ export function DetailPanel({
                 </div>
               )}
           </div>
+          {onToggleFullscreen && (
+            <FullscreenToggle
+              fullscreen={fullscreen}
+              onToggle={onToggleFullscreen}
+            />
+          )}
           <ActionHint content="Fermer le détail (Échap)">
             <Button
               variant="ghost"
@@ -310,56 +384,20 @@ export function DetailPanel({
       {isPull && (
         <Tabs
           value={tab}
-          onValueChange={(value) => setTab(value as "conversation" | "files")}
+          onValueChange={(value) =>
+            setTab(value as "conversation" | "files" | "issue")
+          }
           className="border-b px-5"
         >
           <TabsList variant="line" className="h-9">
             <TabsTrigger value="conversation">Conversation</TabsTrigger>
-            <DropdownMenu>
-              <DropdownMenuTrigger
-                render={
-                  <Button
-                    variant="ghost"
-                    size="xs"
-                    aria-label="Choisir les sources de la conversation"
-                    className="-ml-1"
-                  />
-                }
-              >
-                {sources.github && <GitHubIcon className="size-3.5" />}
-                {sources.slack && (
-                  <SlackIcon className="size-3.5" aria-hidden />
-                )}
-                <ChevronDownIcon />
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="start">
-                <DropdownMenuGroup>
-                  <DropdownMenuLabel>
-                    Afficher dans la conversation
-                  </DropdownMenuLabel>
-                  <DropdownMenuCheckboxItem
-                    checked={sources.github}
-                    onCheckedChange={(checked) => {
-                      toggleSource("github", checked)
-                      setTab("conversation")
-                    }}
-                  >
-                    <GitHubIcon className="size-3.5" />
-                    GitHub
-                  </DropdownMenuCheckboxItem>
-                  <DropdownMenuCheckboxItem
-                    checked={sources.slack}
-                    onCheckedChange={(checked) => {
-                      toggleSource("slack", checked)
-                      setTab("conversation")
-                    }}
-                  >
-                    <SlackIcon className="size-3.5" aria-hidden />
-                    Slack
-                  </DropdownMenuCheckboxItem>
-                </DropdownMenuGroup>
-              </DropdownMenuContent>
-            </DropdownMenu>
+            {linkedIssues.length > 0 && (
+              <TabsTrigger value="issue">
+                {linkedIssues.length > 1
+                  ? `Issues ${linkedIssues.length}`
+                  : `Issue #${linkedIssues[0].number}`}
+              </TabsTrigger>
+            )}
             <TabsTrigger value="files">
               Fichiers modifiés
               {item.additions !== null && (
@@ -382,6 +420,10 @@ export function DetailPanel({
         {tab === "files" && isPull ? (
           <div className="px-5 py-4">
             <DiffView item={item} />
+          </div>
+        ) : tab === "issue" && linkedIssues.length > 0 ? (
+          <div className="px-5 py-4">
+            <LinkedIssues issues={linkedIssues} />
           </div>
         ) : (
           <div className="flex flex-col gap-5 px-5 py-4">
@@ -427,21 +469,19 @@ export function DetailPanel({
               </Alert>
             )}
 
-            {isPull && sources.slack && <SlackDiscussions itemKey={item.key} />}
-            {(!isPull || sources.github) && (
-              <GitHubConversation
-                conversation={data ? conversation : undefined}
-                isPending={isPending}
-                error={error}
-                onReplyInThread={setTarget}
-              />
-            )}
+            {isPull && <SlackDiscussions itemKey={item.key} />}
+            <GitHubConversation
+              conversation={data ? conversation : undefined}
+              isPending={isPending}
+              error={error}
+              onReplyInThread={setTarget}
+            />
             <div ref={bottomRef} />
           </div>
         )}
       </ScrollArea>
 
-      {canReply && (
+      {canReply && tab !== "issue" && (
         <footer className="flex flex-col gap-2 border-t bg-card px-5 py-3">
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <GitHubIcon className="size-3.5 text-foreground" />

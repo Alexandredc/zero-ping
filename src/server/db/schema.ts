@@ -235,7 +235,7 @@ export type ChatMessage = {
   at: string
 }
 
-/** Questions the viewer asked Claude about an item, with the answers. */
+/** Questions the viewer asked the AI about an item, with the answers. */
 export const itemChats = snakeCase.table("item_chats", {
   itemKey: text().primaryKey(),
   messages: jsonb().$type<ChatMessage[]>().notNull().default([]),

@@ -8,12 +8,26 @@ import { ReviewDialog } from "@/components/inbox/review-dialog"
 import type { PendingReview } from "@/components/inbox/review-dialog"
 import { FOLDER_META } from "@/components/inbox/folders"
 import { ItemStrip } from "@/components/inbox/item-strip"
+import { DetailPlaceholder } from "@/components/inbox/detail-placeholder"
 import {
   MatchReason,
   SmartSearchBar,
   useSmartSearch,
 } from "@/components/inbox/smart-search"
 import type { InboxItem } from "@/server/inbox/actions"
+import {
+  ActiveFilters,
+  ListMenus,
+  useListFilters,
+} from "@/components/inbox/list-controls"
+import {
+  PULL_FILTERS,
+  PULL_SORTS,
+  pullSorts,
+  serverSort,
+  sortPulls,
+} from "@/components/inbox/pull-list-options"
+import { applyFilters } from "@/lib/list-filters"
 import { Sidebar } from "@/components/inbox/sidebar"
 import {
   Empty,
@@ -47,9 +61,11 @@ const searchSchema = z.object({
     .default("review"),
   repo: z.string().optional(),
   item: z.string().optional(),
-  sort: z.enum(["priority", "size"]).default("priority"),
+  sort: z.enum(PULL_SORTS).default("priority"),
   /** « Mes PR » only: the viewer's PRs, or every open PR of the tracked repos. */
   scope: z.enum(["mine", "all"]).default("mine"),
+  /** The open item takes the whole window. */
+  full: z.boolean().optional(),
 })
 
 export const Route = createFileRoute("/")({
@@ -57,7 +73,7 @@ export const Route = createFileRoute("/")({
   loaderDeps: ({ search }) => ({
     folder: search.folder,
     repo: search.repo,
-    sort: search.sort,
+    sort: serverSort(search.sort),
     scope: search.scope,
   }),
   loader: ({ context, deps }) =>
@@ -98,7 +114,12 @@ function InboxPage() {
   const navigate = useNavigate({ from: "/" })
   const allPulls = search.folder === "mine" && search.scope === "all"
   const { data, isPending } = useQuery(
-    inboxQuery(search.folder, search.repo, search.sort, search.scope)
+    inboxQuery(
+      search.folder,
+      search.repo,
+      serverSort(search.sort),
+      search.scope
+    )
   )
   const actions = useInboxActions()
   const composerRef = useRef<HTMLTextAreaElement>(null)
@@ -107,13 +128,23 @@ function InboxPage() {
   // Kept by the page: an approved PR leaves its folder and closes the panel.
   const [pendingReview, setPendingReview] = useState<PendingReview | null>(null)
 
+  const filters = useListFilters(
+    search.folder === "mine"
+      ? `pulls:${search.scope}`
+      : `inbox:${search.folder}`
+  )
+  const loaded = data?.items ?? []
+  const listed = sortPulls(
+    applyFilters(loaded, PULL_FILTERS, filters.selection),
+    search.sort
+  )
   const smart = useSmartSearch({
     kind: "PR",
-    items: data?.items ?? [],
+    items: listed,
     toCandidate: pullCandidate,
     resetKey: `${search.folder}:${search.scope}:${search.repo ?? ""}`,
   })
-  const items = allPulls ? smart.visible : (data?.items ?? [])
+  const items = allPulls ? smart.visible : listed
   // Items that left the folder (done, synced away) drop out of the selection.
   const selection = items.filter(
     (item) => item.inInbox && checked.has(item.key)
@@ -152,7 +183,20 @@ function InboxPage() {
       : data?.items.find((item) => item.key === search.item)
 
   const select = (key: string | undefined) =>
-    navigate({ search: (prev) => ({ ...prev, item: key }), replace: true })
+    navigate({
+      search: (prev) => ({
+        ...prev,
+        item: key,
+        full: key ? prev.full : undefined,
+      }),
+      replace: true,
+    })
+  const fullscreen = Boolean(search.full && selected)
+  const toggleFullscreen = () =>
+    void navigate({
+      search: (prev) => ({ ...prev, full: prev.full ? undefined : true }),
+      replace: true,
+    })
 
   useEffect(() => {
     if (!selected) return
@@ -175,7 +219,13 @@ function InboxPage() {
     k: () => move(-1),
     ArrowDown: () => move(1),
     ArrowUp: () => move(-1),
-    Escape: () => (selecting ? clearSelection() : void select(undefined)),
+    Escape: () =>
+      fullscreen
+        ? toggleFullscreen()
+        : selecting
+          ? clearSelection()
+          : void select(undefined),
+    f: () => selected && toggleFullscreen(),
     x: () => selected && toggleChecked(selected.key),
     o: () =>
       selected &&
@@ -196,14 +246,21 @@ function InboxPage() {
 
   return (
     <div className="flex h-svh overflow-hidden">
-      <Sidebar
-        folder={search.folder}
-        counts={data?.counts}
-        sync={data?.sync}
-        onSync={() => actions.sync.mutate()}
-        syncing={actions.sync.isPending}
-      />
-      <main className="flex w-[26rem] shrink-0 flex-col border-r bg-card/40 max-lg:flex-1">
+      {!fullscreen && (
+        <Sidebar
+          folder={search.folder}
+          counts={data?.counts}
+          sync={data?.sync}
+          onSync={() => actions.sync.mutate()}
+          syncing={actions.sync.isPending}
+        />
+      )}
+      <main
+        className={cn(
+          "flex w-[26rem] shrink-0 flex-col border-r bg-card/40 max-lg:flex-1",
+          fullscreen && "hidden"
+        )}
+      >
         <header className="flex items-baseline justify-between gap-2 border-b px-4 py-3">
           <div>
             <h1 className="flex items-center gap-2 font-heading text-lg font-semibold tracking-tight">
@@ -239,24 +296,27 @@ function InboxPage() {
               </ToggleGroup>
             )}
           </div>
-          {canSort && (
-            <ToggleGroup
-              size="sm"
-              value={[search.sort]}
-              onValueChange={(value) => {
-                const sort = value[0] as "priority" | "size" | undefined
-                if (sort)
-                  void navigate({ search: (prev) => ({ ...prev, sort }) })
-              }}
-              aria-label="Trier la liste"
-            >
-              <ToggleGroupItem value="priority">
-                {allPulls ? "Priorité Jev" : "Priorité"}
-              </ToggleGroupItem>
-              <ToggleGroupItem value="size">Taille</ToggleGroupItem>
-            </ToggleGroup>
-          )}
+          <ListMenus
+            sort={canSort ? search.sort : undefined}
+            sorts={canSort ? pullSorts(allPulls) : undefined}
+            onSort={(sort) =>
+              void navigate({ search: (prev) => ({ ...prev, sort }) })
+            }
+            items={loaded}
+            filters={PULL_FILTERS}
+            selection={filters.selection}
+            onToggle={filters.toggle}
+            onClear={filters.clear}
+          />
         </header>
+        <ActiveFilters
+          filters={PULL_FILTERS}
+          selection={filters.selection}
+          onToggle={filters.toggle}
+          onClear={filters.clear}
+          shown={listed.length}
+          total={loaded.length}
+        />
         {allPulls && <SmartSearchBar search={smart} noun="PR" />}
         {items.length > 0 && (
           <div
@@ -344,19 +404,22 @@ function InboxPage() {
                   </div>
                 </div>
               ))}
-            {!isPending && items.length === 0 && !smart.query && (
-              <Empty className="py-16">
-                <EmptyHeader>
-                  <EmptyMedia variant="icon">
-                    <InboxIcon />
-                  </EmptyMedia>
-                  <EmptyTitle>Rien ici</EmptyTitle>
-                  <EmptyDescription>
-                    {EMPTY_COPY[search.folder]}
-                  </EmptyDescription>
-                </EmptyHeader>
-              </Empty>
-            )}
+            {!isPending &&
+              items.length === 0 &&
+              !smart.query &&
+              Object.keys(filters.selection).length === 0 && (
+                <Empty className="py-16">
+                  <EmptyHeader>
+                    <EmptyMedia variant="icon">
+                      <InboxIcon />
+                    </EmptyMedia>
+                    <EmptyTitle>Rien ici</EmptyTitle>
+                    <EmptyDescription>
+                      {EMPTY_COPY[search.folder]}
+                    </EmptyDescription>
+                  </EmptyHeader>
+                </Empty>
+              )}
             {items.map((item) => (
               <div key={item.key} data-key={item.key} className="flex flex-col">
                 <div className="flex">
@@ -385,14 +448,21 @@ function InboxPage() {
           composerRef={composerRef}
           onReview={setPendingReview}
           onClose={() => void select(undefined)}
+          fullscreen={fullscreen}
+          onToggleFullscreen={toggleFullscreen}
         />
       ) : (
-        <div className="hidden flex-1 items-center justify-center lg:flex">
-          <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
-            Choisis un élément ou utilise <Kbd>↓</Kbd> pour commencer par le
-            plus prioritaire.
-          </p>
-        </div>
+        <DetailPlaceholder
+          title={
+            items.length > 0
+              ? `${items.length} élément${items.length > 1 ? "s" : ""} dans la liste`
+              : "Rien à ouvrir ici"
+          }
+        >
+          {items.length > 0
+            ? "Choisis-en un à gauche, ou appuie sur ↓ pour commencer par le plus prioritaire."
+            : "Change de dossier ou de filtres pour retrouver tes PR et issues."}
+        </DetailPlaceholder>
       )}
       {pendingReview && (
         <ReviewDialog

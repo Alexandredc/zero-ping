@@ -1,7 +1,12 @@
+import { readFile } from "node:fs/promises"
+import { homedir } from "node:os"
+import path from "node:path"
 import { eq } from "drizzle-orm"
 import type { Database } from "@/server/db/client"
 import { settings } from "@/server/db/schema"
 import { getAgentConfig, runAgent } from "@/server/agents/runner"
+import type { AgentConfig } from "@/server/agents/runner"
+import { getPreferences } from "@/server/preferences"
 import { recordAttention } from "@/server/inbox/attention"
 import {
   REPLY_JSON_SCHEMA,
@@ -225,6 +230,32 @@ export function publishBlocker(
   return null
 }
 
+/** The instructions of a Claude Code command, without its frontmatter, for an agent that has no slash commands. */
+export function commandInstructions(markdown: string): string {
+  return markdown
+    .replace(/^---\n[\s\S]*?\n---\n/, "")
+    .replaceAll("$ARGUMENTS", "")
+    .trim()
+}
+
+/** Claude Code runs the slash command; Codex reads the same command's file. */
+async function standupPrompt(agent: AgentConfig, command: string) {
+  if (agent.kind === "claude") return command
+  const file = path.join(
+    homedir(),
+    ".claude",
+    "commands",
+    `${command.replace(/^\//, "").replace(":", "/")}.md`
+  )
+  try {
+    return commandInstructions(await readFile(file, "utf8"))
+  } catch {
+    throw new Error(
+      `Codex lit la commande ${command} dans ${file}, introuvable : crée-la ou repasse l'IA principale sur Claude.`
+    )
+  }
+}
+
 /** Posts the standup in today's reminder thread, as the user. */
 export async function publishStandup(
   db: Database,
@@ -233,7 +264,7 @@ export async function publishStandup(
   const state = await readStandup(db, kind)
   const blocker = publishBlocker(state, kind)
   if (blocker) throw new Error(blocker)
-  const config = getAgentConfig(process.env, { agentCli: "claude" })
+  const config = getAgentConfig(process.env, await getPreferences(db))
   const tools = slackSendTools(config.kind)
   const answer = await runAgent(
     {
@@ -277,16 +308,17 @@ export function startStandup(
     })
     try {
       // The command needs the user's default model, gh, jq and the Slack connector.
-      const agent = {
-        ...getAgentConfig(process.env, { agentCli: "claude" }),
+      const agent: AgentConfig = {
+        ...getAgentConfig(process.env, await getPreferences(db)),
         model: undefined,
       }
       const answer = await runAgent(
         {
-          prompt: config.command,
+          prompt: await standupPrompt(agent, config.command),
           appendSystemPrompt: config.systemPrompt,
           schema: standupJsonSchema(kind),
           allowedTools: ["Bash", "Read", "Write", ...SLACK_READ_TOOLS],
+          sandbox: "workspace-write",
           timeoutMs: config.timeoutMs,
         },
         agent

@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query"
 import { Link, useNavigate } from "@tanstack/react-router"
 import {
   BellIcon,
+  BellOffIcon,
   LaptopIcon,
   MoonIcon,
   PanelLeftCloseIcon,
@@ -23,15 +24,27 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
-import { timeAgo } from "@/lib/format"
+import { formatWhen, nextMorning, timeAgo } from "@/lib/format"
 import { useTheme } from "@/lib/theme"
 import { LOGO_URL, formatPings } from "@/lib/pings"
 import {
   folderCountsQuery,
   issuesQuery,
   pingCountQuery,
+  quietQuery,
   teamQuery,
+  useSavePreferences,
 } from "@/hooks/use-inbox"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import { DND_FOREVER, doNotDisturb, isForever } from "@/lib/quiet"
 import { useNotificationPermission } from "@/hooks/use-notification-permission"
 import { useHotkeys } from "@/hooks/use-hotkeys"
 import { useSidebarCollapsed } from "@/hooks/use-sidebar-collapsed"
@@ -227,6 +240,88 @@ function MenuRow({
   )
 }
 
+const DND_DURATIONS = [
+  { label: "Pendant 1 heure", until: () => new Date(Date.now() + 3600_000) },
+  {
+    label: "Pendant 3 heures",
+    until: () => new Date(Date.now() + 3 * 3600_000),
+  },
+  { label: "Jusqu'à demain matin", until: () => nextMorning() },
+  {
+    label: "Jusqu'à ce que je le réactive",
+    until: () => new Date(DND_FOREVER),
+  },
+]
+
+/** « Ne pas déranger »: mutes the notifications for a while, or shows why they are. */
+function DndRow({ collapsed }: { collapsed: boolean }) {
+  const { data } = useQuery(quietQuery())
+  const save = useSavePreferences()
+  const navigate = useNavigate()
+  if (!data) return null
+  const { muted, reason } = doNotDisturb(data)
+  const detail =
+    reason === "dnd" && data.dndUntil
+      ? isForever(data.dndUntil)
+        ? "activé"
+        : `jusqu'à ${formatWhen(new Date(data.dndUntil))}`
+      : reason === "quiet"
+        ? `heures calmes jusqu'à ${data.quietEnd}`
+        : undefined
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        render={
+          <MenuRow
+            icon={muted ? BellOffIcon : BellIcon}
+            label="Ne pas déranger"
+            detail={detail}
+            hint={
+              muted
+                ? `Notifications coupées${detail ? ` (${detail})` : ""}. Ce qui arrive entre-temps ne sera pas notifié.`
+                : "Couper les notifications pour un moment"
+            }
+            collapsed={collapsed}
+          />
+        }
+      />
+      <DropdownMenuContent side="right" align="end" className="w-60">
+        <DropdownMenuGroup>
+          <DropdownMenuLabel>Couper les notifications…</DropdownMenuLabel>
+          {DND_DURATIONS.map((option) => (
+            <DropdownMenuItem
+              key={option.label}
+              onClick={() =>
+                save.mutate({ dndUntil: option.until().toISOString() })
+              }
+            >
+              {option.label}
+            </DropdownMenuItem>
+          ))}
+        </DropdownMenuGroup>
+        <DropdownMenuSeparator />
+        <DropdownMenuGroup>
+          {reason === "dnd" && (
+            <DropdownMenuItem onClick={() => save.mutate({ dndUntil: null })}>
+              Réactiver les notifications
+            </DropdownMenuItem>
+          )}
+          <DropdownMenuItem
+            onClick={() =>
+              void navigate({
+                to: "/settings",
+                search: { section: "notifications" },
+              })
+            }
+          >
+            Régler les heures calmes…
+          </DropdownMenuItem>
+        </DropdownMenuGroup>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+}
+
 /** The logo with the number of items waiting for the viewer in its corner. */
 function LogoWithPings() {
   const { data: count = 0 } = useQuery(pingCountQuery())
@@ -390,6 +485,7 @@ export function Sidebar({
             onClick={() => void request()}
           />
         )}
+        {permission === "granted" && <DndRow collapsed={collapsed} />}
         {onSync && (
           <MenuRow
             icon={RefreshCwIcon}
@@ -398,7 +494,7 @@ export function Sidebar({
             hint={
               running
                 ? "Synchronisation avec GitHub en cours"
-                : `Interroger GitHub maintenant (dernière synchro : ${syncDetail}). Sinon, c'est automatique chaque minute.`
+                : `Interroger GitHub maintenant (dernière synchro : ${syncDetail}). Sinon, c'est automatique.`
             }
             collapsed={collapsed}
             spinning={running}

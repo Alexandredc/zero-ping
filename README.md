@@ -40,9 +40,9 @@ L'authentification GitHub réutilise `gh auth token` (ou `GITHUB_TOKEN`). La pre
 
 ## Résumés IA
 
-En haut de chaque PR et issue, **Résumer avec Claude** produit un résumé en français, **court** (une phrase, par défaut), **standard** ou **détaillé** : chaque longueur s'enregistre à part et se choisit d'un clic sur la PR. Le résumé contient l'essentiel, où on en est, ce qu'on attend de toi, les questions ouvertes et les points de vigilance. Claude lit la conversation GitHub (description, commentaires, reviews, fils de review) et les fils Slack trouvés. Le résumé est enregistré en base et réaffiché sans régénération ; un badge « Pas à jour » signale une activité GitHub plus récente, et **Régénérer** le refait.
+En haut de chaque PR et issue, **Résumer avec l'IA** produit un résumé en français, **court** (une phrase, par défaut), **standard** ou **détaillé** : chaque longueur s'enregistre à part et se choisit d'un clic sur la PR. Le résumé contient l'essentiel, où on en est, ce qu'on attend de toi, les questions ouvertes et les points de vigilance. L'IA lit la conversation GitHub (description, commentaires, reviews, fils de review) et les fils Slack trouvés. Le résumé est enregistré en base et réaffiché sans régénération ; un badge « Pas à jour » signale une activité GitHub plus récente, et **Régénérer** le refait.
 
-Les résumés passent toujours par Claude Code (`claude -p`, sans outils), quel que soit l'agent choisi pour Slack. Le modèle (Sonnet par défaut) se règle dans **Réglages > Agent IA**.
+Les résumés, les questions à l'IA et la recherche IA passent par l'IA principale (`claude -p` ou `codex exec`, sans outils) avec son **modèle de lecture** (Sonnet par défaut pour Claude, celui de ta config pour Codex). Pour répondre aux questions, l'IA reçoit aussi les KPI Jev, le statut et la priorité du projet GitHub et, pour une PR, son état sur uat et son diff.
 
 ## Compteur de pings
 
@@ -60,7 +60,7 @@ La page **Réglages** (barre latérale) regroupe :
 - **Classement** : règles de classement automatique, auteurs à classer, seuil d'ancienneté de la vue Équipe.
 - **Récap** : récap du jour, heure, lancement de `/standup:team`.
 - **Slack** : recherche automatique en arrière-plan, canaux exclus (leurs fils sont masqués tout de suite et l'agent ne les fouille plus).
-- **Agent IA** : agent (Claude Code ou Codex) et modèle pour Slack, longueur par défaut et modèle des résumés, état de Jev et du compte GitHub.
+- **Agent IA** : l'IA principale (Claude Code ou Codex) derrière toutes les fonctions IA, son modèle rapide (Slack) et son modèle de lecture (résumés, questions, recherche), la longueur par défaut des résumés, l'état de Jev et du compte GitHub. Changer d'IA remet les deux modèles sur ses valeurs par défaut.
 - **Notifications** : autorisation du navigateur, types de notifications, test.
 
 Ces réglages sont enregistrés dans la base locale et priment sur `.env` (`AGENT_CLI`, `AGENT_MODEL`). Les clés et jetons restent dans `.env`.
@@ -72,7 +72,7 @@ Pour chaque PR à traiter, l'app cherche dans Slack les messages qui la citent (
 La recherche passe par un agent en ligne de commande qui utilise **ton** accès Slack, en lecture seule :
 
 - **Claude Code** (par défaut) : utilise le connecteur Slack de ton compte claude.ai. Rien à configurer si `claude` est connecté et que le connecteur Slack est activé.
-- **Codex** : `AGENT_CLI=codex` dans `.env`. Codex a besoin de son propre serveur MCP Slack : `codex mcp add slack --url <URL du serveur MCP Slack>` puis `codex mcp login slack`. Si les outils ont d'autres noms que ceux de Claude, rien à changer : Codex n'utilise pas `SLACK_AGENT_TOOLS`.
+- **Codex** : `AGENT_CLI=codex` dans `.env`, ou **Réglages > Agent IA**. Codex a besoin de son propre serveur MCP Slack : `codex mcp add slack --url <URL du serveur MCP Slack>` puis `codex mcp login slack`. Si les outils ont d'autres noms que ceux de Claude, rien à changer : Codex n'utilise pas `SLACK_AGENT_TOOLS`. Pour les standups, Codex suit le texte des commandes `~/.claude/commands/standup.md` et `standup/team.md` dans un sandbox accessible en écriture, avec réseau (gh, Slack).
 
 Chaque fil Slack propose **Répondre dans l'app** : l'agent poste ta réponse telle quelle dans le fil, en ton nom (20 à 40 s), et elle s'ajoute aussitôt au fil affiché. **Ouvrir le fil dans Slack** mène directement à la conversation.
 
@@ -80,8 +80,8 @@ Chaque recherche prend 30 s à 1 min et coûte environ 0,02 $ avec Haiku (sur to
 
 | Variable | Effet |
 | --- | --- |
-| `AGENT_CLI` | `claude` (défaut) ou `codex` |
-| `AGENT_MODEL` | Modèle de l'agent (défaut `haiku` pour Claude, celui de ta config pour Codex) |
+| `AGENT_CLI` | IA principale : `claude` (défaut) ou `codex` |
+| `AGENT_MODEL` | Modèle rapide de l'IA principale (défaut `haiku` pour Claude, celui de ta config pour Codex) |
 | `AGENT_COMMAND` | Chemin de l'exécutable s'il n'est pas dans le `PATH` |
 | `SLACK_AGENT_TOOLS` | Outils Slack autorisés pour Claude Code, si tu utilises un autre serveur MCP |
 | `SLACK_AGENT_SEND_TOOL` | Outil d'envoi Slack pour Claude Code, si tu utilises un autre serveur MCP |
@@ -112,7 +112,7 @@ L'alternative sans agent (app Slack et jeton personnel, plus rapide et sans toke
 
 ## Stack
 
-TanStack Start, React 19, shadcn/ui (Base UI), Tailwind CSS v4, TanStack Query, PGlite + Drizzle ORM 1.0 RC, AI SDK (`experimental_decide` avec Jev), Octokit, Claude Code ou Codex en mode non interactif pour Slack.
+TanStack Start, React 19, shadcn/ui (Base UI), Tailwind CSS v4, TanStack Query, PGlite + Drizzle ORM 1.0 RC, AI SDK (`experimental_decide` avec Jev), Octokit, Claude Code ou Codex en mode non interactif pour toutes les fonctions IA.
 
 ## Scripts
 

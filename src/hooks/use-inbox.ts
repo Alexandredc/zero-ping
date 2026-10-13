@@ -22,6 +22,8 @@ import {
   postWorkItemStatus,
   getItemProjectFields,
   getItemUatStatus,
+  getItemLinkedIssues,
+  getQuiet,
   postSlackRead,
   getMentions,
   getFolderCounts,
@@ -279,6 +281,7 @@ export function useSavePreferences() {
       setPreferences({ data: patch }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["settings"] })
+      void queryClient.invalidateQueries({ queryKey: ["quiet"] })
       void queryClient.invalidateQueries({ queryKey: ["slack"] })
       void queryClient.invalidateQueries({ queryKey: ["inbox"] })
       void queryClient.invalidateQueries({ queryKey: ["issues"] })
@@ -531,6 +534,22 @@ export const projectFieldsQuery = (key: string) =>
     staleTime: 60_000,
   })
 
+export const quietQuery = () =>
+  queryOptions({
+    queryKey: ["quiet"],
+    queryFn: () => getQuiet(),
+    staleTime: 30_000,
+    // A « Ne pas déranger » that ends on its own shows up without a reload.
+    refetchInterval: 60_000,
+  })
+
+export const linkedIssuesQuery = (key: string) =>
+  queryOptions({
+    queryKey: ["linked-issues", key],
+    queryFn: () => getItemLinkedIssues({ data: { key } }),
+    staleTime: 5 * 60_000,
+  })
+
 export const uatStatusQuery = (key: string) =>
   queryOptions({
     queryKey: ["uat", key],
@@ -741,7 +760,7 @@ export const chatQuery = (key: string) =>
   })
 
 /** Asks Claude about an item; the question shows at once, the answer when it lands. */
-export function useAskClaude(key: string) {
+export function useAskAi(key: string) {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: (question: string) => postQuestion({ data: { key, question } }),
@@ -749,7 +768,7 @@ export function useAskClaude(key: string) {
       queryClient.setQueryData(chatQuery(key).queryKey, chat),
     onError: (error) =>
       toast.add({
-        title: "Claude n'a pas répondu",
+        title: "L'IA n'a pas répondu",
         description: error.message,
         type: "error",
       }),

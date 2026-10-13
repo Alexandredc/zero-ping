@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query"
+import { AGENT_LABEL } from "@/lib/agents"
 import { Link } from "@tanstack/react-router"
 import { useState } from "react"
 import {
@@ -27,8 +28,6 @@ import { Spinner } from "@/components/ui/spinner"
 import { Textarea } from "@/components/ui/textarea"
 import { slackToMarkdown } from "@/lib/slack"
 import { timeAgo } from "@/lib/format"
-
-const AGENT_LABEL = { claude: "Claude Code", codex: "Codex" }
 
 const MATCH_LABEL = { link: "lien", reference: "référence", title: "possible" }
 

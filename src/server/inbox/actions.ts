@@ -80,14 +80,13 @@ import {
 } from "@/server/recap/standup"
 import type { StandupKind } from "@/server/recap/standup"
 import { localDate } from "@/server/recap/schedule"
-import { syncNow } from "@/server/inbox/loop"
+import { getSyncStatus, rescheduleSync, syncNow } from "@/server/inbox/loop"
 import { recordActivity, viewTransitions } from "@/server/dashboard/activity"
 import { buildDashboard } from "@/server/dashboard/dashboard"
 import { parseSubjectKey } from "@/server/inbox/notifications"
 import { enrichItems } from "@/server/inbox/sync"
 import { readAttention } from "@/server/inbox/attention"
 import {
-  DEFAULT_SUMMARY_MODEL,
   SUMMARY_JSON_SCHEMA,
   buildSummaryInput,
   buildSummaryPrompt,
@@ -95,13 +94,14 @@ import {
 } from "@/server/summary/summarize"
 import {
   getPreferences,
+  doNotDisturb,
   channelIdOf,
   normalizeChannel,
   updatePreferences,
   withoutExcludedChannels,
 } from "@/server/preferences"
 import type { preferencesPatchSchema } from "@/server/preferences"
-import { getAgentConfig, runAgent } from "@/server/agents/runner"
+import { AGENT_LABEL, getAgentConfig, runAgent } from "@/server/agents/runner"
 import {
   buildInsightState,
   buildIssueInsightState,
@@ -113,6 +113,7 @@ import { getDecisionModel } from "@/server/ai/models"
 import {
   CHAT_JSON_SCHEMA,
   buildChatInput,
+  formatItemFacts,
   buildChatPrompt,
   formatDiff,
   parseChatAnswer,
@@ -244,7 +245,7 @@ export async function listAllPulls(
   sort: SortOrder = "priority"
 ): Promise<InboxItem[]> {
   const db = await getDb()
-  const [team, rows] = await Promise.all([
+  const [team, rows, viewer] = await Promise.all([
     db
       .select()
       .from(teamPulls)
@@ -268,6 +269,7 @@ export async function listAllPulls(
           repo ? eq(items.repoFullName, repo) : undefined
         )
       ),
+    getViewer(),
   ])
   const hiddenChannels = await slackExclusions(
     db,
@@ -301,7 +303,10 @@ export async function listAllPulls(
     ...team.map((pull) => {
       const item = known.get(pull.key)
       if (item) return withCachedScore(item)
-      const synthetic = withJevScore(teamPullToItem(pull), scores.get(pull.key))
+      const synthetic = withJevScore(
+        teamPullToItem(pull, viewer.login),
+        scores.get(pull.key)
+      )
       return {
         ...synthetic,
         slackDiscussions: null,
@@ -399,7 +404,7 @@ async function getItem(key: string): Promise<Item> {
   const pull = (
     await db.select().from(teamPulls).where(eq(teamPulls.key, key))
   ).at(0)
-  if (pull) return teamPullToItem(pull)
+  if (pull) return teamPullToItem(pull, (await getViewer()).login)
   throw new Error(`Élément introuvable : ${key}`)
 }
 
@@ -835,10 +840,26 @@ export async function getSettings() {
   }
 }
 
+/** « Ne pas déranger », the quiet hours and the sync pace, for the sidebar and the settings. */
+export async function getQuietState() {
+  const preferences = await getPreferences(await getDb())
+  return {
+    dndUntil: preferences.dndUntil,
+    quietHoursEnabled: preferences.quietHoursEnabled,
+    quietStart: preferences.quietStart,
+    quietEnd: preferences.quietEnd,
+    syncIntervalSeconds: preferences.syncIntervalSeconds,
+    githubIntervalS: getSyncStatus().githubIntervalS,
+  }
+}
+
 export async function savePreferences(
   patch: z.infer<typeof preferencesPatchSchema>
 ) {
-  return updatePreferences(await getDb(), patch)
+  const next = await updatePreferences(await getDb(), patch)
+  // A new interval applies to the sync already waiting, not the one after.
+  if (patch.syncIntervalSeconds !== undefined) await rescheduleSync()
+  return next
 }
 
 /** In-flight runs, keyed by `itemKey:length`. */
@@ -878,8 +899,8 @@ export function getSummary(key: string) {
   return readSummary(key)
 }
 
-/** Summarises with Claude Code and stores the result; joins a run in progress. */
-/** What Claude reads about an item: its facts, GitHub conversation and Slack threads. */
+/** Summarises with the main AI and stores the result; joins a run in progress. */
+/** What the AI reads about an item: its facts, GitHub conversation and Slack threads. */
 async function summaryContext(key: string) {
   const db = await getDb()
   const item = await getItem(key)
@@ -907,10 +928,7 @@ async function summaryContext(key: string) {
     lookup?.discussions ?? [],
     await slackExclusions(db, preferences.slackExcludedChannels)
   )
-  const config = getAgentConfig(process.env, {
-    agentCli: "claude",
-    agentModel: preferences.summaryModel ?? DEFAULT_SUMMARY_MODEL,
-  })
+  const config = getAgentConfig(process.env, preferences, "smart")
   return {
     item,
     ref,
@@ -1056,19 +1074,40 @@ export async function clearChat(key: string) {
   return { messages: [] }
 }
 
-/** Asks Claude a question about the item, with the earlier exchanges, and keeps both. */
+/** Asks the AI a question about the item, with the earlier exchanges, and keeps both. */
 export async function askAboutItem(key: string, question: string) {
   const db = await getDb()
   const [{ item, ref, octokit, viewer, config, input }, { messages }] =
     await Promise.all([summaryContext(key), getChat(key)])
-  const diff =
-    item.kind === "PullRequest"
-      ? formatDiff((await fetchPullFiles(octokit, ref)).files)
-      : null
+  const isPull = item.kind === "PullRequest"
+  // Everything the panel shows next to the conversation, so the answer matches it.
+  const [diff, kpis, project, uat] = await Promise.all([
+    isPull
+      ? fetchPullFiles(octokit, ref).then(({ files }) => formatDiff(files))
+      : null,
+    db
+      .select()
+      .from(pullInsights)
+      .where(eq(pullInsights.itemKey, key))
+      .then((rows) => rows.at(0)?.insights ?? []),
+    getProjectFields(key).catch(() => null),
+    isPull ? getUatStatus(key).catch(() => null) : null,
+  ])
+  const facts = formatItemFacts({
+    insights: kpis,
+    specs: isPull ? INSIGHTS : ISSUE_INSIGHTS,
+    project: project && {
+      title: project.projectTitle,
+      status: project.status,
+      priority: project.priority,
+      via: project.via?.number ?? null,
+    },
+    uat,
+  })
   const answer = await runAgent(
     {
       prompt: buildChatPrompt(viewer.login),
-      input: buildChatInput(input, diff, messages, question),
+      input: buildChatInput(input, facts, diff, messages, question),
       schema: CHAT_JSON_SCHEMA,
       allowedTools: [],
       timeoutMs: 3 * 60_000,
@@ -1118,7 +1157,7 @@ export async function generateSummary(key: string, length: SummaryLength) {
       itemKey: key,
       length,
       content: parseSummary(answer),
-      model: config.model ?? "claude",
+      model: config.model ?? AGENT_LABEL[config.kind],
       sourceUpdatedAt: item.updatedAt,
       createdAt: new Date(),
     }
@@ -1142,6 +1181,8 @@ export async function generateSummary(key: string, length: SummaryLength) {
 export async function getAttention(afterId: number | null) {
   const db = await getDb()
   const preferences = await getPreferences(db)
+  // Muted, the events are skipped rather than kept: nothing replays afterwards.
+  if (doNotDisturb(preferences).muted) return readAttention(db, afterId, [])
   // The daily recap has its own switch, so older saved kinds still get it.
   const kinds = [
     ...(preferences.notifyEnabled
@@ -1464,7 +1505,7 @@ async function bodiesOf(octokit: Octokit, keys: string[]) {
   return new Map(keys.map((key) => [key, fresh(key)?.body ?? null]))
 }
 
-/** Claude picks, among the items of a list, those that answer a search in plain words. */
+/** The AI picks, among the items of a list, those that answer a search in plain words. */
 export async function searchItems(input: {
   kind: "PR" | "issue"
   query: string
@@ -1499,12 +1540,67 @@ export async function searchItems(input: {
       allowedTools: [],
       timeoutMs: 2 * 60_000,
     },
-    getAgentConfig(process.env, {
-      agentCli: "claude",
-      agentModel: preferences.summaryModel ?? DEFAULT_SUMMARY_MODEL,
-    })
+    getAgentConfig(process.env, preferences, "smart")
   )
   return parseSearchAnswer(answer, new Set(keys))
+}
+
+export type LinkedIssue = {
+  key: string
+  number: number
+  title: string
+  url: string
+  state: "OPEN" | "CLOSED"
+  assignees: string[]
+}
+
+/** The issues a PR closes, as GitHub's « Development » box links them. */
+export async function getLinkedIssues(key: string): Promise<LinkedIssue[]> {
+  const ref = parseSubjectKey(key)
+  if (!ref) return []
+  const data = await (
+    await getOctokit()
+  ).graphql<{
+    repository: {
+      pullRequest: {
+        closingIssuesReferences: {
+          nodes: {
+            number: number
+            title: string
+            url: string
+            state: "OPEN" | "CLOSED"
+            repository: { nameWithOwner: string }
+            assignees: { nodes: { login: string }[] }
+          }[]
+        }
+      } | null
+    } | null
+  }>(
+    `query ($owner: String!, $repo: String!, $number: Int!) {
+      repository(owner: $owner, name: $repo) {
+        pullRequest(number: $number) {
+          closingIssuesReferences(first: 10) {
+            nodes {
+              number title url state
+              repository { nameWithOwner }
+              assignees(first: 5) { nodes { login } }
+            }
+          }
+        }
+      }
+    }`,
+    ref
+  )
+  return (
+    data.repository?.pullRequest?.closingIssuesReferences.nodes ?? []
+  ).map((issue) => ({
+    key: `${issue.repository.nameWithOwner}#${issue.number}`,
+    number: issue.number,
+    title: issue.title,
+    url: issue.url,
+    state: issue.state,
+    assignees: issue.assignees.nodes.map((a) => a.login),
+  }))
 }
 
 export async function moveWorkItem(input: {

@@ -11,8 +11,17 @@ export type FailedCheck = {
   runId: number | null
 }
 
+export type CheckState = "passed" | "failed" | "pending" | "skipped"
+
+/** Every check of the head commit, as GitHub's merge box counts them. */
+export type ChecksSummary = Record<CheckState, number> & {
+  /** Names of the checks still running, to say what is awaited. */
+  running: string[]
+}
+
 export type PullChecks = {
   headSha: string
+  summary: ChecksSummary
   failed: FailedCheck[]
   /** Failed GitHub Actions runs whose failed jobs can be re-run. */
   rerunnableRuns: number[]
@@ -27,6 +36,40 @@ const FAILED = new Set([
   "action_required",
   "startup_failure",
 ])
+
+/** One check run (`status`, `conclusion`) or commit status (`state`), in four states. */
+export function checkState(
+  check:
+    | { kind: "run"; status: string; conclusion: string | null }
+    | { kind: "status"; state: string }
+): CheckState {
+  if (check.kind === "status")
+    return check.state === "success"
+      ? "passed"
+      : check.state === "pending"
+        ? "pending"
+        : "failed"
+  if (check.status !== "completed" || !check.conclusion) return "pending"
+  if (FAILED.has(check.conclusion)) return "failed"
+  return check.conclusion === "skipped" ? "skipped" : "passed"
+}
+
+export function summarizeChecks(
+  checks: { name: string; state: CheckState }[]
+): ChecksSummary {
+  const summary: ChecksSummary = {
+    passed: 0,
+    failed: 0,
+    pending: 0,
+    skipped: 0,
+    running: [],
+  }
+  for (const check of checks) {
+    summary[check.state] += 1
+    if (check.state === "pending") summary.running.push(check.name)
+  }
+  return summary
+}
 
 const RUN_URL = /\/actions\/runs\/(\d+)/
 
@@ -91,6 +134,20 @@ export async function fetchChecks(
   ]
   return {
     headSha,
+    summary: summarizeChecks([
+      ...runs.map((run) => ({
+        name: run.name,
+        state: checkState({
+          kind: "run",
+          status: run.status,
+          conclusion: run.conclusion,
+        }),
+      })),
+      ...statuses.map((status) => ({
+        name: status.context,
+        state: checkState({ kind: "status", state: status.state }),
+      })),
+    ]),
     failed,
     rerunnableRuns: [
       ...new Set(failed.flatMap((check) => (check.runId ? [check.runId] : []))),

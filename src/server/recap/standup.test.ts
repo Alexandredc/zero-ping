@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { parseStandup, publishBlocker } from "./standup"
+import { commandInstructions, parseStandup, publishBlocker } from "./standup"
 import type { StandupState } from "./standup"
 
 describe("parseStandup", () => {
@@ -68,5 +68,15 @@ describe("publishBlocker", () => {
     expect(
       publishBlocker({ ...ready, message: null, slackMessage: null }, "team")
     ).toMatch(/Aucun/)
+  })
+})
+
+describe("commandInstructions", () => {
+  it("keeps the command's text without its frontmatter or arguments", () => {
+    expect(
+      commandInstructions(
+        "---\ndescription: Team standup\n---\nExport the board.$ARGUMENTS\n"
+      )
+    ).toBe("Export the board.")
   })
 })

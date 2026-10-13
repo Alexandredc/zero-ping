@@ -1,7 +1,32 @@
 import { describe, expect, it } from "vitest"
 import { subjectToItem, teamPullToItem } from "./as-item"
 
+const pull = {
+  key: "acme/app#12",
+  repoFullName: "acme/app",
+  number: 12,
+  title: "feat: export",
+  htmlUrl: "https://github.com/acme/app/pull/12",
+  author: "robin",
+  isDraft: false,
+  createdAt: new Date("2026-10-01T10:00:00Z"),
+  updatedAt: new Date("2026-10-12T10:00:00Z"),
+  additions: 40,
+  deletions: 2,
+  reviewers: ["lead"],
+  reviewDecision: null,
+  ciState: "FAILURE",
+  mergeable: "MERGEABLE",
+  problems: ["ci" as const],
+  syncedAt: new Date("2026-10-12T11:00:00Z"),
+}
+
 describe("teamPullToItem", () => {
+  it("files the viewer's own PR under « mine », whatever the case of the login", () => {
+    expect(teamPullToItem(pull, "Robin").view).toBe("mine")
+    expect(teamPullToItem(pull, "lead").view).toBe("other")
+  })
+
   it("shapes a team PR as an open, read, unprioritised inbox item", () => {
     const item = teamPullToItem({
       key: "acme/app#12",
