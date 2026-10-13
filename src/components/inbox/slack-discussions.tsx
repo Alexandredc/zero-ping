@@ -28,14 +28,7 @@ import { Spinner } from "@/components/ui/spinner"
 import { Textarea } from "@/components/ui/textarea"
 import { slackToMarkdown } from "@/lib/slack"
 import { timeAgo } from "@/lib/format"
-
-const MATCH_LABEL = { link: "lien", reference: "référence", title: "possible" }
-
-const MATCH_HINT = {
-  link: "Le message contient le lien de la PR.",
-  reference: "Le message cite la PR par sa référence (repo#numéro).",
-  title: "Le message parle du sujet de la PR sans la citer : à confirmer.",
-}
+import { useI18n } from "@/hooks/use-i18n"
 
 function ReplyBox({
   itemKey,
@@ -48,6 +41,8 @@ function ReplyBox({
   agent: string
   onDone: () => void
 }) {
+  const { t } = useI18n()
+  const m = t.pull.slack
   const [message, setMessage] = useState("")
   const reply = useSlackReply(itemKey)
   const send = () => {
@@ -67,15 +62,13 @@ function ReplyBox({
           }
           if (event.key === "Escape") onDone()
         }}
-        placeholder="Ta réponse dans le fil Slack…"
+        placeholder={m.replyPlaceholder}
         className="min-h-16 bg-background"
         disabled={reply.isPending}
       />
       <div className="flex items-center gap-2 text-xs text-muted-foreground">
         <span className="flex-1">
-          {reply.isPending
-            ? `${agent} envoie ta réponse… (20 à 40 s)`
-            : `Envoyée en ton nom par ${agent}, telle quelle.`}
+          {reply.isPending ? m.sending(agent) : m.sentAs(agent)}
         </span>
         <Button
           variant="ghost"
@@ -83,7 +76,7 @@ function ReplyBox({
           onClick={onDone}
           disabled={reply.isPending}
         >
-          Annuler
+          {t.common.cancel}
         </Button>
         <Button
           size="sm"
@@ -95,8 +88,8 @@ function ReplyBox({
           ) : (
             <SlackIcon data-icon="inline-start" />
           )}
-          Envoyer sur Slack
-          <Kbd>⌘ Entrée</Kbd>
+          {m.sendToSlack}
+          <Kbd>{m.sendShortcut}</Kbd>
         </Button>
       </div>
     </div>
@@ -124,6 +117,8 @@ function Thread({
   /** `postedAt` of the newest message read, when the thread was marked read. */
   readThrough: string | undefined
 }) {
+  const { t, language } = useI18n()
+  const m = t.pull.slack
   const [replying, setReplying] = useState(false)
   const markRead = useSlackRead(itemKey)
   const latest = latestPostedAt(discussion)
@@ -160,36 +155,30 @@ function Thread({
             {discussion.channel}
           </span>
         </button>
-        <Hint content={MATCH_HINT[discussion.match]}>
+        <Hint content={m.matchHint[discussion.match]}>
           <Badge variant="outline" className="cursor-help">
-            {MATCH_LABEL[discussion.match]}
+            {m.match[discussion.match]}
           </Badge>
         </Hint>
-        <span>
-          {discussion.messages.length} message
-          {discussion.messages.length > 1 ? "s" : ""}
-        </span>
+        <span>{m.messages(discussion.messages.length)}</span>
         {hasNew && (
-          <Hint content="Tu l'avais marqué comme lu, mais de nouveaux messages sont arrivés depuis.">
+          <Hint content={m.newMessagesHint}>
             <Badge
               variant="outline"
               className="cursor-help border-heat/40 text-heat-foreground"
             >
-              nouveaux messages
+              {m.newMessages}
             </Badge>
           </Hint>
         )}
-        <Hint
-          content="Replie le fil dans Zéro Ping ; il se rouvre si un nouveau message arrive. Rien ne change dans Slack."
-          className="ml-auto flex"
-        >
+        <Hint content={m.readHint} className="ml-auto flex">
           <label className="flex cursor-pointer items-center gap-1.5 rounded border bg-background px-1.5 py-0.5">
             <Checkbox
               checked={isRead}
               onCheckedChange={() => toggleRead()}
               disabled={markRead.isPending}
             />
-            Lu
+            {m.read}
           </label>
         </Hint>
       </header>
@@ -202,7 +191,7 @@ function Thread({
                   <span className="font-medium text-foreground">
                     {message.author}
                   </span>
-                  <span>{timeAgo(message.postedAt)}</span>
+                  <span>{timeAgo(message.postedAt, language)}</span>
                 </p>
                 <Markdown>{slackToMarkdown(message.text)}</Markdown>
               </li>
@@ -223,7 +212,7 @@ function Thread({
                 onClick={() => setReplying(true)}
               >
                 <MessageSquareReplyIcon data-icon="inline-start" />
-                Répondre dans l'app
+                {m.replyInApp}
               </Button>
               <Button
                 variant="outline"
@@ -238,7 +227,7 @@ function Thread({
                 }
               >
                 <SlackIcon data-icon="inline-start" />
-                Ouvrir le fil dans Slack
+                {m.openInSlack}
               </Button>
             </footer>
           )}
@@ -256,9 +245,11 @@ export function SlackDiscussions({
   /** For an issue outside the inbox: what the agent searches Slack for. */
   subject?: SlackSubjectInput
 }) {
+  const { t, language } = useI18n()
+  const m = t.pull.slack
   const { data, isPending } = useQuery(slackQuery(itemKey, subject))
   const refresh = useRefreshSlack(itemKey, subject)
-  const noun = subject?.kind === "Issue" ? "cette issue" : "cette PR"
+  const noun = subject?.kind === "Issue" ? m.thisIssue : m.thisPr
 
   if (isPending) return <Skeleton className="h-16 w-full" />
   if (!data?.enabled) return null
@@ -278,11 +269,11 @@ export function SlackDiscussions({
   return (
     <section
       className="flex flex-col gap-3 rounded-lg border border-l-4 border-l-slack bg-card p-4"
-      aria-label="Discussions Slack"
+      aria-label={m.sectionLabel}
     >
       <header className="flex items-center gap-2">
         <SlackIcon />
-        <h3 className="text-sm font-semibold">Slack</h3>
+        <h3 className="text-sm font-semibold">{m.title}</h3>
         {discussions.length > 0 && (
           <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
             <span className="h-1.5 w-16 overflow-hidden rounded-full bg-muted">
@@ -293,17 +284,15 @@ export function SlackDiscussions({
                 }}
               />
             </span>
-            {readCount}/{discussions.length} lus
+            {m.readCount(readCount, discussions.length)}
           </span>
         )}
-        <Hint
-          content={`${agent} cherche dans ton Slack les messages qui citent ${noun} (lien, référence ou sujet), en lecture seule. Les résultats sont gardés 6 h.`}
-        >
+        <Hint content={m.searchHint(agent, noun)}>
           <span className="cursor-help text-xs text-muted-foreground">
             {searching
-              ? `${agent} cherche… (30 s à 1 min)`
+              ? m.searching(agent)
               : lookup?.finishedAt
-                ? `vérifié ${timeAgo(lookup.finishedAt)}`
+                ? m.checked(timeAgo(lookup.finishedAt, language))
                 : ""}
           </span>
         </Hint>
@@ -313,7 +302,7 @@ export function SlackDiscussions({
           className="ml-auto"
           onClick={() => refresh.mutate()}
           disabled={searching}
-          aria-label="Chercher à nouveau dans Slack"
+          aria-label={m.searchAgain}
         >
           {searching ? <Spinner /> : <RefreshCwIcon />}
         </Button>
@@ -321,28 +310,25 @@ export function SlackDiscussions({
 
       {data.hiddenCount > 0 && (
         <p className="text-xs text-muted-foreground">
-          {data.hiddenCount} fil{data.hiddenCount > 1 ? "s" : ""} masqué
-          {data.hiddenCount > 1 ? "s" : ""} (canaux exclus,{" "}
+          {m.hiddenBefore(data.hiddenCount)}
           <Link
             to="/settings"
             search={{ section: "slack" }}
             className="underline underline-offset-2 hover:text-foreground"
           >
-            modifier
+            {m.hiddenEdit}
           </Link>
-          ).
+          {m.hiddenAfter}
         </p>
       )}
       {lookup?.status === "error" && !searching && (
         <p className="text-xs text-destructive">
-          Recherche impossible : {lookup.error}
+          {m.searchFailed(lookup.error ?? "")}
         </p>
       )}
       {searching && linked.length === 0 && <Skeleton className="h-12 w-full" />}
       {lookup?.status === "done" && discussions.length === 0 && !searching && (
-        <p className="text-xs text-muted-foreground">
-          Aucune discussion trouvée sur Slack.
-        </p>
+        <p className="text-xs text-muted-foreground">{m.noneFound}</p>
       )}
       {linked.map((discussion) => (
         <Thread
@@ -355,9 +341,7 @@ export function SlackDiscussions({
       ))}
       {possible.length > 0 && (
         <>
-          <p className="text-xs text-muted-foreground">
-            Discussions possibles, sans lien vers {noun} :
-          </p>
+          <p className="text-xs text-muted-foreground">{m.possible(noun)}</p>
           {possible.map((discussion) => (
             <Thread
               key={discussion.permalink}

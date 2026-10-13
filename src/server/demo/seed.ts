@@ -18,6 +18,9 @@ import {
 } from "@/server/db/schema"
 import type { NewItem, SummaryLength } from "@/server/db/schema"
 import { computePriority } from "@/server/inbox/priority"
+import { DEFAULT_LANGUAGE } from "@/lib/i18n/core"
+import { messagesFor } from "@/lib/i18n/messages"
+import type { Messages } from "@/lib/i18n/messages"
 import { preferencesSchema } from "@/server/preferences"
 import { localDate } from "@/server/recap/schedule"
 import {
@@ -60,7 +63,10 @@ export async function assertDemoDatabase(db: Database) {
 }
 
 /** Inbox items with the priority the live sync would give them. */
-export function scoredItems(now: Date): NewItem[] {
+export function scoredItems(
+  now: Date,
+  t: Messages = messagesFor(DEFAULT_LANGUAGE)
+): NewItem[] {
   return demoItems(now).map((item) => {
     const { priority, reasons, needsCheck } = computePriority(
       {
@@ -85,6 +91,7 @@ export function scoredItems(now: Date): NewItem[] {
         aiConfidence: item.aiConfidence ?? null,
         aiQuestionProbability: item.aiQuestionProbability ?? null,
       },
+      t,
       now
     )
     return { ...item, priority, priorityReasons: reasons, needsCheck }

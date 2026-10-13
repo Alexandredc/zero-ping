@@ -2,6 +2,7 @@ import { chmodSync, mkdtempSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import { describe, expect, it } from "vitest"
+import { messagesFor } from "@/lib/i18n/messages"
 import {
   agentEnv,
   buildClaudeArgs,
@@ -134,15 +135,28 @@ describe("parseClaudeOutput", () => {
   it("returns the structured output, ignoring warnings printed before it", () => {
     expect(
       parseClaudeOutput(
-        'Warning: no stdin\n{"is_error":false,"structured_output":{"discussions":[]}}'
+        'Warning: no stdin\n{"is_error":false,"structured_output":{"discussions":[]}}',
+        messagesFor("fr")
       )
     ).toEqual({ discussions: [] })
   })
 
   it("surfaces agent errors", () => {
     expect(() =>
-      parseClaudeOutput('{"is_error":true,"result":"Not logged in"}')
+      parseClaudeOutput(
+        '{"is_error":true,"result":"Not logged in"}',
+        messagesFor("fr")
+      )
     ).toThrow("Not logged in")
+  })
+
+  it("reports a missing answer in the chosen language", () => {
+    expect(() => parseClaudeOutput("no json", messagesFor("en"))).toThrow(
+      "Claude Code returned no JSON result."
+    )
+    expect(() => parseClaudeOutput("{}", messagesFor("fr"))).toThrow(
+      "Claude Code n'a pas renvoyé de réponse structurée."
+    )
   })
 })
 
@@ -170,5 +184,21 @@ describe("runAgent", () => {
       { kind: "claude", command, model: undefined }
     )
     expect(answer).toEqual({ ok: true })
+  })
+
+  it("reports a missing command in the config's language", async () => {
+    await expect(
+      runAgent(
+        { prompt: "ignored", schema: {} },
+        {
+          kind: "claude",
+          command: "zero-ping-missing-agent",
+          model: undefined,
+          language: "en",
+        }
+      )
+    ).rejects.toThrow(
+      "Command “zero-ping-missing-agent” not found: install it or set AGENT_COMMAND."
+    )
   })
 })

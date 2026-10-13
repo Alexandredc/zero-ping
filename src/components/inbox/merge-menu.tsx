@@ -2,7 +2,6 @@ import { useQuery } from "@tanstack/react-query"
 import { useState } from "react"
 import { ChevronDownIcon, GitMergeIcon } from "lucide-react"
 import { ActionHint } from "./hint"
-import type { MergeMethod } from "@/server/github/merge"
 import { mergeInfoQuery, useMerge } from "@/hooks/use-inbox"
 import { Button } from "@/components/ui/button"
 import {
@@ -16,12 +15,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Spinner } from "@/components/ui/spinner"
-
-const METHOD_LABEL: Record<MergeMethod, string> = {
-  SQUASH: "Squash and merge",
-  MERGE: "Merge commit",
-  REBASE: "Rebase and merge",
-}
+import { useI18n } from "@/hooks/use-i18n"
 
 /** Merges the viewer's PR from the inbox; the merge state is read when the menu opens. */
 export function MergeMenu({
@@ -31,6 +25,8 @@ export function MergeMenu({
   itemKey: string
   approved: boolean
 }) {
+  const { t } = useI18n()
+  const copy = t.detail.merge
   const [open, setOpen] = useState(false)
   const [deleteBranch, setDeleteBranch] = useState(true)
   const { data: info, isFetching } = useQuery({
@@ -42,7 +38,7 @@ export function MergeMenu({
 
   return (
     <DropdownMenu open={open} onOpenChange={setOpen}>
-      <ActionHint content="Merge la PR sur GitHub, avec la méthode choisie, et supprime sa branche si tu le veux.">
+      <ActionHint content={copy.hint}>
         <DropdownMenuTrigger
           render={
             <Button
@@ -57,7 +53,7 @@ export function MergeMenu({
           ) : (
             <GitMergeIcon data-icon="inline-start" />
           )}
-          Merger
+          {copy.button}
           <ChevronDownIcon data-icon="inline-end" />
         </DropdownMenuTrigger>
       </ActionHint>
@@ -65,14 +61,14 @@ export function MergeMenu({
         <DropdownMenuGroup>
           <DropdownMenuLabel>
             {!info
-              ? "Vérification de la PR…"
+              ? copy.checking
               : info.canMerge
-                ? "Merger avec…"
+                ? copy.mergeWith
                 : info.blockedReason}
           </DropdownMenuLabel>
           {!info && isFetching && (
             <DropdownMenuItem disabled>
-              <Spinner /> État du merge sur GitHub
+              <Spinner /> {copy.state}
             </DropdownMenuItem>
           )}
           {info?.methods.map((method) => (
@@ -86,10 +82,10 @@ export function MergeMenu({
                 })
               }
             >
-              {METHOD_LABEL[method]}
+              {copy.methods[method]}
               {method === info.defaultMethod && (
                 <span className="ml-auto text-xs text-muted-foreground">
-                  par défaut
+                  {copy.default}
                 </span>
               )}
             </DropdownMenuItem>
@@ -105,16 +101,14 @@ export function MergeMenu({
                   onCheckedChange={setDeleteBranch}
                   closeOnClick={false}
                 >
-                  Supprimer la branche{" "}
+                  {copy.deleteBranch}{" "}
                   <span className="truncate font-mono text-xs">
                     {info.headRef}
                   </span>
                 </DropdownMenuCheckboxItem>
               ) : (
                 <DropdownMenuLabel className="font-normal">
-                  {info.isCrossRepository
-                    ? "Branche dans un fork : elle reste en place."
-                    : "GitHub supprime la branche après le merge."}
+                  {info.isCrossRepository ? copy.forkBranch : copy.autoDelete}
                 </DropdownMenuLabel>
               )}
             </DropdownMenuGroup>

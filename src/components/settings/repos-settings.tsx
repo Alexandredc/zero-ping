@@ -32,6 +32,7 @@ import {
 } from "@/components/ui/popover"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Switch } from "@/components/ui/switch"
+import { useI18n } from "@/hooks/use-i18n"
 import {
   accessibleReposQuery,
   reposQuery,
@@ -39,6 +40,7 @@ import {
 } from "@/hooks/use-inbox"
 
 function AddRepo({ known }: { known: Set<string> }) {
+  const { t } = useI18n()
   const [open, setOpen] = useState(false)
   const { data, isPending } = useQuery({
     ...accessibleReposQuery(),
@@ -51,14 +53,16 @@ function AddRepo({ known }: { known: Set<string> }) {
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger render={<Button size="sm" />}>
         <PlusIcon data-icon="inline-start" />
-        Ajouter un repo
+        {t.settings.repos.add}
       </PopoverTrigger>
       <PopoverContent align="end" className="w-80 p-0">
         <Command>
-          <CommandInput placeholder="Chercher parmi tes repos…" />
+          <CommandInput placeholder={t.settings.repos.search} />
           <CommandList>
             <CommandEmpty>
-              {isPending ? "Chargement de tes repos…" : "Aucun repo trouvé."}
+              {isPending
+                ? t.settings.repos.loading
+                : t.settings.repos.noneFound}
             </CommandEmpty>
             <CommandGroup>
               {candidates.map((repo) => (
@@ -85,6 +89,7 @@ function AddRepo({ known }: { known: Set<string> }) {
 }
 
 export function ReposSettings() {
+  const { t } = useI18n()
   const { data: repos, isPending } = useQuery(reposQuery())
   const { trackRepo } = useInboxActions()
   const [filter, setFilter] = useState("")
@@ -99,12 +104,9 @@ export function ReposSettings() {
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <GitHubIcon />
-          Repos suivis
+          {t.settings.repos.title}
         </CardTitle>
-        <CardDescription>
-          Seuls les repos activés apparaissent dans l'inbox. Ceux qui t'envoient
-          des notifications sont ajoutés et activés automatiquement.
-        </CardDescription>
+        <CardDescription>{t.settings.repos.description}</CardDescription>
         <CardAction>
           <AddRepo known={known} />
         </CardAction>
@@ -115,8 +117,8 @@ export function ReposSettings() {
             <InputGroupInput
               value={filter}
               onChange={(event) => setFilter(event.target.value)}
-              placeholder="Filtrer les repos"
-              aria-label="Filtrer les repos"
+              placeholder={t.settings.repos.filter}
+              aria-label={t.settings.repos.filter}
             />
             <InputGroupAddon>
               <SearchIcon />
@@ -124,7 +126,7 @@ export function ReposSettings() {
           </InputGroup>
           {repos && (
             <span className="text-xs text-muted-foreground">
-              {tracked} suivi{tracked > 1 ? "s" : ""} sur {repos.length}
+              {t.settings.repos.trackedCount(tracked, repos.length)}
             </span>
           )}
         </div>
@@ -146,7 +148,9 @@ export function ReposSettings() {
                   {repo.fullName}
                 </span>
                 {repo.active > 0 && (
-                  <Badge variant="secondary">{repo.active} à traiter</Badge>
+                  <Badge variant="secondary">
+                    {t.settings.repos.toHandle(repo.active)}
+                  </Badge>
                 )}
               </label>
               <Switch
@@ -163,7 +167,7 @@ export function ReposSettings() {
           ))}
           {repos && visible.length === 0 && (
             <li className="py-4 text-sm text-muted-foreground">
-              Aucun repo ne correspond à « {filter} ».
+              {t.settings.repos.noMatch(filter)}
             </li>
           )}
         </ul>

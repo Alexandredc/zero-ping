@@ -1,4 +1,5 @@
 import type { Viewer } from "@/server/inbox/analyze"
+import { server } from "@/lib/i18n/messages/server"
 
 /**
  * Demo mode (`pnpm demo`): fictional data in its own data folder, and nothing
@@ -16,13 +17,13 @@ export const DEMO_VIEWER: Viewer = {
   teams: ["acme/web-team", "acme/backend"],
 }
 
-export const DEMO_OFFLINE =
-  "Mode démo : rien n'est envoyé à GitHub, à Slack ni à l'IA."
+/** The French message, for the synchronous guards that cannot read the language. */
+export const DEMO_OFFLINE = server.fr.errors.demoOffline
 
 /** Thrown by every live call that would reach GitHub, Slack or an AI. */
 export class DemoOfflineError extends Error {
-  constructor() {
-    super(DEMO_OFFLINE)
+  constructor(message: string = DEMO_OFFLINE) {
+    super(message)
     this.name = "DemoOfflineError"
   }
 }

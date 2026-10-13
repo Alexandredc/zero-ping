@@ -7,6 +7,7 @@ import {
   weekStart,
   weekSummaryText,
 } from "./week"
+import { messagesFor } from "@/lib/i18n/messages"
 
 describe("weekStart", () => {
   it("goes back to Monday midnight, also from a Sunday", () => {
@@ -70,16 +71,18 @@ describe("toEntries and weekSummaryText", () => {
       (node) => node.mergedAt
     )
     expect(shipped.map((entry) => entry.number)).toEqual([1, 2])
-    expect(
-      weekSummaryText({
-        since: "2026-10-12T00:00:00Z",
-        shipped,
-        started: [],
-        closed: [],
-        reviewed: [shipped[0]],
-      })
-    ).toBe(
+    const summary = {
+      since: "2026-10-12T00:00:00Z",
+      shipped,
+      started: [],
+      closed: [],
+      reviewed: [shipped[0]],
+    }
+    expect(weekSummaryText(summary, messagesFor("fr"))).toBe(
       "Livré :\n• Restore login (#1)\n• Add export (#2)\n\nReviewé :\n• Restore login"
+    )
+    expect(weekSummaryText(summary, messagesFor("en"))).toBe(
+      "Shipped:\n• Restore login (#1)\n• Add export (#2)\n\nReviewed:\n• Restore login"
     )
   })
 })

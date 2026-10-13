@@ -3,6 +3,7 @@ import { z } from "zod"
 import type { Database } from "@/server/db/client"
 import { ATTENTION_KINDS, SUMMARY_LENGTHS, settings } from "@/server/db/schema"
 import type { SlackDiscussion } from "@/server/db/schema"
+import { DEFAULT_LANGUAGE, LANGUAGES } from "@/lib/i18n/core"
 
 /** A local time of day, `HH:MM`. */
 const TIME = /^([01]\d|2[0-3]):[0-5]\d$/
@@ -12,6 +13,8 @@ const COMMAND = /^\/[\w.-]+(:[\w.-]+)*$/
 
 /** Options edited in the settings page. `null` falls back to the `.env` value. */
 export const preferencesSchema = z.object({
+  /** The language of the UI, of the notifications and of the AI's answers. */
+  language: z.enum(LANGUAGES).default(DEFAULT_LANGUAGE),
   slackExcludedChannels: z.array(z.string()).default([]),
   slackAutoSearch: z.boolean().default(true),
   /** After a review sent from the app, offer to tell the author on Slack. */
@@ -67,6 +70,7 @@ export type Preferences = z.infer<typeof preferencesSchema>
 
 /** Without defaults: a patch must leave the options it does not mention untouched. */
 export const preferencesPatchSchema = z.object({
+  language: z.enum(LANGUAGES).optional(),
   slackExcludedChannels: z.array(z.string()).optional(),
   slackAutoSearch: z.boolean().optional(),
   reviewNoticeEnabled: z.boolean().optional(),

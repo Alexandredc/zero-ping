@@ -4,17 +4,20 @@ import { checksQuery, useRerunChecks } from "@/hooks/use-inbox"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Spinner } from "@/components/ui/spinner"
+import { useI18n } from "@/hooks/use-i18n"
 
 /** The checks failing on the PR's head, with their logs and a re-run of the failed jobs. */
 export function FailedChecks({ itemKey }: { itemKey: string }) {
   const { data, isPending, error } = useQuery(checksQuery(itemKey))
   const rerun = useRerunChecks(itemKey)
+  const { t } = useI18n()
+  const m = t.pull.checks
 
   return (
     <section className="flex flex-col gap-2 rounded-lg border border-destructive/30 bg-destructive/5 p-3">
       <header className="flex items-center gap-2">
         <XCircleIcon className="size-4 text-destructive" />
-        <h3 className="text-sm font-semibold">CI en échec</h3>
+        <h3 className="text-sm font-semibold">{m.failedTitle}</h3>
         {data && data.rerunnableRuns.length > 0 && (
           <Button
             variant="outline"
@@ -28,21 +31,18 @@ export function FailedChecks({ itemKey }: { itemKey: string }) {
             ) : (
               <RotateCwIcon data-icon="inline-start" />
             )}
-            {rerun.isSuccess ? "Relancés" : "Relancer les jobs en échec"}
+            {rerun.isSuccess ? m.rerunDone : m.rerun}
           </Button>
         )}
       </header>
       {isPending && <Skeleton className="h-8 w-full" />}
       {error && (
         <p className="text-xs text-muted-foreground">
-          Checks indisponibles : {error.message}
+          {m.unavailable(error.message)}
         </p>
       )}
       {data && data.failed.length === 0 && (
-        <p className="text-xs text-muted-foreground">
-          Plus aucun check en échec sur le dernier commit : la CI tourne
-          peut-être encore.
-        </p>
+        <p className="text-xs text-muted-foreground">{m.noneFailing}</p>
       )}
       {data && data.failed.length > 0 && (
         <ul className="flex flex-col gap-1 text-xs">
@@ -64,7 +64,7 @@ export function FailedChecks({ itemKey }: { itemKey: string }) {
                   rel="noreferrer"
                   className="inline-flex shrink-0 items-center gap-1 text-primary hover:underline"
                 >
-                  Voir le log
+                  {m.viewLog}
                   <ExternalLinkIcon className="size-3" />
                 </a>
               )}
@@ -73,10 +73,7 @@ export function FailedChecks({ itemKey }: { itemKey: string }) {
         </ul>
       )}
       {data && data.failed.length > 0 && data.rerunnableRuns.length === 0 && (
-        <p className="text-xs text-muted-foreground">
-          Ces checks viennent d'une CI externe : relance-les depuis son
-          interface.
-        </p>
+        <p className="text-xs text-muted-foreground">{m.externalCi}</p>
       )}
     </section>
   )

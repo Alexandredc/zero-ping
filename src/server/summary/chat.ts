@@ -1,4 +1,6 @@
 import { z } from "zod"
+import { LANGUAGE_PROMPT_NAMES } from "@/lib/i18n/core"
+import type { Language } from "@/lib/i18n/core"
 import type { ChatMessage, PullInsight } from "@/server/db/schema"
 import type { UatStatus } from "@/server/github/uat"
 import type { InsightSpec } from "@/lib/insights"
@@ -9,23 +11,28 @@ const MAX_DIFF_CHARS = 60_000
 /** Earlier exchanges kept in the prompt, so follow-up questions make sense. */
 const MAX_HISTORY = 10
 
-export const CHAT_JSON_SCHEMA = {
-  type: "object",
-  additionalProperties: false,
-  required: ["answer"],
-  properties: {
-    answer: {
-      type: "string",
-      description: "The answer, in French Markdown.",
+export function chatJsonSchema(language: Language) {
+  return {
+    type: "object",
+    additionalProperties: false,
+    required: ["answer"],
+    properties: {
+      answer: {
+        type: "string",
+        description: `The answer, in ${LANGUAGE_PROMPT_NAMES[language]} Markdown.`,
+      },
     },
-  },
+  }
 }
 
-export function buildChatPrompt(readerLogin: string): string {
+export function buildChatPrompt(
+  readerLogin: string,
+  language: Language
+): string {
   return [
     `Answer the question of ${readerLogin}, a lead developer, about the GitHub item given on stdin.`,
     "The input holds the item, its GitHub conversation, the Slack threads found about it, its facts (Jev's KPIs, its status and priority on the team's GitHub project, whether a pull request runs on uat), the diff for a pull request, then the earlier exchanges and the question.",
-    "Write in French, plainly and briefly; use Markdown and code references (file:line) when they help. Name people with their handle.",
+    `Write in ${LANGUAGE_PROMPT_NAMES[language]}, plainly and briefly; use Markdown and code references (file:line) when they help. Name people with their handle.`,
     "Only use what the input says. When it does not hold the answer, say so instead of guessing. Do not use any tool.",
   ].join("\n")
 }

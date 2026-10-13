@@ -45,6 +45,12 @@ describe("demo guards", () => {
         { kind: "claude", command: "claude", model: undefined }
       )
     ).rejects.toThrow(DEMO_OFFLINE)
+    await expect(
+      runAgent(
+        { prompt: "hi", schema: {} },
+        { kind: "claude", command: "claude", model: undefined, language: "en" }
+      )
+    ).rejects.toThrow("Demo mode: nothing is sent to GitHub, Slack or the AI.")
     vi.stubEnv("TYPESAFE_AI_API_KEY", "key")
     expect(getDecisionModel()).toBeNull()
   })

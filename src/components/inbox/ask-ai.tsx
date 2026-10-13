@@ -14,19 +14,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { Spinner } from "@/components/ui/spinner"
 import { Textarea } from "@/components/ui/textarea"
 import { cn } from "@/lib/utils"
-
-const SUGGESTIONS: Record<"PR" | "issue", string[]> = {
-  PR: [
-    "Qu'est-ce qui bloque le merge ?",
-    "Quels fichiers relire en priorité ?",
-    "Y a-t-il un risque en prod ?",
-  ],
-  issue: [
-    "Qu'est-ce qui reste à faire ?",
-    "Qui attend une décision ?",
-    "Comment découper ce ticket ?",
-  ],
-}
+import { useI18n } from "@/hooks/use-i18n"
 
 /**
  * Questions to the AI about the item, under its summary. It reads the
@@ -39,6 +27,8 @@ export function AskAi({
   itemKey: string
   kind: "PR" | "issue"
 }) {
+  const { t } = useI18n()
+  const copy = t.detail.ask
   const { data, isPending } = useQuery(chatQuery(itemKey))
   const ask = useAskAi(itemKey)
   const clear = useClearChat(itemKey)
@@ -68,17 +58,17 @@ export function AskAi({
       <header className="flex items-center gap-2">
         <MessageCircleQuestionIcon className="size-4 text-muted-foreground" />
         <h4 className="text-xs font-medium text-muted-foreground">
-          Demander à l'IA
+          {copy.title}
         </h4>
         {messages.length > 0 && (
-          <Hint content="Efface les questions et les réponses de cet élément.">
+          <Hint content={copy.clearHint}>
             <Button
               variant="ghost"
               size="icon-xs"
               className="ml-auto"
               onClick={() => clear.mutate()}
               disabled={clear.isPending || ask.isPending}
-              aria-label="Effacer la discussion"
+              aria-label={copy.clear}
             >
               <Trash2Icon />
             </Button>
@@ -113,14 +103,13 @@ export function AskAi({
             {question}
           </p>
           <p className="flex items-center gap-2 text-xs text-muted-foreground">
-            <Spinner /> L'IA lit{" "}
-            {kind === "PR" ? "la PR et son diff" : "l'issue"}… (15 à 60 s)
+            <Spinner /> {copy.reading(kind === "PR")}
           </p>
         </>
       )}
       {!isPending && messages.length === 0 && !ask.isPending && (
         <div className="flex flex-wrap gap-1.5">
-          {SUGGESTIONS[kind].map((suggestion) => (
+          {copy.suggestions[kind].map((suggestion) => (
             <Button
               key={suggestion}
               variant="outline"
@@ -145,7 +134,7 @@ export function AskAi({
             }
             if (event.key === "Escape") event.currentTarget.blur()
           }}
-          placeholder={`Une question sur cette ${kind} ?`}
+          placeholder={copy.placeholder(kind)}
           disabled={ask.isPending}
           className="max-h-40 min-h-9 bg-background"
           rows={1}
@@ -153,8 +142,10 @@ export function AskAi({
         <Hint
           content={
             <>
-              Envoyer à l'IA (<Kbd>Entrée</Kbd>, <Kbd>Maj</Kbd>{" "}
-              <Kbd>Entrée</Kbd> pour aller à la ligne)
+              {copy.sendHintStart}
+              <Kbd>{t.detail.composer.keysEnter}</Kbd>,{" "}
+              <Kbd>{copy.sendHintShift}</Kbd>{" "}
+              <Kbd>{t.detail.composer.keysEnter}</Kbd> {copy.sendHintEnd}
             </>
           }
           className="flex"
@@ -163,7 +154,7 @@ export function AskAi({
             size="icon-sm"
             onClick={() => send()}
             disabled={!question.trim() || ask.isPending}
-            aria-label="Envoyer la question"
+            aria-label={copy.send}
           >
             {ask.isPending ? <Spinner /> : <ArrowUpIcon />}
           </Button>

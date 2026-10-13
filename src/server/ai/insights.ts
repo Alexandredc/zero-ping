@@ -96,7 +96,7 @@ export async function computeInsights(
         ? {
             type: "score" as const,
             instructions: spec.instructions,
-            criteria: spec.levels,
+            criteria: spec.criteria,
           }
         : { type: "boolean" as const, instructions: spec.instructions },
     ])

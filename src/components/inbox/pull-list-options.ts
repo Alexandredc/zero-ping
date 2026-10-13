@@ -3,6 +3,7 @@ import { byDate } from "@/lib/list-filters"
 import { sortOptions } from "@/lib/sorts"
 import type { FilterDef } from "@/lib/list-filters"
 import type { InboxItem } from "@/server/inbox/actions"
+import type { Messages } from "@/lib/i18n/messages"
 
 export const PULL_SORTS = [
   "priority",
@@ -46,82 +47,86 @@ const CI: Record<string, string> = {
   EXPECTED: "pending",
 }
 
-const URGENCY = ["Peut attendre", "Normale", "Importante", "Bloquante"]
-
-export const PULL_FILTERS: FilterDef<InboxItem>[] = [
-  {
-    id: "kind",
-    label: "Type",
-    valuesOf: (item) => [item.kind],
-    options: [
-      { value: "PullRequest", label: "PR" },
-      { value: "Issue", label: "Issue" },
-    ],
-  },
-  {
-    id: "review",
-    label: "Review",
-    valuesOf: (item) => (item.reviewDecision ? [item.reviewDecision] : []),
-    options: [
-      { value: "REVIEW_REQUIRED", label: "Review requise" },
-      { value: "CHANGES_REQUESTED", label: "Changements demandés" },
-      { value: "APPROVED", label: "Approuvée" },
-    ],
-  },
-  {
-    id: "ci",
-    label: "CI",
-    valuesOf: (item) =>
-      item.ciState && CI[item.ciState] ? [CI[item.ciState]] : [],
-    options: [
-      { value: "failed", label: "CI en échec" },
-      { value: "pending", label: "CI en cours" },
-      { value: "passed", label: "CI passée" },
-    ],
-  },
-  {
-    id: "draft",
-    label: "État",
-    valuesOf: (item) =>
-      item.kind === "PullRequest" ? [item.isDraft ? "draft" : "ready"] : [],
-    options: [
-      { value: "ready", label: "Prête pour review" },
-      { value: "draft", label: "Brouillon" },
-    ],
-  },
-  {
-    id: "size",
-    label: "Taille",
-    valuesOf: (item) =>
-      item.additions === null ? [] : [pullSize(item.additions, item.deletions)],
-    options: ["XS", "S", "M", "L", "XL"].map((size) => ({
-      value: size,
-      label: `Taille ${size}`,
-    })),
-  },
-  {
-    id: "jev",
-    label: "Urgence Jev",
-    valuesOf: (item) =>
-      item.jevUrgency === null ? [] : [String(item.jevUrgency)],
-    options: [3, 2, 1, 0].map((level) => ({
-      value: String(level),
-      label: URGENCY[level],
-    })),
-  },
-  {
-    id: "author",
-    label: "Auteur",
-    valuesOf: (item) => (item.author ? [item.author] : []),
-  },
-  {
-    id: "repo",
-    label: "Repo",
-    valuesOf: (item) => [item.repoFullName.split("/")[1]],
-  },
-  {
-    id: "label",
-    label: "Label",
-    valuesOf: (item) => item.labels,
-  },
-]
+/** The filters of the PR lists, named in the chosen language. */
+export function pullFilters(t: Messages): FilterDef<InboxItem>[] {
+  const f = t.inbox.filters
+  return [
+    {
+      id: "kind",
+      label: f.kind,
+      valuesOf: (item) => [item.kind],
+      options: [
+        { value: "PullRequest", label: "PR" },
+        { value: "Issue", label: "Issue" },
+      ],
+    },
+    {
+      id: "review",
+      label: f.review,
+      valuesOf: (item) => (item.reviewDecision ? [item.reviewDecision] : []),
+      options: [
+        { value: "REVIEW_REQUIRED", label: f.reviewRequired },
+        { value: "CHANGES_REQUESTED", label: f.changesRequested },
+        { value: "APPROVED", label: f.approved },
+      ],
+    },
+    {
+      id: "ci",
+      label: f.ci,
+      valuesOf: (item) =>
+        item.ciState && CI[item.ciState] ? [CI[item.ciState]] : [],
+      options: [
+        { value: "failed", label: f.ciFailed },
+        { value: "pending", label: f.ciPending },
+        { value: "passed", label: f.ciPassed },
+      ],
+    },
+    {
+      id: "draft",
+      label: f.state,
+      valuesOf: (item) =>
+        item.kind === "PullRequest" ? [item.isDraft ? "draft" : "ready"] : [],
+      options: [
+        { value: "ready", label: f.ready },
+        { value: "draft", label: f.draft },
+      ],
+    },
+    {
+      id: "size",
+      label: f.size,
+      valuesOf: (item) =>
+        item.additions === null
+          ? []
+          : [pullSize(item.additions, item.deletions)],
+      options: ["XS", "S", "M", "L", "XL"].map((size) => ({
+        value: size,
+        label: t.inbox.strip.size(size),
+      })),
+    },
+    {
+      id: "jev",
+      label: f.jev,
+      valuesOf: (item) =>
+        item.jevUrgency === null ? [] : [String(item.jevUrgency)],
+      options: [3, 2, 1, 0].map((level) => ({
+        value: String(level),
+        label: f.urgency[level],
+      })),
+    },
+    {
+      id: "author",
+      label: f.author,
+      valuesOf: (item) => (item.author ? [item.author] : []),
+    },
+    {
+      id: "repo",
+      label: f.repo,
+      valuesOf: (item) => [item.repoFullName.split("/")[1]],
+    },
+    {
+      id: "label",
+      label: f.label,
+      valuesOf: (item) => item.labels,
+    },
+  ]
+}

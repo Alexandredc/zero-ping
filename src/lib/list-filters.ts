@@ -1,3 +1,5 @@
+import type { Language } from "@/lib/i18n/core"
+
 /** One filter of a list: the values an item has for it, and the labels of those values. */
 export type FilterDef<T> = {
   id: string
@@ -29,7 +31,8 @@ export function applyFilters<T>(
 /** The menu's options with how many items each one keeps, the empty ones left out. */
 export function filterOptions<T>(
   items: T[],
-  def: FilterDef<T>
+  def: FilterDef<T>,
+  language: Language
 ): { value: string; label: string; count: number }[] {
   const counts = new Map<string, number>()
   for (const item of items)
@@ -38,7 +41,7 @@ export function filterOptions<T>(
   const options =
     def.options ??
     [...counts.keys()]
-      .sort((a, b) => a.localeCompare(b, "fr"))
+      .sort((a, b) => a.localeCompare(b, language))
       .map((value) => ({ value, label: value }))
   return options
     .map((option) => ({ ...option, count: counts.get(option.value) ?? 0 }))

@@ -13,6 +13,9 @@ import {
   sql,
 } from "drizzle-orm"
 import { getDb } from "@/server/db/client"
+import { getLanguage, getMessages } from "@/server/i18n"
+import { messagesFor } from "@/lib/i18n/messages"
+import type { Messages } from "@/lib/i18n/messages"
 import {
   SUMMARY_LENGTHS,
   items,
@@ -68,11 +71,11 @@ import {
 import type { UatEntry, UatStatus } from "@/server/github/uat"
 import {
   MAX_CANDIDATES,
-  SEARCH_JSON_SCHEMA,
   buildSearchInput,
   buildSearchPrompt,
   fetchBodies,
   parseSearchAnswer,
+  searchJsonSchema,
 } from "@/server/search/smart-search"
 import type { SearchCandidate, SearchMatch } from "@/server/search/smart-search"
 import type { Octokit } from "octokit"
@@ -114,14 +117,14 @@ import {
   computeInsights,
   insightHash,
 } from "@/server/ai/insights"
-import { INSIGHTS, ISSUE_INSIGHTS } from "@/lib/insights"
+import { issueInsightSpecs, pullInsightSpecs } from "@/lib/insights"
 import { getDecisionModel } from "@/server/ai/models"
 import {
-  CHAT_JSON_SCHEMA,
   buildChatInput,
   formatItemFacts,
   buildChatPrompt,
   formatDiff,
+  chatJsonSchema,
   parseChatAnswer,
 } from "@/server/summary/chat"
 import { subjectToItem, teamPullToItem } from "@/server/team/as-item"
@@ -131,7 +134,6 @@ import {
   trustedUrgency,
 } from "@/server/ai/scores"
 import type { Score, ScoreSubject } from "@/server/ai/scores"
-import { URGENCY_LEVELS } from "@/server/inbox/priority"
 import {
   appendReply,
   requestLookup,
@@ -277,9 +279,11 @@ export async function listAllPulls(
       ),
     getViewer(),
   ])
+  const preferences = await getPreferences(db)
+  const t = messagesFor(preferences.language)
   const hiddenChannels = await slackExclusions(
     db,
-    (await getPreferences(db)).slackExcludedChannels
+    preferences.slackExcludedChannels
   )
   const known = new Map(
     rows.map((row) => [
@@ -302,7 +306,7 @@ export async function listAllPulls(
   // An inbox item that left the active folders keeps no triage: the team score fills in.
   const withCachedScore = (item: InboxItem): InboxItem => {
     if (item.jevUrgency !== null) return item
-    const scored = withJevScore(item, scores.get(item.key))
+    const scored = withJevScore(item, scores.get(item.key), t)
     return { ...item, ...scored, jevUrgency: jevUrgencyOf(scored) }
   }
   const all: InboxItem[] = [
@@ -311,7 +315,8 @@ export async function listAllPulls(
       if (item) return withCachedScore(item)
       const synthetic = withJevScore(
         teamPullToItem(pull, viewer.login),
-        scores.get(pull.key)
+        scores.get(pull.key),
+        t
       )
       return {
         ...synthetic,
@@ -339,7 +344,7 @@ export async function listAllPulls(
 }
 
 /** Shows Jev's level on a team PR like on an inbox item, without a priority score. */
-function withJevScore(item: Item, score: Score | undefined): Item {
+function withJevScore(item: Item, score: Score | undefined, t: Messages): Item {
   if (!score) return item
   const urgency = trustedUrgency(score)
   return {
@@ -352,9 +357,11 @@ function withJevScore(item: Item, score: Score | undefined): Item {
         ? []
         : [
             {
-              label: `IA : ${URGENCY_LEVELS[Math.round(urgency)].toLowerCase()}`,
+              label: t.server.priority.ai(
+                t.server.priority.urgencyLevels[Math.round(urgency)]
+              ),
               weight: Math.round(urgency * 10),
-              hint: "Urgence estimée par Jev à partir du titre, de la description, des labels et des derniers commentaires.",
+              hint: t.server.priority.aiHint,
             },
           ],
   }
@@ -411,7 +418,8 @@ async function getItem(key: string): Promise<Item> {
     await db.select().from(teamPulls).where(eq(teamPulls.key, key))
   ).at(0)
   if (pull) return teamPullToItem(pull, (await getViewer()).login)
-  throw new Error(`Élément introuvable : ${key}`)
+  const { t } = await getMessages(db)
+  throw new Error(t.server.errors.itemNotFound(key))
 }
 
 const HOUR_MS = 60 * 60 * 1000
@@ -521,7 +529,8 @@ export async function getWorkConversation(
   kind: "Issue" | "PullRequest"
 ) {
   const ref = parseSubjectKey(key)
-  if (!ref) throw new Error(`Élément illisible : ${key}`)
+  if (!ref)
+    throw new Error((await getMessages()).t.server.errors.itemUnreadable(key))
   return cachedConversation(await getOctokit(), ref, kind)
 }
 
@@ -540,7 +549,7 @@ export type ReplyTarget =
 
 export async function reply(key: string, body: string, target: ReplyTarget) {
   const ref = parseSubjectKey(key)
-  if (!ref) throw new Error("Impossible de répondre à cet élément.")
+  if (!ref) throw new Error((await getMessages()).t.server.errors.cannotReply)
   const octokit = await getOctokit()
   const { data } =
     target.type === "thread"
@@ -571,7 +580,7 @@ export async function submitReview(
   body: string
 ) {
   const ref = parseSubjectKey(key)
-  if (!ref) throw new Error("Impossible de reviewer cet élément.")
+  if (!ref) throw new Error((await getMessages()).t.server.errors.cannotReview)
   const octokit = await getOctokit()
   const { data } = await octokit.rest.pulls.createReview({
     owner: ref.owner,
@@ -625,14 +634,17 @@ export async function getReviewNotice(key: string, event: ReviewEvent) {
     channel,
     threadPermalink: thread?.permalink ?? null,
     author,
-    message: draftReviewNotice({
-      event,
-      repoFullName: item.repoFullName,
-      number: item.number,
-      title: item.title,
-      url: item.htmlUrl,
-      author: item.author,
-    }),
+    message: draftReviewNotice(
+      {
+        event,
+        repoFullName: item.repoFullName,
+        number: item.number,
+        title: item.title,
+        url: item.htmlUrl,
+        author: item.author,
+      },
+      messagesFor(preferences.language)
+    ),
   }
 }
 
@@ -673,7 +685,7 @@ export async function sendReviewNotice(input: {
     },
     config
   )
-  return parseReply(answer)
+  return parseReply(answer, messagesFor(preferences.language))
 }
 
 export async function listRepos() {
@@ -806,12 +818,11 @@ export async function replyInSlack(
   permalink: string,
   message: string
 ) {
+  const db = await getDb()
+  const { t } = await getMessages(db)
   const thread = parsePermalink(permalink)
-  if (!thread)
-    throw new Error(
-      "Lien Slack illisible : ouvre le fil dans Slack pour répondre."
-    )
-  const config = await resolveAgentConfig(await getDb())
+  if (!thread) throw new Error(t.server.errors.slackLinkUnreadable)
+  const config = await resolveAgentConfig(db)
   const tools = slackSendTools(config.kind)
   const answer = await runAgent(
     {
@@ -822,8 +833,8 @@ export async function replyInSlack(
     },
     config
   )
-  const result = parseReply(answer)
-  await appendReply(await getDb(), key, permalink, message)
+  const result = parseReply(answer, t)
+  await appendReply(db, key, permalink, message)
   return result
 }
 
@@ -943,7 +954,8 @@ async function summaryContext(key: string) {
   const item = await getItem(key)
   const ref = parseSubjectKey(key)
   if (!ref || (item.kind !== "PullRequest" && item.kind !== "Issue")) {
-    throw new Error("Seules les PR et les issues peuvent être résumées.")
+    const { t } = await getMessages(db)
+    throw new Error(t.server.errors.summaryNeedsSubject)
   }
   const [octokit, viewer, preferences, lookup] = await Promise.all([
     getOctokit(),
@@ -972,6 +984,7 @@ async function summaryContext(key: string) {
     octokit,
     viewer,
     config,
+    language: preferences.language,
     input: buildSummaryInput(item, conversation, slack),
   }
 }
@@ -993,6 +1006,7 @@ export async function getPullInsights(
   if (!model)
     return { available: false as const, insights: [], createdAt: null }
   const db = await getDb()
+  const { t } = await getMessages(db)
   // An issue of « Mes issues » may be known only by what the page sends.
   const item = await getItem(key).catch((error: unknown) => {
     if (subject) return subjectToItem({ key, ...subject })
@@ -1000,7 +1014,7 @@ export async function getPullInsights(
   })
   const ref = parseSubjectKey(key)
   if (!ref || (item.kind !== "PullRequest" && item.kind !== "Issue"))
-    throw new Error("Seules les PR et les issues ont des KPI Jev.")
+    throw new Error(t.server.errors.insightsNeedSubject)
   const cached = (
     await db.select().from(pullInsights).where(eq(pullInsights.itemKey, key))
   ).at(0)
@@ -1024,7 +1038,7 @@ export async function getPullInsights(
       fetchConversation(octokit, { ...ref, kind: "PullRequest" }),
       fetchPullFiles(octokit, ref),
     ])
-    if (!conversation) throw new Error("Conversation de la PR introuvable.")
+    if (!conversation) throw new Error(t.server.errors.pullConversationNotFound)
     state = buildInsightState(conversation, files.files, {
       ciState: item.ciState,
       reviewDecision: item.reviewDecision,
@@ -1034,10 +1048,12 @@ export async function getPullInsights(
       fetchConversation(octokit, { ...ref, kind: "Issue" }),
       getViewer(),
     ])
-    if (!conversation) throw new Error("Conversation de l'issue introuvable.")
+    if (!conversation)
+      throw new Error(t.server.errors.issueConversationNotFound)
     state = buildIssueInsightState(conversation, item.labels, viewer.login)
   }
-  const specs = item.kind === "PullRequest" ? INSIGHTS : ISSUE_INSIGHTS
+  const specs =
+    item.kind === "PullRequest" ? pullInsightSpecs(t) : issueInsightSpecs(t)
   const hash = insightHash(state)
   // Past the TTL, an unchanged item keeps its KPIs: Jev is only asked again on a change.
   if (cached && cached.hash === hash && !force) {
@@ -1114,8 +1130,10 @@ export async function clearChat(key: string) {
 /** Asks the AI a question about the item, with the earlier exchanges, and keeps both. */
 export async function askAboutItem(key: string, question: string) {
   const db = await getDb()
-  const [{ item, ref, octokit, viewer, config, input }, { messages }] =
-    await Promise.all([summaryContext(key), getChat(key)])
+  const [
+    { item, ref, octokit, viewer, config, language, input },
+    { messages },
+  ] = await Promise.all([summaryContext(key), getChat(key)])
   const isPull = item.kind === "PullRequest"
   // Everything the panel shows next to the conversation, so the answer matches it.
   const [diff, kpis, project, uat] = await Promise.all([
@@ -1132,7 +1150,9 @@ export async function askAboutItem(key: string, question: string) {
   ])
   const facts = formatItemFacts({
     insights: kpis,
-    specs: isPull ? INSIGHTS : ISSUE_INSIGHTS,
+    specs: isPull
+      ? pullInsightSpecs(messagesFor(language))
+      : issueInsightSpecs(messagesFor(language)),
     project: project && {
       title: project.projectTitle,
       status: project.status,
@@ -1143,9 +1163,9 @@ export async function askAboutItem(key: string, question: string) {
   })
   const answer = await runAgent(
     {
-      prompt: buildChatPrompt(viewer.login),
+      prompt: buildChatPrompt(viewer.login, language),
       input: buildChatInput(input, facts, diff, messages, question),
-      schema: CHAT_JSON_SCHEMA,
+      schema: chatJsonSchema(language),
       allowedTools: [],
       timeoutMs: 3 * 60_000,
     },
@@ -1179,10 +1199,10 @@ export async function generateSummary(key: string, length: SummaryLength) {
   }
   const run = (async () => {
     const db = await getDb()
-    const { item, viewer, input, config } = await summaryContext(key)
+    const { item, viewer, input, config, language } = await summaryContext(key)
     const answer = await runAgent(
       {
-        prompt: buildSummaryPrompt(viewer.login, length),
+        prompt: buildSummaryPrompt(viewer.login, language, length),
         input,
         schema: SUMMARY_JSON_SCHEMA,
         allowedTools: [],
@@ -1234,7 +1254,7 @@ export async function getPullFiles(key: string, sinceReview = false) {
   const ref = parseSubjectKey(key)
   const item = await getItem(key)
   if (!ref || item.kind !== "PullRequest") {
-    throw new Error("Seules les PR ont des fichiers modifiés.")
+    throw new Error((await getMessages()).t.server.errors.filesNeedPull)
   }
   const since =
     sinceReview && item.reviewedOid && item.headOid
@@ -1243,14 +1263,15 @@ export async function getPullFiles(key: string, sinceReview = false) {
   return fetchPullFiles(await getOctokit(), ref, since)
 }
 
-function pullRef(key: string) {
+async function pullRef(key: string) {
   const ref = parseSubjectKey(key)
-  if (!ref) throw new Error("Cet élément n'est pas une PR.")
+  if (!ref) throw new Error((await getMessages()).t.server.errors.notAPull)
   return ref
 }
 
 export async function getMergeInfo(key: string) {
-  return fetchMergeInfo(await getOctokit(), pullRef(key))
+  const { t } = await getMessages()
+  return fetchMergeInfo(await getOctokit(), await pullRef(key), t)
 }
 
 export async function merge(
@@ -1258,10 +1279,13 @@ export async function merge(
   method: MergeMethod,
   deleteBranch: boolean
 ) {
-  const result = await mergePull(await getOctokit(), pullRef(key), {
-    method,
-    deleteBranch,
-  })
+  const { t } = await getMessages()
+  const result = await mergePull(
+    await getOctokit(),
+    await pullRef(key),
+    { method, deleteBranch },
+    t
+  )
   forgetConversation(key)
   checksCache.invalidate(key)
   await refreshItem(key)
@@ -1269,12 +1293,13 @@ export async function merge(
 }
 
 export async function getChecks(key: string) {
-  const ref = pullRef(key)
+  const ref = await pullRef(key)
   return checksCache.get(key, async () => fetchChecks(await getOctokit(), ref))
 }
 
 export async function rerunChecks(key: string) {
-  const runs = await rerunFailedJobs(await getOctokit(), pullRef(key))
+  const { t } = await getMessages()
+  const runs = await rerunFailedJobs(await getOctokit(), await pullRef(key), t)
   checksCache.invalidate(key)
   // The new runs take a few seconds to replace the failed status.
   setTimeout(() => void refreshItem(key).catch(() => undefined), 15_000)
@@ -1314,7 +1339,7 @@ export async function countTeamProblems(): Promise<number> {
 
 /** Adds the viewer as reviewer; the next sync brings the PR into « À reviewer ». */
 export async function takeReview(key: string) {
-  const ref = pullRef(key)
+  const ref = await pullRef(key)
   const [octokit, viewer] = await Promise.all([getOctokit(), getViewer()])
   await octokit.rest.pulls.requestReviewers({
     owner: ref.owner,
@@ -1327,14 +1352,24 @@ export async function takeReview(key: string) {
 
 export async function getReviewerOptions(key: string) {
   const [octokit, viewer] = await Promise.all([getOctokit(), getViewer()])
-  return fetchReviewerOptions(octokit, pullRef(key), viewer.login)
+  return fetchReviewerOptions(
+    octokit,
+    await pullRef(key),
+    viewer.login,
+    await getLanguage()
+  )
 }
 
 /** Leaves exactly `wanted` as requested reviewers, then updates the local copies. */
 export async function setReviewers(key: string, wanted: string[]) {
-  const ref = pullRef(key)
+  const ref = await pullRef(key)
   const [octokit, viewer] = await Promise.all([getOctokit(), getViewer()])
-  const { requested } = await fetchReviewerOptions(octokit, ref, viewer.login)
+  const { requested } = await fetchReviewerOptions(
+    octokit,
+    ref,
+    viewer.login,
+    await getLanguage()
+  )
   const changes = reviewerChanges(requested, wanted)
   await updateReviewers(octokit, ref, changes)
 
@@ -1541,7 +1576,7 @@ export async function searchItems(input: {
   )
   const answer = await runAgent(
     {
-      prompt: buildSearchPrompt(input.kind),
+      prompt: buildSearchPrompt(input.kind, preferences.language),
       input: buildSearchInput(
         input.query,
         candidates.map((candidate) => ({
@@ -1550,7 +1585,7 @@ export async function searchItems(input: {
           summary: summaryOf.get(candidate.key) ?? null,
         }))
       ),
-      schema: SEARCH_JSON_SCHEMA,
+      schema: searchJsonSchema(preferences.language),
       allowedTools: [],
       timeoutMs: 2 * 60_000,
     },
@@ -1692,17 +1727,18 @@ export async function getRecap() {
     readStandup(db, "me"),
     getPreferences(db),
   ])
+  const t = messagesFor(preferences.language)
   return {
     ...recap,
     standups: {
       team: {
         state: team,
-        publishBlocker: publishBlocker(team, "team"),
+        publishBlocker: publishBlocker(team, "team", t),
         enabled: preferences.standupEnabled,
       },
       me: {
         state: me,
-        publishBlocker: publishBlocker(me, "me"),
+        publishBlocker: publishBlocker(me, "me", t),
         enabled: preferences.myStandupEnabled,
       },
     },

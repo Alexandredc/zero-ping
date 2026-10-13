@@ -1,8 +1,11 @@
 import { Sidebar } from "./sidebar"
-import { PAGE_META } from "./pages"
+import { PAGE_ICONS } from "./pages"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { useI18n } from "@/hooks/use-i18n"
+import { DEFAULT_LANGUAGE } from "@/lib/i18n/core"
+import type { Language } from "@/lib/i18n/core"
 
-type LeadPageKey = Exclude<keyof typeof PAGE_META, "settings">
+type LeadPageKey = Exclude<keyof typeof PAGE_ICONS, "settings">
 
 /**
  * Shared frame of the pages outside the inbox (Lead, « Mes issues »): the same header (icon, title, description,
@@ -22,8 +25,8 @@ export function LeadPage({
   toolbar?: React.ReactNode
   children: React.ReactNode
 }) {
-  const meta = PAGE_META[page]
-  const Icon = meta.icon
+  const { t } = useI18n()
+  const Icon = PAGE_ICONS[page]
   return (
     <div className="flex h-svh overflow-hidden">
       <Sidebar page={page} />
@@ -34,7 +37,7 @@ export function LeadPage({
               <div className="flex min-w-0 flex-col gap-1">
                 <h1 className="flex items-center gap-2 font-heading text-lg font-semibold tracking-tight">
                   <Icon className="size-5 shrink-0 text-muted-foreground" />
-                  {meta.label}
+                  {t.nav.pages[page]}
                 </h1>
                 <p className="max-w-3xl text-sm text-muted-foreground">
                   {description}
@@ -60,8 +63,11 @@ export function LeadPage({
 }
 
 /** The day, as the Lead pages show it under their title. */
-export function todayLabel(now: Date = new Date()): string {
-  const label = now.toLocaleDateString("fr", {
+export function todayLabel(
+  language: Language = DEFAULT_LANGUAGE,
+  now: Date = new Date()
+): string {
+  const label = now.toLocaleDateString(language, {
     weekday: "long",
     day: "numeric",
     month: "long",

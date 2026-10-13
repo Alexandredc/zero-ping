@@ -1,19 +1,11 @@
-import type { TeamProblem } from "@/server/db/schema"
-
-export const TEAM_PROBLEM_LABEL: Record<TeamProblem, string> = {
-  "no-reviewer": "Sans reviewer",
-  changes: "Changements en attente",
-  ci: "CI en échec",
-  conflict: "En conflit",
-  stale: "Ouverte depuis longtemps",
-}
+import type { Messages } from "@/lib/i18n/messages"
 
 /** Prefix of team reviewers, so that people and teams can be told apart. */
 export const TEAM_PREFIX = "team:"
 
 /** `@lead` for a person, `équipe leads` for a team stored as `team:leads`. */
-export function reviewerLabel(reviewer: string): string {
+export function reviewerLabel(reviewer: string, t: Messages): string {
   return reviewer.startsWith(TEAM_PREFIX)
-    ? `équipe ${reviewer.slice(TEAM_PREFIX.length)}`
+    ? t.team.teamReviewer(reviewer.slice(TEAM_PREFIX.length))
     : `@${reviewer}`
 }

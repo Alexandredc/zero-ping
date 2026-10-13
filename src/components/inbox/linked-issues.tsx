@@ -9,9 +9,11 @@ import { Button } from "@/components/ui/button"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { workConversationQuery } from "@/hooks/use-inbox"
 import { cn } from "@/lib/utils"
+import { useI18n } from "@/hooks/use-i18n"
 import type { LinkedIssue } from "@/server/inbox/actions"
 
 function IssueView({ issue }: { issue: LinkedIssue }) {
+  const { t } = useI18n()
   const { data, isPending, error } = useQuery(
     workConversationQuery(issue.key, "Issue")
   )
@@ -31,7 +33,10 @@ function IssueView({ issue }: { issue: LinkedIssue }) {
               />
               {issue.key}
               <span className="font-sans">
-                · {open ? "ouverte" : "fermée"}
+                ·{" "}
+                {open
+                  ? t.detail.linkedIssues.open
+                  : t.detail.linkedIssues.closed}
                 {issue.assignees.length > 0 &&
                   ` · ${issue.assignees.map((login) => `@${login}`).join(", ")}`}
               </span>
@@ -47,7 +52,7 @@ function IssueView({ issue }: { issue: LinkedIssue }) {
             render={<a href={issue.url} target="_blank" rel="noreferrer" />}
           >
             <GitHubIcon data-icon="inline-start" />
-            Ouvrir
+            {t.common.open}
           </Button>
         </div>
         <ProjectFields itemKey={issue.key} />
@@ -70,6 +75,7 @@ function IssueView({ issue }: { issue: LinkedIssue }) {
 
 /** The issues the PR closes, one at a time, with their board fields and conversation. */
 export function LinkedIssues({ issues }: { issues: LinkedIssue[] }) {
+  const { t } = useI18n()
   const [chosen, setChosen] = useState(issues[0]?.key)
   const issue = issues.find((i) => i.key === chosen) ?? issues.at(0)
   if (!issue) return null
@@ -81,7 +87,7 @@ export function LinkedIssues({ issues }: { issues: LinkedIssue[] }) {
           onValueChange={(value) => value[0] && setChosen(value[0])}
           variant="outline"
           size="sm"
-          aria-label="Choisir l'issue"
+          aria-label={t.detail.linkedIssues.choose}
           className="flex-wrap"
         >
           {issues.map((linked) => (

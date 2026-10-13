@@ -9,6 +9,12 @@ import type { AgentConfig } from "@/server/agents/runner"
 import { getPreferences } from "@/server/preferences"
 import type { Preferences } from "@/server/preferences"
 import { recordAttention } from "@/server/inbox/attention"
+import { getMessages } from "@/server/i18n"
+import { LANGUAGE_PROMPT_NAMES } from "@/lib/i18n/core"
+import type { Language } from "@/lib/i18n/core"
+import type { Messages } from "@/lib/i18n/messages"
+import { publishBlocker } from "./standup-state"
+import type { StandupKind, StandupState } from "./standup-state"
 import {
   REPLY_JSON_SCHEMA,
   buildReplyPrompt,
@@ -16,30 +22,8 @@ import {
   slackSendTools,
 } from "@/server/slack/reply"
 
-export type StandupState = {
-  status: "idle" | "running" | "done" | "error"
-  /** Local day the last run belongs to. */
-  date: string | null
-  startedAt: string | null
-  finishedAt: string | null
-  /** The standup as written in the chat, with first names instead of Slack mentions. */
-  message: string | null
-  /** The same message with Slack mentions, as it will be posted. */
-  slackMessage: string | null
-  /** Today's "Daily standup reminder" thread, where the standup goes. */
-  channelId: string | null
-  threadTs: string | null
-  /** A team standup was already in the thread when the command ran. */
-  alreadyPosted: boolean
-  postedAt: string | null
-  postedLink: string | null
-  note: string | null
-  error: string | null
-}
-
-/** The team's standup, from the project board, and the viewer's own, from their PRs. */
-export type StandupKind = "team" | "me"
-export const STANDUP_KINDS: StandupKind[] = ["team", "me"]
+export { STANDUP_KINDS, publishBlocker } from "./standup-state"
+export type { StandupKind, StandupState } from "./standup-state"
 
 const EMPTY: StandupState = {
   status: "idle",
@@ -62,7 +46,7 @@ const nullableText = (description: string) => ({
   description,
 })
 
-export const standupJsonSchema = (kind: StandupKind) => ({
+export const standupJsonSchema = (kind: StandupKind, language: Language) => ({
   type: "object",
   additionalProperties: false,
   required: [
@@ -96,7 +80,7 @@ export const standupJsonSchema = (kind: StandupKind) => ({
           : "True when the user already posted their own standup in today's reminder thread.",
     },
     note: nullableText(
-      "In French, one sentence for anything the user must know: no reminder today, standup already posted, unknown names. Null otherwise."
+      `In ${LANGUAGE_PROMPT_NAMES[language]}, one sentence for anything the user must know: no reminder today, standup already posted, unknown names. Null otherwise.`
     ),
   },
 })
@@ -116,22 +100,16 @@ const KIND_CONFIG: Record<
     /** Settings row holding the last run. */
     key: string
     timeoutMs: number
-    readyTitle: string
-    alreadyPosted: string
   }
 > = {
   team: {
     key: "standup",
     // The board export alone takes about six minutes.
     timeoutMs: 25 * 60_000,
-    readyTitle: "Standup d'équipe prêt",
-    alreadyPosted: "Un point d'équipe est déjà dans le fil d'aujourd'hui.",
   },
   me: {
     key: "standup:me",
     timeoutMs: 10 * 60_000,
-    readyTitle: "Ton standup est prêt",
-    alreadyPosted: "Ton standup est déjà dans le fil d'aujourd'hui.",
   },
 }
 
@@ -169,10 +147,11 @@ export function standupSystemPrompt(
 }
 
 /** Why a standup cannot run yet, or null when it can. */
-export function standupSetupBlocker(settings: StandupSettings): string | null {
-  return settings.standupChannel
-    ? null
-    : "Choisis le canal Slack du standup dans Réglages > Récap."
+export function standupSetupBlocker(
+  settings: StandupSettings,
+  t: Messages
+): string | null {
+  return settings.standupChannel ? null : t.recap.standup.setupChannel
 }
 
 const globalForStandup = globalThis as unknown as {
@@ -199,7 +178,7 @@ export async function readStandup(
     return {
       ...state,
       status: "error",
-      error: "Interrompu par un redémarrage de l'app.",
+      error: (await getMessages(db)).t.recap.standup.interrupted,
     }
   return state
 }
@@ -225,10 +204,10 @@ export type StandupResult = Pick<
   | "note"
 >
 
-export function parseStandup(answer: unknown): StandupResult {
+export function parseStandup(answer: unknown, t: Messages): StandupResult {
   const value = answer as Record<string, unknown> | null
   if (!value || typeof value.message !== "string")
-    throw new Error("Le standup n'a pas renvoyé de message.")
+    throw new Error(t.recap.standup.noMessage)
   const text = (field: unknown) =>
     typeof field === "string" && field.trim() ? field.trim() : null
   return {
@@ -241,22 +220,6 @@ export function parseStandup(answer: unknown): StandupResult {
   }
 }
 
-/** Why the standup cannot be published, or null when it can. */
-export function publishBlocker(
-  state: StandupState,
-  kind: StandupKind
-): string | null {
-  if (!state.slackMessage)
-    return state.message
-      ? "Ce standup date d'avant le bouton : relance-le pour préparer sa version Slack."
-      : "Aucun standup à publier."
-  if (!state.channelId || !state.threadTs)
-    return "Pas de « Daily standup reminder » aujourd'hui : rien où publier."
-  if (state.postedAt) return "Ce standup est déjà publié."
-  if (state.alreadyPosted) return KIND_CONFIG[kind].alreadyPosted
-  return null
-}
-
 /** The instructions of a Claude Code command, without its frontmatter, for an agent that has no slash commands. */
 export function commandInstructions(markdown: string): string {
   return markdown
@@ -266,7 +229,7 @@ export function commandInstructions(markdown: string): string {
 }
 
 /** Claude Code runs the slash command; Codex reads the same command's file. */
-async function standupPrompt(agent: AgentConfig, command: string) {
+async function standupPrompt(agent: AgentConfig, command: string, t: Messages) {
   if (agent.kind === "claude") return command
   const file = path.join(
     homedir(),
@@ -277,9 +240,7 @@ async function standupPrompt(agent: AgentConfig, command: string) {
   try {
     return commandInstructions(await readFile(file, "utf8"))
   } catch {
-    throw new Error(
-      `Codex lit la commande ${command} dans ${file}, introuvable : crée-la ou repasse l'IA principale sur Claude.`
-    )
+    throw new Error(t.recap.standup.codexCommandMissing(command, file))
   }
 }
 
@@ -288,8 +249,11 @@ export async function publishStandup(
   db: Database,
   kind: StandupKind
 ): Promise<StandupState> {
-  const state = await readStandup(db, kind)
-  const blocker = publishBlocker(state, kind)
+  const [state, { t }] = await Promise.all([
+    readStandup(db, kind),
+    getMessages(db),
+  ])
+  const blocker = publishBlocker(state, kind, t)
   if (blocker) throw new Error(blocker)
   const config = getAgentConfig(process.env, await getPreferences(db))
   const tools = slackSendTools(config.kind)
@@ -306,7 +270,7 @@ export async function publishStandup(
     },
     config
   )
-  const { permalink } = parseReply(answer)
+  const { permalink } = parseReply(answer, t)
   const next = {
     ...state,
     postedAt: new Date().toISOString(),
@@ -325,8 +289,11 @@ export function startStandup(
   const config = KIND_CONFIG[kind]
   runs[kind] ??= (async () => {
     const startedAt = new Date().toISOString()
-    const preferences = await getPreferences(db)
-    const blocker = standupSetupBlocker(preferences)
+    const [preferences, { t, language }] = await Promise.all([
+      getPreferences(db),
+      getMessages(db),
+    ])
+    const blocker = standupSetupBlocker(preferences, t)
     if (blocker) {
       await writeStandup(db, kind, {
         ...(await readStandup(db, kind)),
@@ -354,16 +321,20 @@ export function startStandup(
       }
       const answer = await runAgent(
         {
-          prompt: await standupPrompt(agent, standupCommand(kind, preferences)),
+          prompt: await standupPrompt(
+            agent,
+            standupCommand(kind, preferences),
+            t
+          ),
           appendSystemPrompt: standupSystemPrompt(kind, preferences),
-          schema: standupJsonSchema(kind),
+          schema: standupJsonSchema(kind, language),
           allowedTools: ["Bash", "Read", "Write", ...SLACK_READ_TOOLS],
           sandbox: "workspace-write",
           timeoutMs: config.timeoutMs,
         },
         agent
       )
-      const result = parseStandup(answer)
+      const result = parseStandup(answer, t)
       await writeStandup(db, kind, {
         status: "done",
         date,
@@ -378,10 +349,8 @@ export function startStandup(
         {
           itemKey: kind === "team" ? "standup" : "standup:me",
           kind: "recap",
-          title: config.readyTitle,
-          body:
-            result.note ??
-            "Relis-le dans le récap du jour, puis publie-le dans Slack.",
+          title: t.recap.standup.kinds[kind].readyTitle,
+          body: result.note ?? t.recap.standup.readyBody,
         },
       ])
     } catch (error) {

@@ -11,6 +11,7 @@ import {
 import { prefetchLookups } from "@/server/slack/lookups"
 import { applyAutoRules } from "@/server/inbox/auto-done"
 import { getPreferences } from "@/server/preferences"
+import { messagesFor } from "@/lib/i18n/messages"
 import { runDailyRecap } from "@/server/recap/recap"
 import { syncTeamPulls } from "@/server/team/pulls"
 import { repos } from "@/server/db/schema"
@@ -71,7 +72,12 @@ async function runOnce(forceSearch: boolean): Promise<number> {
   if (!notify && enriched < ENRICH_LIMIT) await markAttentionReady(db)
   await rescoreAll(db)
   const preferences = await getPreferences(db)
-  await applyAutoRules(db, octokit, preferences)
+  await applyAutoRules(
+    db,
+    octokit,
+    preferences,
+    messagesFor(preferences.language)
+  )
   const loop = state()
   if (forceSearch || Date.now() - loop.lastTeamSyncAt > TEAM_SYNC_MS) {
     const tracked = await db

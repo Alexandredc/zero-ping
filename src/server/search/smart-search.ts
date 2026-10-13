@@ -1,5 +1,7 @@
 import type { Octokit } from "octokit"
 import { z } from "zod"
+import { LANGUAGE_PROMPT_NAMES } from "@/lib/i18n/core"
+import type { Language } from "@/lib/i18n/core"
 
 /** What the list already knows of an item, sent along with the question. */
 export type SearchCandidate = {
@@ -16,38 +18,44 @@ export type SearchMatch = { key: string; reason: string }
 export const MAX_CANDIDATES = 200
 const MAX_BODY_CHARS = 600
 
-export const SEARCH_JSON_SCHEMA = {
-  type: "object",
-  additionalProperties: false,
-  required: ["matches"],
-  properties: {
-    matches: {
-      type: "array",
-      description: "The items that answer the search, the best match first.",
-      items: {
-        type: "object",
-        additionalProperties: false,
-        required: ["key", "reason"],
-        properties: {
-          key: { type: "string", description: "The item's key, as given." },
-          reason: {
-            type: "string",
-            description: "Why it matches, in a few French words.",
+export function searchJsonSchema(language: Language) {
+  return {
+    type: "object",
+    additionalProperties: false,
+    required: ["matches"],
+    properties: {
+      matches: {
+        type: "array",
+        description: "The items that answer the search, the best match first.",
+        items: {
+          type: "object",
+          additionalProperties: false,
+          required: ["key", "reason"],
+          properties: {
+            key: { type: "string", description: "The item's key, as given." },
+            reason: {
+              type: "string",
+              description: `Why it matches, in a few ${LANGUAGE_PROMPT_NAMES[language]} words.`,
+            },
           },
         },
       },
     },
-  },
+  }
 }
 
-export function buildSearchPrompt(kind: "PR" | "issue"): string {
+export function buildSearchPrompt(
+  kind: "PR" | "issue",
+  language: Language
+): string {
   const things = kind === "PR" ? "pull requests" : "issues"
+  const words = LANGUAGE_PROMPT_NAMES[language]
   return [
     `Find the ${things} that answer the user's search, among the list given on stdin.`,
-    "The search is usually in French while the items are in English: match on meaning across both languages and on domain synonyms (réclamation = claim, transporteur = carrier, commande = order, entrepôt = warehouse…), not on shared words.",
+    "The search may be in French or English, and the items in either: match on meaning across both languages and on domain synonyms (réclamation = claim, transporteur = carrier, commande = order, entrepôt = warehouse…), not on shared words.",
     "It may describe the work, a part of the code, a person (by name or handle), a state or a moment rather than quote a title.",
     `Read each item's title, branch, description, labels, facts and summary. Return every ${things.slice(0, -1)} that is about what is searched, the best match first, at most 10. Leave out items that only brush the subject, and return none when nothing is about it.`,
-    "Give each match a reason of a few French words that tells what in the item answers the search.",
+    `Give each match a reason of a few ${words} words that tells what in the item answers the search.`,
     "Only use what the input says. Do not use any tool.",
   ].join("\n")
 }
@@ -127,15 +135,14 @@ export async function fetchBodies(
         }`
     )
     .join("\n")}}`
-  const data =
-    await octokit.graphql<
-      Record<
-        string,
-        {
-          issueOrPullRequest: { body?: string; headRefName?: string } | null
-        } | null
-      >
-    >(query)
+  const data = await octokit.graphql<
+    Record<
+      string,
+      {
+        issueOrPullRequest: { body?: string; headRefName?: string } | null
+      } | null
+    >
+  >(query)
   const bodies = new Map<string, string>()
   refs.forEach((ref, index) => {
     const subject = data[`i${index}`]?.issueOrPullRequest

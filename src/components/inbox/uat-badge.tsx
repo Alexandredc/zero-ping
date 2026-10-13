@@ -4,6 +4,9 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { uatStatusQuery } from "@/hooks/use-inbox"
 import { formatWhen } from "@/lib/format"
 import { cn } from "@/lib/utils"
+import { useI18n } from "@/hooks/use-i18n"
+import type { Language } from "@/lib/i18n/core"
+import type { Messages } from "@/lib/i18n/messages"
 import type { UatStatus } from "@/server/github/uat"
 
 const DOT: Record<UatStatus["state"], string> = {
@@ -14,55 +17,49 @@ const DOT: Record<UatStatus["state"], string> = {
   absent: "bg-muted-foreground/50",
 }
 
-function describe(status: UatStatus): { label: string; detail: string[] } {
+/** The badge label and its tooltip lines, in the viewer's language. */
+export function describeUat(
+  status: UatStatus,
+  t: Messages,
+  language: Language
+): { label: string; detail: string[] } {
+  const copy = t.detail.uat
   if (status.state === "merged")
-    return {
-      label: "Sur UAT",
-      detail: ["Le commit de merge est dans l'historique de uat."],
-    }
-  const when = status.at ? ` le ${formatWhen(new Date(status.at))}` : ""
+    return { label: copy.on, detail: [copy.mergeCommitOnUat] }
+  const when = status.at
+    ? copy.when(formatWhen(new Date(status.at), language))
+    : ""
   const missing = status.missing.length
-    ? ["Pas encore sur uat :", ...status.missing.map((m) => `• ${m}`)]
+    ? [copy.missing, ...status.missing.map((m) => `• ${m}`)]
     : []
   const outdated = status.outdated.length
-    ? [
-        "Réécrits depuis leur déploiement, à redéployer :",
-        ...status.outdated.map((m) => `• ${m}`),
-      ]
+    ? [copy.outdated, ...status.outdated.map((m) => `• ${m}`)]
     : []
   switch (status.state) {
     case "deployed":
       return {
-        label: status.outdated.length ? "Sur UAT, à redéployer" : "Sur UAT",
-        detail: [
-          `Tous les commits sont sur uat, déployés${when}.`,
-          ...outdated,
-        ],
+        label: status.outdated.length ? copy.onToRedeploy : copy.on,
+        detail: [copy.allDeployed(when), ...outdated],
       }
     case "partial":
       return {
-        label: `En partie sur UAT · ${status.shipped}/${status.total}`,
-        detail: [`Dernier déploiement${when}.`, ...missing, ...outdated],
+        label: copy.partial(status.shipped, status.total),
+        detail: [copy.lastDeploy(when), ...missing, ...outdated],
       }
     case "reverted":
-      return {
-        label: "Retirée d'UAT",
-        detail: [`Déployée puis revertée sur uat${when}.`],
-      }
+      return { label: copy.reverted, detail: [copy.revertedDetail(when)] }
     case "absent":
-      return {
-        label: "Pas sur UAT",
-        detail: ["Aucun commit de la PR dans les derniers commits de uat."],
-      }
+      return { label: copy.absent, detail: [copy.absentDetail] }
   }
 }
 
 /** Whether the PR's commits run on uat, matched by their subject. */
 export function UatBadge({ itemKey }: { itemKey: string }) {
+  const { t, language } = useI18n()
   const { data, isPending } = useQuery(uatStatusQuery(itemKey))
   if (isPending) return <Skeleton className="h-6 w-24" />
   if (!data) return null
-  const { label, detail } = describe(data)
+  const { label, detail } = describeUat(data, t, language)
   const stale = data.state !== "merged" && data.outdated.length > 0
   return (
     <Hint
@@ -72,10 +69,7 @@ export function UatBadge({ itemKey }: { itemKey: string }) {
           {detail.map((line, index) => (
             <span key={index}>{line}</span>
           ))}
-          <span className="text-muted-foreground">
-            Comparé aux titres des commits, qui restent les mêmes quand un
-            cherry-pick règle un conflit.
-          </span>
+          <span className="text-muted-foreground">{t.detail.uat.matching}</span>
         </>
       }
     >

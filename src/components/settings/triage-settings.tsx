@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { Switch } from "@/components/ui/switch"
+import { useI18n } from "@/hooks/use-i18n"
 import { useSavePreferences } from "@/hooks/use-inbox"
 import { cn } from "@/lib/utils"
 
@@ -31,29 +32,11 @@ type Settings = Awaited<ReturnType<typeof getSettings>>
 type RuleKey =
   "autoDoneClosed" | "autoDoneBots" | "autoDoneCi" | "autoDoneReleases"
 
-const RULES: { key: RuleKey; label: string; description: string }[] = [
-  {
-    key: "autoDoneClosed",
-    label: "PR et issues mergées ou fermées",
-    description: "Une fois fermées, il n'y a plus rien à y faire.",
-  },
-  {
-    key: "autoDoneBots",
-    label: "PR et issues de bots",
-    description:
-      "Dependabot, Renovate, GitHub Actions et autres comptes [bot].",
-  },
-  {
-    key: "autoDoneCi",
-    label: "Activité CI",
-    description:
-      "Les notifications de workflows terminés. Les échecs de tes PR restent signalés dans « Mes PR ».",
-  },
-  {
-    key: "autoDoneReleases",
-    label: "Releases",
-    description: "Les nouvelles versions publiées sur les repos suivis.",
-  },
+const RULES: RuleKey[] = [
+  "autoDoneClosed",
+  "autoDoneBots",
+  "autoDoneCi",
+  "autoDoneReleases",
 ]
 
 function SwitchField({
@@ -88,6 +71,7 @@ function SwitchField({
 }
 
 function AuthorList({ preferences }: { preferences: Preferences }) {
+  const { t } = useI18n()
   const save = useSavePreferences()
   const [draft, setDraft] = useState("")
   const authors = preferences.autoDoneAuthors
@@ -101,10 +85,11 @@ function AuthorList({ preferences }: { preferences: Preferences }) {
   }
   return (
     <Field>
-      <FieldLabel htmlFor="auto-done-author">Auteurs à classer</FieldLabel>
+      <FieldLabel htmlFor="auto-done-author">
+        {t.settings.triage.authors.label}
+      </FieldLabel>
       <FieldDescription>
-        Les notifications de ces comptes GitHub sont classées d'office, sauf
-        quand elles te mentionnent ou te demandent une review.
+        {t.settings.triage.authors.description}
       </FieldDescription>
       <form
         className="flex gap-2"
@@ -117,10 +102,10 @@ function AuthorList({ preferences }: { preferences: Preferences }) {
           id="auto-done-author"
           value={draft}
           onChange={(event) => setDraft(event.target.value)}
-          placeholder="login GitHub, par ex. release-bot"
+          placeholder={t.settings.triage.authors.placeholder}
         />
         <Button type="submit" variant="outline" disabled={!draft.trim()}>
-          Ajouter
+          {t.settings.add}
         </Button>
       </form>
       {authors.length > 0 && (
@@ -131,7 +116,7 @@ function AuthorList({ preferences }: { preferences: Preferences }) {
               <Button
                 variant="ghost"
                 size="icon-xs"
-                aria-label={`Retirer @${login}`}
+                aria-label={t.settings.remove(`@${login}`)}
                 onClick={() =>
                   save.mutate({
                     autoDoneAuthors: authors.filter((a) => a !== login),
@@ -149,6 +134,7 @@ function AuthorList({ preferences }: { preferences: Preferences }) {
 }
 
 export function TriageSettings({ settings }: { settings: Settings }) {
+  const { t } = useI18n()
   const save = useSavePreferences()
   const { preferences } = settings
   return (
@@ -157,26 +143,24 @@ export function TriageSettings({ settings }: { settings: Settings }) {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <ArchiveIcon className="size-4" />
-            Classement automatique
+            {t.settings.triage.title}
           </CardTitle>
-          <CardDescription>
-            À chaque synchro, ces notifications passent dans « Traités », ici et
-            sur GitHub. Celles qui t'attendent (review, mention, réponse) ne
-            sont jamais classées, et tout revient s'il y a du nouveau.
-          </CardDescription>
+          <CardDescription>{t.settings.triage.description}</CardDescription>
         </CardHeader>
         <CardContent>
           <FieldGroup>
             <FieldSet>
-              <FieldLegend variant="label">Classer d'office</FieldLegend>
+              <FieldLegend variant="label">
+                {t.settings.triage.legend}
+              </FieldLegend>
               {RULES.map((rule) => (
                 <SwitchField
-                  key={rule.key}
-                  id={rule.key}
-                  label={rule.label}
-                  description={rule.description}
-                  checked={preferences[rule.key]}
-                  onChange={(checked) => save.mutate({ [rule.key]: checked })}
+                  key={rule}
+                  id={rule}
+                  label={t.settings.triage.rules[rule].label}
+                  description={t.settings.triage.rules[rule].description}
+                  checked={preferences[rule]}
+                  onChange={(checked) => save.mutate({ [rule]: checked })}
                 />
               ))}
             </FieldSet>
@@ -189,22 +173,18 @@ export function TriageSettings({ settings }: { settings: Settings }) {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <UsersIcon className="size-4" />
-            Vue équipe
+            {t.settings.team.title}
           </CardTitle>
-          <CardDescription>
-            Les PR ouvertes des repos suivis, hors les tiennes et celles des
-            bots, mises à jour toutes les 10 minutes.
-          </CardDescription>
+          <CardDescription>{t.settings.team.description}</CardDescription>
         </CardHeader>
         <CardContent>
           <Field orientation="horizontal">
             <FieldContent>
               <FieldLabel htmlFor="team-stale-days">
-                Ancienne au-delà de
+                {t.settings.team.staleLabel}
               </FieldLabel>
               <FieldDescription>
-                Nombre de jours depuis l'ouverture d'une PR avant qu'elle soit
-                signalée comme « ouverte depuis longtemps ».
+                {t.settings.team.staleDescription}
               </FieldDescription>
             </FieldContent>
             <Input
@@ -234,7 +214,7 @@ export function TriageSettings({ settings }: { settings: Settings }) {
 
 const isCommand = (value: string) => /^\/[\w.-]+(:[\w.-]+)*$/.test(value)
 
-/** A text setting saved when the field loses focus or on Entrée. */
+/** A text setting saved when the field loses focus or on Enter. */
 function TextField({
   id,
   label,
@@ -285,6 +265,8 @@ function TextField({
 }
 
 export function RecapSettings({ settings }: { settings: Settings }) {
+  const { t } = useI18n()
+  const m = t.settings.recap
   const save = useSavePreferences()
   const { preferences } = settings
   return (
@@ -292,19 +274,16 @@ export function RecapSettings({ settings }: { settings: Settings }) {
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <SunriseIcon className="size-4" />
-          Récap du jour
+          {m.title}
         </CardTitle>
-        <CardDescription>
-          Chaque jour ouvré, une notification résume ce qui t'attend. Si l'app
-          était éteinte à l'heure choisie, le récap part à son démarrage.
-        </CardDescription>
+        <CardDescription>{m.description}</CardDescription>
       </CardHeader>
       <CardContent>
         <FieldGroup>
           <SwitchField
             id="recap-enabled"
-            label="Envoyer le récap"
-            description="Une notification du navigateur, qui ouvre la page Récap du jour."
+            label={m.enabled}
+            description={m.enabledDescription}
             checked={preferences.recapEnabled}
             onChange={(checked) => save.mutate({ recapEnabled: checked })}
           />
@@ -313,10 +292,9 @@ export function RecapSettings({ settings }: { settings: Settings }) {
             data-disabled={!preferences.recapEnabled || undefined}
           >
             <FieldContent>
-              <FieldLabel htmlFor="recap-time">Heure</FieldLabel>
+              <FieldLabel htmlFor="recap-time">{m.time}</FieldLabel>
               <FieldDescription>
-                Après le message « {preferences.standupReminder} » du jour, pour
-                que le standup trouve son fil Slack.
+                {m.timeDescription(preferences.standupReminder)}
               </FieldDescription>
             </FieldContent>
             <Input
@@ -338,8 +316,8 @@ export function RecapSettings({ settings }: { settings: Settings }) {
           <FieldSeparator />
           <TextField
             id="standup-channel"
-            label="Canal du standup"
-            description="Le canal Slack où un message de rappel ouvre chaque jour le fil des standups. Sans canal, les standups ne se lancent pas."
+            label={m.channel}
+            description={m.channelDescription}
             value={preferences.standupChannel}
             placeholder="daily-standup"
             prefix="#"
@@ -347,8 +325,8 @@ export function RecapSettings({ settings }: { settings: Settings }) {
           />
           <TextField
             id="standup-reminder"
-            label="Message de rappel"
-            description="Le texte qui distingue le rappel du jour dans ce canal, par exemple celui d'un rappel Slack automatique."
+            label={m.reminder}
+            description={m.reminderDescription}
             value={preferences.standupReminder}
             placeholder="Daily standup reminder"
             onSave={(standupReminder) =>
@@ -358,16 +336,16 @@ export function RecapSettings({ settings }: { settings: Settings }) {
           <FieldSeparator />
           <SwitchField
             id="standup-enabled"
-            label={`Lancer ${preferences.teamStandupCommand} avec le récap`}
-            description={`L'IA principale exporte le board et rédige le standup de l'équipe. Tu le relis dans le récap du jour, puis tu le publies d'un clic dans le fil du jour${preferences.standupChannel ? ` de #${preferences.standupChannel}` : ""}.`}
+            label={m.runWithRecap(preferences.teamStandupCommand)}
+            description={m.teamStandupDescription(preferences.standupChannel)}
             checked={preferences.standupEnabled}
             disabled={!preferences.standupChannel}
             onChange={(checked) => save.mutate({ standupEnabled: checked })}
           />
           <TextField
             id="team-standup-command"
-            label="Commande du standup d'équipe"
-            description="Une commande de ~/.claude/commands. Codex en suit le texte."
+            label={m.teamCommand}
+            description={m.commandDescription}
             value={preferences.teamStandupCommand}
             placeholder="/standup:team"
             mono
@@ -379,16 +357,16 @@ export function RecapSettings({ settings }: { settings: Settings }) {
           <FieldSeparator />
           <SwitchField
             id="my-standup-enabled"
-            label={`Lancer ${preferences.myStandupCommand} avec le récap`}
-            description="L'IA principale rédige ton propre standup à partir de tes PR et de tes reviews. Tu le relis dans le récap du jour, puis tu le publies d'un clic dans le même fil."
+            label={m.runWithRecap(preferences.myStandupCommand)}
+            description={m.myStandupDescription}
             checked={preferences.myStandupEnabled}
             disabled={!preferences.standupChannel}
             onChange={(checked) => save.mutate({ myStandupEnabled: checked })}
           />
           <TextField
             id="my-standup-command"
-            label="Commande de ton standup"
-            description="Une commande de ~/.claude/commands. Codex en suit le texte."
+            label={m.myCommand}
+            description={m.commandDescription}
             value={preferences.myStandupCommand}
             placeholder="/standup"
             mono

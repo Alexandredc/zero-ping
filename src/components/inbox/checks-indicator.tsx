@@ -4,6 +4,8 @@ import { Hint } from "@/components/inbox/hint"
 import { Skeleton } from "@/components/ui/skeleton"
 import { checksQuery } from "@/hooks/use-inbox"
 import { cn } from "@/lib/utils"
+import { useI18n } from "@/hooks/use-i18n"
+import type { Messages } from "@/lib/i18n/messages"
 import type { ChecksSummary } from "@/server/github/checks"
 
 type Verdict = "passed" | "failed" | "pending" | "none"
@@ -21,18 +23,22 @@ const STYLE: Record<Verdict, { bar: string; text: string }> = {
   none: { bar: "bg-border", text: "text-muted-foreground" },
 }
 
-function label(verdict: Verdict, summary: ChecksSummary) {
+export function checksLabel(
+  verdict: Verdict,
+  summary: ChecksSummary,
+  t: Messages
+): string {
   const total =
     summary.passed + summary.failed + summary.pending + summary.skipped
   switch (verdict) {
     case "passed":
-      return `Tous les checks passent · ${summary.passed}/${total - summary.skipped}`
+      return t.pull.checks.allPassing(summary.passed, total - summary.skipped)
     case "failed":
-      return `${summary.failed} check${summary.failed > 1 ? "s" : ""} en échec`
+      return t.pull.checks.failing(summary.failed)
     case "pending":
-      return `Checks en cours · ${summary.pending} sur ${total}`
+      return t.pull.checks.running(summary.pending, total)
     case "none":
-      return "Aucun check"
+      return t.pull.checks.none
   }
 }
 
@@ -53,6 +59,7 @@ export function ChecksBar({ itemKey }: { itemKey: string }) {
 
 /** What the checks say, with the ones still running on hover. */
 export function ChecksIndicator({ itemKey }: { itemKey: string }) {
+  const { t } = useI18n()
   const { data, isPending, error } = useQuery({
     ...checksQuery(itemKey),
     // Running checks finish on their own: look again soon until they do.
@@ -79,19 +86,16 @@ export function ChecksIndicator({ itemKey }: { itemKey: string }) {
       )}
       content={
         <>
-          <span>
-            Sur le dernier commit : {summary.passed} réussi
-            {summary.passed > 1 ? "s" : ""}, {summary.failed} en échec,{" "}
-            {summary.pending} en cours, {summary.skipped} ignoré
-            {summary.skipped > 1 ? "s" : ""}.
-          </span>
+          <span>{t.pull.checks.lastCommit(summary)}</span>
           {data.failed.length > 0 && (
             <span>
-              En échec : {data.failed.map((check) => check.name).join(", ")}
+              {t.pull.checks.failedList(
+                data.failed.map((check) => check.name).join(", ")
+              )}
             </span>
           )}
           {summary.running.length > 0 && (
-            <span>En cours : {summary.running.join(", ")}</span>
+            <span>{t.pull.checks.runningList(summary.running.join(", "))}</span>
           )}
         </>
       }
@@ -102,7 +106,7 @@ export function ChecksIndicator({ itemKey }: { itemKey: string }) {
           verdict === "pending" && "animate-spin [animation-duration:3s]"
         )}
       />
-      {label(verdict, summary)}
+      {checksLabel(verdict, summary, t)}
     </Hint>
   )
 }

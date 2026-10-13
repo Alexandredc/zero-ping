@@ -1,4 +1,5 @@
 import type { Octokit } from "octokit"
+import type { Messages } from "@/lib/i18n/messages"
 
 export type WeekEntry = {
   key: string
@@ -170,7 +171,8 @@ export function clip(label: string, max = 70): string {
 }
 
 /** The summary as plain bullets, ready to paste in a meeting chat. */
-export function weekSummaryText(summary: WeekSummary): string {
+export function weekSummaryText(summary: WeekSummary, t: Messages): string {
+  const { blocks, heading } = t.recap.week
   const line = (entry: WeekEntry) =>
     entry.count > 1
       ? `• ${clip(entry.label)} ×${entry.count}`
@@ -178,14 +180,14 @@ export function weekSummaryText(summary: WeekSummary): string {
   const review = (entry: WeekEntry) =>
     `• ${clip(entry.label)}${entry.author ? ` (@${entry.author})` : ""}`
   return [
-    { title: "Livré", entries: summary.shipped, line },
-    { title: "Lancé", entries: summary.started, line },
-    { title: "Fermé", entries: summary.closed, line },
-    { title: "Reviewé", entries: summary.reviewed, line: review },
+    { title: blocks.shipped, entries: summary.shipped, line },
+    { title: blocks.started, entries: summary.started, line },
+    { title: blocks.closed, entries: summary.closed, line },
+    { title: blocks.reviewed, entries: summary.reviewed, line: review },
   ]
     .filter((block) => block.entries.length > 0)
     .map((block) =>
-      [`${block.title} :`, ...block.entries.map(block.line)].join("\n")
+      [heading(block.title), ...block.entries.map(block.line)].join("\n")
     )
     .join("\n\n")
 }

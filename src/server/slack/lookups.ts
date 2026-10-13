@@ -5,6 +5,7 @@ import type { Database } from "@/server/db/client"
 import { items, slackLookups } from "@/server/db/schema"
 import type { Item, SlackLookup } from "@/server/db/schema"
 import { getPreferences, resolveExclusions } from "@/server/preferences"
+import { messagesFor } from "@/lib/i18n/messages"
 import {
   DISCUSSIONS_JSON_SCHEMA,
   buildSlackPrompt,
@@ -85,7 +86,10 @@ async function runLookup(db: Database, item: Item, runner: AgentRunner) {
       .update(slackLookups)
       .set({
         status: "done",
-        discussions: parseDiscussions(answer),
+        discussions: parseDiscussions(
+          answer,
+          messagesFor(preferences.language)
+        ),
         error: null,
         finishedAt: new Date(),
       })

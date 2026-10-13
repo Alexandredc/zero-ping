@@ -12,6 +12,7 @@ import { PingIndicators } from "@/components/notifications/ping-indicators"
 import { Toaster } from "@/components/ui/toast"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { ThemeProvider, themeScript } from "@/lib/theme"
+import { languageQuery, useLanguage } from "@/hooks/use-i18n"
 import { APP_NAME, LOGO_URL } from "@/lib/pings"
 
 import appCss from "../styles.css?url"
@@ -32,6 +33,11 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
         { rel: "manifest", href: "/manifest.json" },
       ],
     }),
+    // The language is read before the first render: SSR then paints the page
+    // in the chosen language, and the client hydrates the same text.
+    beforeLoad: async ({ context }) => {
+      await context.queryClient.ensureQueryData(languageQuery())
+    },
     notFoundComponent: NotFoundPage,
     errorComponent: ErrorPage,
     shellComponent: RootDocument,
@@ -39,8 +45,9 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
 )
 
 function RootDocument({ children }: { children: React.ReactNode }) {
+  const language = useLanguage()
   return (
-    <html lang="fr" suppressHydrationWarning>
+    <html lang={language} suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
         <HeadContent />

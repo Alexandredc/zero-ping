@@ -5,6 +5,10 @@ import { tmpdir } from "node:os"
 import path from "node:path"
 
 import type { AgentKind } from "@/lib/agents"
+import { DEFAULT_LANGUAGE } from "@/lib/i18n/core"
+import type { Language } from "@/lib/i18n/core"
+import { messagesFor } from "@/lib/i18n/messages"
+import type { Messages } from "@/lib/i18n/messages"
 import { DemoOfflineError, isDemo } from "@/server/demo/mode"
 
 export type { AgentKind } from "@/lib/agents"
@@ -29,6 +33,8 @@ export type AgentConfig = {
   kind: AgentKind
   command: string
   model: string | undefined
+  /** The language of the errors the run reports; the default when not given. */
+  language?: Language
 }
 
 const DEFAULT_TIMEOUT_MS = 3 * 60_000
@@ -51,6 +57,7 @@ export type AgentOverrides = {
   agentCli?: AgentKind | null
   agentModel?: string | null
   summaryModel?: string | null
+  language?: Language
 }
 
 /**
@@ -74,6 +81,7 @@ export function getAgentConfig(
       role === "fast"
         ? (overrides.agentModel ?? envModel ?? DEFAULT_MODELS[kind].fast)
         : (overrides.summaryModel ?? DEFAULT_MODELS[kind].smart),
+    language: overrides.language,
   }
 }
 
@@ -124,17 +132,17 @@ export function buildCodexArgs(
 }
 
 /** Claude Code prints one JSON result object; the typed answer is `structured_output`. */
-export function parseClaudeOutput(stdout: string): unknown {
+export function parseClaudeOutput(stdout: string, t: Messages): unknown {
   const start = stdout.indexOf("{")
-  if (start < 0) throw new Error("Claude Code n'a renvoyé aucun résultat JSON.")
+  if (start < 0) throw new Error(t.server.agent.noJson)
   const result = JSON.parse(stdout.slice(start)) as {
     is_error?: boolean
     result?: string
     structured_output?: unknown
   }
-  if (result.is_error) throw new Error(result.result ?? "Claude Code a échoué.")
+  if (result.is_error) throw new Error(result.result ?? t.server.agent.failed)
   if (result.structured_output === undefined) {
-    throw new Error("Claude Code n'a pas renvoyé de réponse structurée.")
+    throw new Error(t.server.agent.noStructuredAnswer)
   }
   return result.structured_output
 }
@@ -155,6 +163,7 @@ function run(
   args: string[],
   cwd: string,
   timeoutMs: number,
+  t: Messages,
   input?: string
 ) {
   return new Promise<string>((resolve, reject) => {
@@ -174,9 +183,7 @@ function run(
       clearTimeout(timer)
       reject(
         (error as NodeJS.ErrnoException).code === "ENOENT"
-          ? new Error(
-              `Commande « ${command} » introuvable : installe-la ou définis AGENT_COMMAND.`
-            )
+          ? new Error(t.server.agent.commandNotFound(command))
           : error
       )
     })
@@ -184,13 +191,12 @@ function run(
       clearTimeout(timer)
       if (signal)
         return reject(
-          new Error(`L'agent a dépassé ${Math.round(timeoutMs / 1000)} s.`)
+          new Error(t.server.agent.timedOut(Math.round(timeoutMs / 1000)))
         )
       if (code !== 0) {
         return reject(
           new Error(
-            stderr.trim().split("\n").pop() ||
-              `L'agent a quitté avec le code ${code}.`
+            stderr.trim().split("\n").pop() || t.server.agent.exited(code)
           )
         )
       }
@@ -207,7 +213,8 @@ export async function runAgent(
   task: AgentTask,
   config: AgentConfig = getAgentConfig()
 ): Promise<unknown> {
-  if (isDemo()) throw new DemoOfflineError()
+  const t = messagesFor(config.language ?? DEFAULT_LANGUAGE)
+  if (isDemo()) throw new DemoOfflineError(t.server.errors.demoOffline)
   const workdir = await mkdtemp(path.join(tmpdir(), "zero-ping-agent-"))
   const timeoutMs = task.timeoutMs ?? DEFAULT_TIMEOUT_MS
   try {
@@ -217,9 +224,10 @@ export async function runAgent(
         buildClaudeArgs(task, config.model),
         workdir,
         timeoutMs,
+        t,
         task.input
       )
-      return parseClaudeOutput(stdout)
+      return parseClaudeOutput(stdout, t)
     }
     const files = {
       schema: path.join(workdir, "schema.json"),
@@ -231,6 +239,7 @@ export async function runAgent(
       buildCodexArgs(task, config.model, files),
       workdir,
       timeoutMs,
+      t,
       task.input
     )
     return JSON.parse(await readFile(files.output, "utf8"))

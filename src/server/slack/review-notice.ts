@@ -1,35 +1,39 @@
 import type { SlackThreadRef } from "./reply"
+import type { Messages } from "@/lib/i18n/messages"
 
 export type ReviewEvent = "APPROVE" | "REQUEST_CHANGES" | "COMMENT"
 
 /** A GitHub person the message pings, for the agent to find on Slack. */
 export type NoticeMention = { login: string; name: string | null }
 
-const OPENING: Record<ReviewEvent, string> = {
-  APPROVE: "✅ J'ai approuvé",
-  REQUEST_CHANGES: "🔁 J'ai demandé des changements sur",
-  COMMENT: "💬 J'ai laissé une review sur",
-}
+const WORDING = {
+  APPROVE: "approve",
+  REQUEST_CHANGES: "requestChanges",
+  COMMENT: "comment",
+} as const satisfies Record<ReviewEvent, string>
 
-const CLOSING: Record<ReviewEvent, string> = {
-  APPROVE: "c'est bon pour moi, tu peux merger.",
-  REQUEST_CHANGES: "je t'ai laissé des retours.",
-  COMMENT: "je t'ai laissé quelques commentaires.",
-}
-
-/** The message offered with a review, pinging the author by handle. */
-export function draftReviewNotice(input: {
-  event: ReviewEvent
-  repoFullName: string
-  number: number
-  title: string
-  url: string
-  author: string | null
-}): string {
+/**
+ * The message offered with a review, pinging the author by handle. It is the
+ * user's own message, so it starts in the app's language; they edit it before sending.
+ */
+export function draftReviewNotice(
+  input: {
+    event: ReviewEvent
+    repoFullName: string
+    number: number
+    title: string
+    url: string
+    author: string | null
+  },
+  t: Messages
+): string {
+  const m = t.server.reviewNotice
+  const { opening, closing } = m[WORDING[input.event]]
   const repo = input.repoFullName.split("/")[1]
   const who = input.author ? `@${input.author} ` : ""
+  const subject = `${repo}#${input.number} (${input.title})`
   // A bare URL on its own line reads well in the box, and Slack links it.
-  return `${OPENING[input.event]} ${repo}#${input.number} (${input.title}) : ${who}${CLOSING[input.event]}\n${input.url}`
+  return `${m.message(opening, subject, `${who}${closing}`)}\n${input.url}`
 }
 
 /**

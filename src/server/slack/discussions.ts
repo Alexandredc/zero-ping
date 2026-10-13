@@ -1,6 +1,7 @@
 import { z } from "zod"
 import type { AgentKind } from "@/server/agents/runner"
 import type { SlackDiscussion } from "@/server/db/schema"
+import type { Messages } from "@/lib/i18n/messages"
 
 export type SlackSubject = {
   repoFullName: string
@@ -90,13 +91,12 @@ export function buildSlackPrompt(
   ].join("\n")
 }
 
-export function parseDiscussions(answer: unknown): SlackDiscussion[] {
+export function parseDiscussions(
+  answer: unknown,
+  t: Messages
+): SlackDiscussion[] {
   const { searched, discussions } = discussionsSchema.parse(answer)
-  if (!searched) {
-    throw new Error(
-      "L'agent n'a pas pu accéder à Slack : vérifie que le connecteur Slack est disponible pour cet agent."
-    )
-  }
+  if (!searched) throw new Error(t.server.errors.slackUnavailable)
   const seen = new Set<string>()
   return discussions.filter((discussion) => {
     if (seen.has(discussion.permalink)) return false

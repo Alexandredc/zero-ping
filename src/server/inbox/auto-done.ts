@@ -4,6 +4,7 @@ import type { Database } from "@/server/db/client"
 import { items, repos } from "@/server/db/schema"
 import type { Item } from "@/server/db/schema"
 import type { Preferences } from "@/server/preferences"
+import type { Messages } from "@/lib/i18n/messages"
 
 export type AutoDoneRules = Pick<
   Preferences,
@@ -39,20 +40,22 @@ export function matchAutoRule(
     Item,
     "view" | "awaitingMe" | "state" | "author" | "reason" | "subjectType"
   >,
-  rules: AutoDoneRules
+  rules: AutoDoneRules,
+  t: Messages
 ): string | null {
+  const m = t.server.autoDone
   if (item.view !== "other" || item.awaitingMe) return null
   if (
     rules.autoDoneClosed &&
     (item.state === "MERGED" || item.state === "CLOSED")
   )
-    return item.state === "MERGED" ? "PR mergée" : "Fermée"
-  if (rules.autoDoneCi && item.reason === "ci_activity") return "Activité CI"
-  if (rules.autoDoneReleases && item.subjectType === "Release") return "Release"
-  if (rules.autoDoneBots && isBot(item.author)) return `Bot @${item.author}`
+    return item.state === "MERGED" ? m.merged : m.closed
+  if (rules.autoDoneCi && item.reason === "ci_activity") return m.ci
+  if (rules.autoDoneReleases && item.subjectType === "Release") return m.release
+  if (rules.autoDoneBots && isBot(item.author)) return m.bot(item.author ?? "")
   const author = item.author?.toLowerCase()
   if (author && rules.autoDoneAuthors.includes(author))
-    return `Auteur @${item.author}`
+    return m.author(item.author ?? author)
   return null
 }
 
@@ -63,6 +66,7 @@ export async function applyAutoRules(
   db: Database,
   octokit: Octokit,
   rules: AutoDoneRules,
+  t: Messages,
   now: Date = new Date()
 ): Promise<number> {
   const candidates = await db
@@ -79,7 +83,7 @@ export async function applyAutoRules(
       )
     )
   const matched = candidates.flatMap(({ item }) => {
-    const reason = matchAutoRule(item, rules)
+    const reason = matchAutoRule(item, rules, t)
     return reason ? [{ item, reason }] : []
   })
   for (let start = 0; start < matched.length; start += CONCURRENCY) {

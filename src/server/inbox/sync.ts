@@ -11,6 +11,7 @@ import { analyze } from "@/server/inbox/analyze"
 import { parseSubjectKey, toItem } from "@/server/inbox/notifications"
 import type { RawNotification } from "@/server/inbox/notifications"
 import { computePriority } from "@/server/inbox/priority"
+import { getMessages } from "@/server/i18n"
 import { detectAttention, recordAttention } from "@/server/inbox/attention"
 import type { AttentionDraft } from "@/server/inbox/attention"
 import { fetchStates, fetchSubjects } from "@/server/github/subjects"
@@ -252,6 +253,8 @@ export async function enrichItems(
   if (refs.length === 0) return 0
 
   const now = new Date()
+  // Priority reasons and notifications are stored as written, in the chosen language.
+  const { t } = await getMessages(db)
   const states = await fetchStates(octokit, refs)
   const openRefs = refs.filter((ref) => states.get(ref.key) === "OPEN")
   const subjects = await fetchSubjects(octokit, openRefs)
@@ -347,6 +350,7 @@ export async function enrichItems(
       }
       const priority = computePriority(
         { ...item, ...enriched, waitingSince: waitingSince(enriched) },
+        t,
         now
       )
       await db
@@ -370,7 +374,7 @@ export async function enrichItems(
         )
       )
       if (options.notify) {
-        const draft = detectAttention(item, enriched, now)
+        const draft = detectAttention(item, enriched, t, now)
         if (draft) attention.push(draft)
       }
     })
@@ -398,9 +402,12 @@ export async function rescoreAll(db: Database) {
       )
     )
   const now = new Date()
+  // Also rewrites the reasons in the new language after a switch.
+  const { t } = await getMessages(db)
   for (const item of active) {
     const priority = computePriority(
       { ...item, waitingSince: waitingSince(item) },
+      t,
       now
     )
     const changed =

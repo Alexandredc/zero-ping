@@ -35,6 +35,7 @@ import {
 } from "@/components/ui/popover"
 import { Input } from "@/components/ui/input"
 import { Switch } from "@/components/ui/switch"
+import { useI18n } from "@/hooks/use-i18n"
 import { useSavePreferences } from "@/hooks/use-inbox"
 
 type Settings = Awaited<ReturnType<typeof getSettings>>
@@ -62,6 +63,8 @@ function AddChannel({
   settings: Settings
   onAdd: (channel: string) => void
 }) {
+  const { t } = useI18n()
+  const m = t.settings.slack
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState("")
   const excluded = new Set(settings.preferences.slackExcludedChannels)
@@ -79,33 +82,31 @@ function AddChannel({
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger render={<Button variant="outline" size="sm" />}>
         <PlusIcon data-icon="inline-start" />
-        Exclure un canal
+        {m.exclude}
       </PopoverTrigger>
       <PopoverContent align="start" className="w-80 p-0">
         <Command>
           <CommandInput
             value={query}
             onValueChange={setQuery}
-            placeholder="Nom du canal, par exemple eng-general"
+            placeholder={m.channelPlaceholder}
           />
           <CommandList>
-            <CommandEmpty>
-              Aucun canal vu dans les discussions trouvées.
-            </CommandEmpty>
+            <CommandEmpty>{m.noChannel}</CommandEmpty>
             {typed &&
               !excluded.has(typed) &&
               !suggestions.some((c) => c.name === typed) && (
-                <CommandGroup heading="Saisie">
+                <CommandGroup heading={m.typed}>
                   <CommandItem
                     value={`typed-${typed}`}
                     onSelect={() => add(typed)}
                   >
-                    Exclure #{typed}
+                    {m.excludeTyped(typed)}
                   </CommandItem>
                 </CommandGroup>
               )}
             {suggestions.length > 0 && (
-              <CommandGroup heading="Canaux vus dans les discussions">
+              <CommandGroup heading={m.seenChannels}>
                 {suggestions.map((channel) => (
                   <CommandItem
                     key={channel.id}
@@ -116,7 +117,7 @@ function AddChannel({
                   >
                     #{channel.name}
                     <span className="ml-auto font-mono text-xs text-muted-foreground">
-                      {channel.threads} fil{channel.threads > 1 ? "s" : ""}
+                      {m.threads(channel.threads)}
                     </span>
                   </CommandItem>
                 ))}
@@ -130,6 +131,8 @@ function AddChannel({
 }
 
 export function SlackSettings({ settings }: { settings: Settings }) {
+  const { t } = useI18n()
+  const m = t.settings.slack
   const save = useSavePreferences()
   const { preferences } = settings
   const excluded = preferences.slackExcludedChannels
@@ -141,32 +144,24 @@ export function SlackSettings({ settings }: { settings: Settings }) {
           <SlackIcon />
           Slack
         </CardTitle>
-        <CardDescription>
-          Les discussions Slack sur tes PR sont trouvées par l'agent choisi dans
-          l'onglet Agent IA, avec ton propre accès Slack, en lecture seule.
-        </CardDescription>
+        <CardDescription>{m.description}</CardDescription>
       </CardHeader>
       <CardContent>
         {!settings.env.slackSearchEnabled && (
           <Alert className="mb-4">
             <AlertDescription>
-              La recherche Slack est désactivée par{" "}
-              <code>SLACK_SEARCH=off</code> dans
-              <code>.env</code> : retire cette ligne pour l'activer.
+              {m.disabled(
+                <code key="flag">SLACK_SEARCH=off</code>,
+                <code key="file">.env</code>
+              )}
             </AlertDescription>
           </Alert>
         )}
         <FieldGroup>
           <Field orientation="horizontal">
             <FieldContent>
-              <FieldLabel htmlFor="slack-auto">
-                Recherche automatique
-              </FieldLabel>
-              <FieldDescription>
-                Cherche les discussions des PR à traiter en arrière-plan, trois
-                par synchronisation. Désactivée, la recherche ne se lance qu'à
-                l'ouverture d'une PR. Chaque recherche coûte environ 0,02 $.
-              </FieldDescription>
+              <FieldLabel htmlFor="slack-auto">{m.autoSearch}</FieldLabel>
+              <FieldDescription>{m.autoSearchDescription}</FieldDescription>
             </FieldContent>
             <Switch
               id="slack-auto"
@@ -179,15 +174,8 @@ export function SlackSettings({ settings }: { settings: Settings }) {
           <FieldSeparator />
           <Field orientation="horizontal">
             <FieldContent>
-              <FieldLabel htmlFor="review-notice">
-                Prévenir l'auteur après une review
-              </FieldLabel>
-              <FieldDescription>
-                Quand tu approuves ou demandes des changements depuis l'app, une
-                fenêtre propose un message Slack qui mentionne l'auteur. Il ne
-                part qu'après ta confirmation, dans le fil de la PR s'il existe,
-                sinon dans le canal ci-dessous.
-              </FieldDescription>
+              <FieldLabel htmlFor="review-notice">{m.reviewNotice}</FieldLabel>
+              <FieldDescription>{m.reviewNoticeDescription}</FieldDescription>
             </FieldContent>
             <Switch
               id="review-notice"
@@ -203,11 +191,9 @@ export function SlackSettings({ settings }: { settings: Settings }) {
           >
             <FieldContent>
               <FieldLabel htmlFor="review-notice-channel">
-                Canal des reviews
+                {m.reviewChannel}
               </FieldLabel>
-              <FieldDescription>
-                Sans le #, par exemple pull-requests.
-              </FieldDescription>
+              <FieldDescription>{m.reviewChannelDescription}</FieldDescription>
             </FieldContent>
             <Input
               id="review-notice-channel"
@@ -224,11 +210,8 @@ export function SlackSettings({ settings }: { settings: Settings }) {
           </Field>
           <FieldSeparator />
           <Field>
-            <FieldLabel>Canaux exclus</FieldLabel>
-            <FieldDescription>
-              Les fils de ces canaux sont masqués tout de suite, y compris ceux
-              déjà trouvés, et l'agent ne les fouille plus.
-            </FieldDescription>
+            <FieldLabel>{m.excluded}</FieldLabel>
+            <FieldDescription>{m.excludedDescription}</FieldDescription>
             <div className="flex flex-wrap items-center gap-2">
               {excluded.map((channel) => (
                 <Badge
@@ -240,7 +223,9 @@ export function SlackSettings({ settings }: { settings: Settings }) {
                   <Button
                     variant="ghost"
                     size="icon-xs"
-                    aria-label={`Ne plus exclure #${exclusionLabel(channel, settings.slackChannels)}`}
+                    aria-label={m.unexclude(
+                      exclusionLabel(channel, settings.slackChannels)
+                    )}
                     onClick={() =>
                       save.mutate({
                         slackExcludedChannels: excluded.filter(
@@ -255,7 +240,7 @@ export function SlackSettings({ settings }: { settings: Settings }) {
               ))}
               {excluded.length === 0 && (
                 <span className="text-sm text-muted-foreground">
-                  Aucun canal exclu.
+                  {m.noneExcluded}
                 </span>
               )}
               <AddChannel

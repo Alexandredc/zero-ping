@@ -18,9 +18,11 @@ import type { PullFiles } from "@/server/github/pull-files"
 import type { SearchCandidate, SearchMatch } from "@/server/search/smart-search"
 import { MAX_CANDIDATES } from "@/server/search/smart-search"
 import { draftReviewNotice } from "@/server/slack/review-notice"
+import { getMessages } from "@/server/i18n"
+import { messagesFor } from "@/lib/i18n/messages"
 import { getPreferences, normalizeChannel } from "@/server/preferences"
 import { teamPullToItem } from "@/server/team/as-item"
-import { DEMO_OFFLINE, DEMO_VIEWER, DemoOfflineError } from "./mode"
+import { DEMO_VIEWER, DemoOfflineError } from "./mode"
 import {
   DEMO_BOARD,
   DEMO_PEOPLE,
@@ -288,14 +290,17 @@ async function getReviewNotice(key: string, event: ReviewEvent) {
     author: item.author
       ? { login: item.author, name: nameOf(item.author) }
       : null,
-    message: draftReviewNotice({
-      event,
-      repoFullName: item.repoFullName,
-      number: item.number,
-      title: item.title,
-      url: item.htmlUrl,
-      author: item.author,
-    }),
+    message: draftReviewNotice(
+      {
+        event,
+        repoFullName: item.repoFullName,
+        number: item.number,
+        title: item.title,
+        url: item.htmlUrl,
+        author: item.author,
+      },
+      messagesFor(preferences.language)
+    ),
   }
 }
 
@@ -309,14 +314,17 @@ async function generateSummary(key: string) {
 /** A canned answer: the demo never runs an AI. */
 async function askAboutItem(key: string, question: string) {
   const db = await getDb()
-  const { messages } = await live.getChat(key)
+  const [{ messages }, { t }] = await Promise.all([
+    live.getChat(key),
+    getMessages(db),
+  ])
   const now = new Date().toISOString()
   const next: ChatMessage[] = [
     ...messages,
     { role: "user", content: question, at: now },
     {
       role: "assistant",
-      content: `${DEMO_OFFLINE} Avec Claude Code ou Codex, la réponse s'appuie sur la conversation GitHub, les fils Slack, le diff et les KPI Jev de l'élément.`,
+      content: `${t.server.errors.demoOffline} ${t.server.demo.chatAnswer}`,
       at: now,
     },
   ]

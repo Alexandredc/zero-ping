@@ -4,22 +4,30 @@ import {
   parseStandup,
   publishBlocker,
   standupCommand,
+  standupJsonSchema,
   standupSetupBlocker,
   standupSystemPrompt,
 } from "./standup"
 import type { StandupState } from "./standup"
+import { messagesFor } from "@/lib/i18n/messages"
+
+const fr = messagesFor("fr")
+const en = messagesFor("en")
 
 describe("parseStandup", () => {
   it("keeps both forms of the message and the reminder thread", () => {
     expect(
-      parseStandup({
-        message: " **Point équipe** ",
-        slackMessage: "<@U1> : livré",
-        channelId: "C0123456789",
-        threadTs: "1791800000.000100",
-        alreadyPosted: false,
-        note: "",
-      })
+      parseStandup(
+        {
+          message: " **Point équipe** ",
+          slackMessage: "<@U1> : livré",
+          channelId: "C0123456789",
+          threadTs: "1791800000.000100",
+          alreadyPosted: false,
+          note: "",
+        },
+        fr
+      )
     ).toEqual({
       message: "**Point équipe**",
       slackMessage: "<@U1> : livré",
@@ -31,7 +39,9 @@ describe("parseStandup", () => {
   })
 
   it("rejects an answer without a message", () => {
-    expect(() => parseStandup({ slackMessage: null })).toThrow()
+    expect(() => parseStandup({ slackMessage: null }, en)).toThrow(
+      "The standup returned no message."
+    )
   })
 })
 
@@ -76,6 +86,15 @@ describe("publishBlocker", () => {
       publishBlocker({ ...ready, message: null, slackMessage: null }, "team")
     ).toMatch(/Aucun/)
   })
+
+  it("words the blockers in the chosen language", () => {
+    expect(publishBlocker({ ...ready, postedAt: "now" }, "team", en)).toBe(
+      "This standup is already posted."
+    )
+    expect(publishBlocker({ ...ready, alreadyPosted: true }, "me", en)).toBe(
+      "Your standup is already in today's thread."
+    )
+  })
 })
 
 describe("commandInstructions", () => {
@@ -109,9 +128,21 @@ describe("standup settings", () => {
   })
 
   it("asks for a channel before any run", () => {
-    expect(standupSetupBlocker(settings)).toBeNull()
-    expect(standupSetupBlocker({ ...settings, standupChannel: "" })).toMatch(
-      /Réglages > Récap/
+    expect(standupSetupBlocker(settings, fr)).toBeNull()
+    expect(
+      standupSetupBlocker({ ...settings, standupChannel: "" }, fr)
+    ).toMatch(/Réglages > Récap/)
+    expect(
+      standupSetupBlocker({ ...settings, standupChannel: "" }, en)
+    ).toMatch(/Settings > Recap/)
+  })
+
+  it("asks for the note in the chosen language", () => {
+    expect(standupJsonSchema("me", "en").properties.note.description).toMatch(
+      /^In English, one sentence/
+    )
+    expect(standupJsonSchema("team", "fr").properties.note.description).toMatch(
+      /^In French, one sentence/
     )
   })
 })

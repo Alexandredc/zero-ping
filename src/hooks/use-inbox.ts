@@ -60,6 +60,8 @@ import {
 import type { Folder, SortOrder } from "@/server/inbox/actions"
 import type { StandupKind } from "@/server/recap/standup"
 import { toast } from "@/components/ui/toast"
+import { languageQuery, useI18n } from "@/hooks/use-i18n"
+import { messagesFor } from "@/lib/i18n/messages"
 
 /** The UI reads the local database often; GitHub is only polled by the server. */
 const LOCAL_REFRESH_MS = 4000
@@ -111,6 +113,7 @@ export function useRefreshSlack(key: string, subject?: SlackSubjectInput) {
 /** Marks a Slack thread read (collapsed) or unread, showing the change at once. */
 export function useSlackRead(key: string) {
   const queryClient = useQueryClient()
+  const { t } = useI18n()
   return useMutation({
     mutationFn: (input: { permalink: string; readThrough: string | null }) =>
       postSlackRead({ data: input }),
@@ -129,7 +132,7 @@ export function useSlackRead(key: string) {
       if (context?.previous)
         queryClient.setQueryData(slackQuery(key).queryKey, context.previous)
       toast.add({
-        title: "Fil non modifié",
+        title: t.inbox.toasts.slackThreadFailed,
         description: error.message,
         type: "error",
       })
@@ -139,16 +142,17 @@ export function useSlackRead(key: string) {
 
 export function useSlackReply(key: string) {
   const queryClient = useQueryClient()
+  const { t } = useI18n()
   return useMutation({
     mutationFn: (input: { permalink: string; message: string }) =>
       postSlackReply({ data: { key, ...input } }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["slack", key] })
-      toast.add({ title: "Réponse envoyée sur Slack", type: "success" })
+      toast.add({ title: t.inbox.toasts.slackReplySent, type: "success" })
     },
     onError: (error) =>
       toast.add({
-        title: "Réponse Slack non envoyée",
+        title: t.inbox.toasts.slackReplyFailed,
         description: error.message,
         type: "error",
       }),
@@ -169,15 +173,17 @@ export const accessibleReposQuery = () =>
     staleTime: 10 * 60_000,
   })
 
-function errorMessage(error: unknown) {
-  return error instanceof Error ? error.message : "Erreur inconnue"
-}
-
 export function useInboxActions() {
   const queryClient = useQueryClient()
+  const { t, language } = useI18n()
+  const copy = t.inbox.toasts
   const refresh = () => queryClient.invalidateQueries({ queryKey: ["inbox"] })
   const onError = (title: string) => (error: unknown) =>
-    toast.add({ title, description: errorMessage(error), type: "error" })
+    toast.add({
+      title,
+      description: error instanceof Error ? error.message : copy.unknownError,
+      type: "error",
+    })
 
   const done = useMutation({
     mutationFn: (input: { keys: string[]; done: boolean }) =>
@@ -186,20 +192,16 @@ export function useInboxActions() {
       void refresh()
       if (input.done) {
         toast.add({
-          title:
-            input.keys.length > 1
-              ? `${input.keys.length} éléments marqués comme traités`
-              : "Marqué comme traité",
-          description:
-            "Rangé dans « Traités » et marqué Done sur GitHub. Il revient tout seul s'il y a du nouveau.",
+          title: copy.markedDone(input.keys.length),
+          description: copy.markedDoneDescription,
           actionProps: {
-            children: "Annuler",
+            children: t.common.cancel,
             onClick: () => done.mutate({ keys: input.keys, done: false }),
           },
         })
       }
     },
-    onError: onError("Impossible de marquer comme traité"),
+    onError: onError(copy.markDoneFailed),
   })
 
   const snooze = useMutation({
@@ -211,15 +213,18 @@ export function useInboxActions() {
       void refresh()
       if (input.until) {
         toast.add({
-          title:
-            input.keys.length > 1
-              ? `${input.keys.length} éléments mis en pause`
-              : "Mis en pause",
-          description: `Jusqu'au ${input.until.toLocaleString("fr", { weekday: "long", hour: "2-digit", minute: "2-digit" })}`,
+          title: copy.snoozed(input.keys.length),
+          description: copy.snoozedUntil(
+            input.until.toLocaleString(language, {
+              weekday: "long",
+              hour: "2-digit",
+              minute: "2-digit",
+            })
+          ),
         })
       }
     },
-    onError: onError("Impossible de mettre en pause"),
+    onError: onError(copy.snoozeFailed),
   })
 
   const reply = useMutation({
@@ -230,9 +235,9 @@ export function useInboxActions() {
       void queryClient.invalidateQueries({
         queryKey: ["conversation", input.key],
       })
-      toast.add({ title: "Réponse envoyée", type: "success" })
+      toast.add({ title: copy.replySent, type: "success" })
     },
-    onError: onError("Réponse non envoyée"),
+    onError: onError(copy.replyFailed),
   })
 
   const review = useMutation({
@@ -243,20 +248,15 @@ export function useInboxActions() {
       void queryClient.invalidateQueries({
         queryKey: ["conversation", input.key],
       })
-      const titles = {
-        APPROVE: "PR approuvée",
-        REQUEST_CHANGES: "Changements demandés",
-        COMMENT: "Review envoyée",
-      }
-      toast.add({ title: titles[input.event], type: "success" })
+      toast.add({ title: copy.reviewSent[input.event], type: "success" })
     },
-    onError: onError("Review non envoyée"),
+    onError: onError(copy.reviewFailed),
   })
 
   const sync = useMutation({
     mutationFn: () => triggerSync(),
     onSuccess: () => refresh(),
-    onError: onError("Synchronisation échouée"),
+    onError: onError(copy.syncFailed),
   })
 
   const trackRepo = useMutation({
@@ -266,7 +266,7 @@ export function useInboxActions() {
       void queryClient.invalidateQueries({ queryKey: ["repos"] })
       void refresh()
     },
-    onError: onError("Impossible de modifier le repo"),
+    onError: onError(copy.repoFailed),
   })
 
   return { done, snooze, reply, review, sync, trackRepo }
@@ -277,20 +277,26 @@ export const settingsQuery = () =>
 
 export function useSavePreferences() {
   const queryClient = useQueryClient()
+  const { t } = useI18n()
   return useMutation({
     mutationFn: (patch: Parameters<typeof setPreferences>[0]["data"]) =>
       setPreferences({ data: patch }),
-    onSuccess: () => {
+    onSuccess: (next) => {
+      // The new language applies at once, to this toast as well, and the
+      // server rewrites the text it produces (recap, reasons, errors).
+      const previous = queryClient.getQueryData(languageQuery().queryKey)
+      queryClient.setQueryData(languageQuery().queryKey, next.language)
+      if (previous !== next.language) void queryClient.invalidateQueries()
       void queryClient.invalidateQueries({ queryKey: ["settings"] })
       void queryClient.invalidateQueries({ queryKey: ["quiet"] })
       void queryClient.invalidateQueries({ queryKey: ["slack"] })
       void queryClient.invalidateQueries({ queryKey: ["inbox"] })
       void queryClient.invalidateQueries({ queryKey: ["issues"] })
-      toast.add({ title: "Réglage enregistré" })
+      toast.add({ title: messagesFor(next.language).settings.saved })
     },
     onError: (error) =>
       toast.add({
-        title: "Réglage non enregistré",
+        title: t.settings.notSaved,
         description: error.message,
         type: "error",
       }),
@@ -308,13 +314,14 @@ export const summaryQuery = (key: string) =>
 
 export function useSummarize(key: string) {
   const queryClient = useQueryClient()
+  const { t } = useI18n()
   return useMutation({
     mutationFn: (length: "short" | "standard" | "detailed") =>
       summarizeItem({ data: { key, length } }),
     onSuccess: (data) => queryClient.setQueryData(["summary", key], data),
     onError: (error) =>
       toast.add({
-        title: "Résumé impossible",
+        title: t.inbox.toasts.summaryFailed,
         description: error.message,
         type: "error",
       }),
@@ -348,6 +355,7 @@ export const filesQuery = (key: string, sinceReview = false) =>
 /** Toggles a file's viewed state, optimistically, then syncs it to GitHub. */
 export function useFileViewed(key: string, sinceReview = false) {
   const queryClient = useQueryClient()
+  const { t } = useI18n()
   type Files = Awaited<ReturnType<typeof getItemFiles>>
   return useMutation({
     mutationFn: (input: {
@@ -378,7 +386,7 @@ export function useFileViewed(key: string, sinceReview = false) {
     onError: (error, _input, context) => {
       queryClient.setQueryData(["files", key, sinceReview], context?.previous)
       toast.add({
-        title: "Fichier non synchronisé avec GitHub",
+        title: t.inbox.toasts.fileViewedFailed,
         description: error.message,
         type: "error",
       })
@@ -395,6 +403,7 @@ export const mergeInfoQuery = (key: string) =>
 
 export function useMerge(key: string) {
   const queryClient = useQueryClient()
+  const { t } = useI18n()
   return useMutation({
     mutationFn: (input: {
       method: "SQUASH" | "MERGE" | "REBASE"
@@ -404,16 +413,16 @@ export function useMerge(key: string) {
       void queryClient.invalidateQueries({ queryKey: ["inbox"] })
       void queryClient.invalidateQueries({ queryKey: ["merge-info", key] })
       toast.add({
-        title: "PR mergée",
+        title: t.inbox.toasts.merged,
         description: result.deletedBranch
-          ? `Branche ${result.deletedBranch} supprimée.`
+          ? t.inbox.toasts.branchDeleted(result.deletedBranch)
           : undefined,
         type: "success",
       })
     },
     onError: (error) =>
       toast.add({
-        title: "Merge impossible",
+        title: t.inbox.toasts.mergeFailed,
         description: error.message,
         type: "error",
       }),
@@ -429,6 +438,7 @@ export const checksQuery = (key: string) =>
 
 export function useRerunChecks(key: string) {
   const queryClient = useQueryClient()
+  const { t } = useI18n()
   return useMutation({
     mutationFn: () => postRerunChecks({ data: { key } }),
     onSuccess: ({ runs }) => {
@@ -437,14 +447,14 @@ export function useRerunChecks(key: string) {
         5000
       )
       toast.add({
-        title: "Jobs en échec relancés",
-        description: `${runs} workflow${runs > 1 ? "s" : ""} relancé${runs > 1 ? "s" : ""} sur GitHub Actions.`,
+        title: t.inbox.toasts.rerun,
+        description: t.inbox.toasts.rerunDescription(runs),
         type: "success",
       })
     },
     onError: (error) =>
       toast.add({
-        title: "Relance impossible",
+        title: t.inbox.toasts.rerunFailed,
         description: error.message,
         type: "error",
       }),
@@ -460,19 +470,20 @@ export const teamQuery = () =>
 
 export function useTakeReview() {
   const queryClient = useQueryClient()
+  const { t } = useI18n()
   return useMutation({
     mutationFn: (key: string) => postTakeReview({ data: { key } }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["inbox"] })
       toast.add({
-        title: "Review prise",
-        description: "La PR arrive dans « À reviewer » à la prochaine synchro.",
+        title: t.inbox.toasts.reviewTaken,
+        description: t.inbox.toasts.reviewTakenDescription,
         type: "success",
       })
     },
     onError: (error) =>
       toast.add({
-        title: "Impossible de prendre la review",
+        title: t.inbox.toasts.takeReviewFailed,
         description: error.message,
         type: "error",
       }),
@@ -488,6 +499,7 @@ export const reviewerOptionsQuery = (key: string) =>
 
 export function useSetReviewers(key: string) {
   const queryClient = useQueryClient()
+  const { t } = useI18n()
   return useMutation({
     mutationFn: (reviewers: string[]) =>
       postReviewers({ data: { key, reviewers } }),
@@ -498,20 +510,21 @@ export function useSetReviewers(key: string) {
         queryKey: ["reviewer-options", key],
       })
       const parts = [
-        add.length > 0 && `${add.length} demandé${add.length > 1 ? "s" : ""}`,
-        remove.length > 0 &&
-          `${remove.length} retiré${remove.length > 1 ? "s" : ""}`,
+        add.length > 0 && t.inbox.toasts.reviewersRequested(add.length),
+        remove.length > 0 && t.inbox.toasts.reviewersRemoved(remove.length),
       ].filter(Boolean)
       toast.add({
-        title: "Reviewers mis à jour",
+        title: t.inbox.toasts.reviewersUpdated,
         description:
-          parts.length > 0 ? `${parts.join(", ")} sur GitHub.` : undefined,
+          parts.length > 0
+            ? t.inbox.toasts.reviewersOnGitHub(parts.join(", "))
+            : undefined,
         type: "success",
       })
     },
     onError: (error) =>
       toast.add({
-        title: "Impossible de changer les reviewers",
+        title: t.inbox.toasts.reviewersFailed,
         description: error.message,
         type: "error",
       }),
@@ -565,6 +578,7 @@ export const uatStatusQuery = (key: string) =>
 /** Sets the status or priority of an item's card, showing it before GitHub answers. */
 export function useSetProjectField(key: string) {
   const queryClient = useQueryClient()
+  const { t } = useI18n()
   const queryKey = projectFieldsQuery(key).queryKey
   return useMutation({
     mutationFn: (input: {
@@ -597,7 +611,7 @@ export function useSetProjectField(key: string) {
       if (context?.previous)
         queryClient.setQueryData(queryKey, context.previous)
       toast.add({
-        title: "Champ du projet non modifié",
+        title: t.inbox.toasts.projectFieldFailed,
         description: error.message,
         type: "error",
       })
@@ -606,8 +620,8 @@ export function useSetProjectField(key: string) {
       toast.add({
         title:
           input.field === "status"
-            ? `Déplacée dans « ${input.value} »`
-            : `Priorité passée à ${input.value}`,
+            ? t.inbox.toasts.movedTo(input.value)
+            : t.inbox.toasts.prioritySet(input.value),
         type: "success",
       }),
     onSettled: () => {
@@ -620,6 +634,7 @@ export function useSetProjectField(key: string) {
 /** Moves an item to another board column, showing the new status before GitHub answers. */
 export function useSetWorkItemStatus() {
   const queryClient = useQueryClient()
+  const { t } = useI18n()
   return useMutation({
     mutationFn: (input: {
       projectId: string
@@ -663,14 +678,14 @@ export function useSetWorkItemStatus() {
       if (context?.previous)
         queryClient.setQueryData(issuesQuery().queryKey, context.previous)
       toast.add({
-        title: "Statut non modifié",
+        title: t.inbox.toasts.statusFailed,
         description: error.message,
         type: "error",
       })
     },
     onSuccess: (_, input) =>
       toast.add({
-        title: `Déplacée dans « ${input.status} »`,
+        title: t.inbox.toasts.movedTo(input.status),
         type: "success",
       }),
     onSettled: () =>
@@ -696,18 +711,19 @@ export const reviewNoticeQuery = (
   })
 
 export function useSendReviewNotice() {
+  const { t } = useI18n()
   return useMutation({
     mutationFn: (input: Parameters<typeof postReviewNotice>[0]["data"]) =>
       postReviewNotice({ data: input }),
     onSuccess: ({ permalink }) =>
       toast.add({
-        title: "Message posté sur Slack",
+        title: t.inbox.toasts.slackPosted,
         description: permalink ?? undefined,
         type: "success",
       }),
     onError: (error) =>
       toast.add({
-        title: "Message Slack non envoyé",
+        title: t.inbox.toasts.slackPostFailed,
         description: error.message,
         type: "error",
       }),
@@ -724,13 +740,14 @@ export const insightsQuery = (key: string, subject?: SlackSubjectInput) =>
 
 export function useRefreshInsights(key: string, subject?: SlackSubjectInput) {
   const queryClient = useQueryClient()
+  const { t } = useI18n()
   return useMutation({
     mutationFn: () => refreshInsights({ data: { key, subject } }),
     onSuccess: (data) =>
       queryClient.setQueryData(insightsQuery(key).queryKey, data),
     onError: (error) =>
       toast.add({
-        title: "KPI Jev indisponibles",
+        title: t.inbox.toasts.insightsFailed,
         description: error.message,
         type: "error",
       }),
@@ -767,13 +784,14 @@ export const chatQuery = (key: string) =>
 /** Asks Claude about an item; the question shows at once, the answer when it lands. */
 export function useAskAi(key: string) {
   const queryClient = useQueryClient()
+  const { t } = useI18n()
   return useMutation({
     mutationFn: (question: string) => postQuestion({ data: { key, question } }),
     onSuccess: (chat) =>
       queryClient.setQueryData(chatQuery(key).queryKey, chat),
     onError: (error) =>
       toast.add({
-        title: "L'IA n'a pas répondu",
+        title: t.inbox.toasts.aiNoAnswer,
         description: error.message,
         type: "error",
       }),
@@ -821,13 +839,14 @@ export const recapQuery = () =>
 
 export function useRunStandup(kind: StandupKind) {
   const queryClient = useQueryClient()
+  const { t } = useI18n()
   return useMutation({
     mutationFn: () => postRunStandup({ data: { kind } }),
     onSuccess: () =>
       void queryClient.invalidateQueries({ queryKey: ["recap"] }),
     onError: (error) =>
       toast.add({
-        title: "Standup non lancé",
+        title: t.inbox.toasts.standupFailed,
         description: error.message,
         type: "error",
       }),
@@ -844,15 +863,16 @@ export const dashboardQuery = () =>
 
 export function usePublishStandup(kind: StandupKind) {
   const queryClient = useQueryClient()
+  const { t } = useI18n()
   return useMutation({
     mutationFn: () => postStandupToSlack({ data: { kind } }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["recap"] })
-      toast.add({ title: "Standup publié dans Slack", type: "success" })
+      toast.add({ title: t.inbox.toasts.standupPublished, type: "success" })
     },
     onError: (error) =>
       toast.add({
-        title: "Standup non publié",
+        title: t.inbox.toasts.standupPublishFailed,
         description: error.message,
         type: "error",
       }),
