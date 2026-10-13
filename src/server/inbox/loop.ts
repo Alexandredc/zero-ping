@@ -18,6 +18,7 @@ import { eq } from "drizzle-orm"
 import { recordDailyPings } from "@/server/dashboard/activity"
 import { countPings, warmProjectCaches } from "@/server/inbox/actions"
 import { localDate } from "@/server/recap/schedule"
+import { isDemo } from "@/server/demo/mode"
 
 export type SyncStatus = {
   running: boolean
@@ -132,6 +133,8 @@ function schedule(seconds: number) {
 export function syncNow(
   options: { forceSearch?: boolean } = {}
 ): Promise<void> {
+  // The demo's data is seeded once: there is nothing to sync.
+  if (isDemo()) return Promise.resolve()
   const loop = state()
   if (loop.current) return loop.current
   loop.status.running = true

@@ -1,6 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router"
-import { countPings } from "@/server/inbox/actions"
-import { ensureSyncLoop } from "@/server/inbox/loop"
+import { countPings, ensureSyncLoop } from "@/server/inbox/api"
 
 /** Plain-text count of the items waiting for the viewer, read by the macOS app's Dock badge. */
 export const Route = createFileRoute("/api/pings")({
