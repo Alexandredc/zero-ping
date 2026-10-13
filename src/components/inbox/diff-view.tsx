@@ -23,13 +23,7 @@ import { parsePatch } from "@/lib/diff"
 import { buildFileTree } from "@/lib/file-tree"
 import type { TreeNode } from "@/lib/file-tree"
 import { cn } from "@/lib/utils"
-
-const STATUS_LABEL: Record<string, string> = {
-  added: "ajouté",
-  removed: "supprimé",
-  renamed: "renommé",
-  copied: "copié",
-}
+import { useI18n } from "@/hooks/use-i18n"
 
 /** Generated or noisy files start collapsed, like on GitHub. */
 const NOISY =
@@ -175,6 +169,8 @@ function FileDiff({
   onViewed: (viewed: boolean) => void
   sectionRef: (element: HTMLElement | null) => void
 }) {
+  const { t } = useI18n()
+  const m = t.pull.diff
   const lines = open && file.patch ? parsePatch(file.patch) : []
   const viewed = file.viewed === "VIEWED"
 
@@ -211,33 +207,33 @@ function FileDiff({
           </span>
         </button>
         {file.viewed === "DISMISSED" && (
-          <Hint content="Tu l'avais marqué comme vu, mais il a changé depuis.">
+          <Hint content={m.changedSinceHint}>
             <Badge
               variant="outline"
               className="cursor-help border-heat/40 text-heat-foreground"
             >
-              modifié depuis
+              {m.changedSince}
             </Badge>
           </Hint>
         )}
-        {STATUS_LABEL[file.status] && (
-          <Badge variant="outline">{STATUS_LABEL[file.status]}</Badge>
+        {m.status[file.status] && (
+          <Badge variant="outline">{m.status[file.status]}</Badge>
         )}
         <Counts additions={file.additions} deletions={file.deletions} />
-        <Hint content="Marqué aussi comme vu sur GitHub">
+        <Hint content={m.viewedHint}>
           <label className="flex cursor-pointer items-center gap-1.5 rounded border bg-background px-1.5 py-0.5">
             <Checkbox
               checked={viewed}
               onCheckedChange={(checked) => onViewed(checked)}
             />
-            Vu
+            {m.viewed}
           </label>
         </Hint>
         <a
           href={file.url}
           target="_blank"
           rel="noreferrer"
-          aria-label={`Voir ${file.filename} sur GitHub`}
+          aria-label={m.viewFileOnGitHub(file.filename)}
           className="text-muted-foreground hover:text-foreground"
         >
           <ExternalLinkIcon className="size-3.5" />
@@ -296,14 +292,14 @@ function FileDiff({
           </div>
         ) : (
           <p className="px-3 py-3 text-xs text-muted-foreground">
-            Diff non affiché (fichier binaire ou trop volumineux).{" "}
+            {m.notShown}{" "}
             <a
               href={file.url}
               target="_blank"
               rel="noreferrer"
               className="underline"
             >
-              Le voir sur GitHub
+              {m.seeOnGitHub}
             </a>
           </p>
         ))}
@@ -321,6 +317,8 @@ function RangeToggle({
   sinceReview: boolean
   onChange: (sinceReview: boolean) => void
 }) {
+  const { t, language } = useI18n()
+  const m = t.pull.diff
   return (
     <div className="flex flex-wrap items-center gap-2 rounded-lg border bg-muted/40 px-3 py-2 text-xs">
       <ToggleGroup
@@ -329,26 +327,28 @@ function RangeToggle({
         onValueChange={(value) => {
           if (value[0]) onChange(value[0] === "since")
         }}
-        aria-label="Étendue du diff"
+        aria-label={m.rangeLabel}
       >
-        <ToggleGroupItem value="since">Depuis ma review</ToggleGroupItem>
-        <ToggleGroupItem value="all">Toute la PR</ToggleGroupItem>
+        <ToggleGroupItem value="since">{m.sinceMyReview}</ToggleGroupItem>
+        <ToggleGroupItem value="all">{m.wholePr}</ToggleGroupItem>
       </ToggleGroup>
       <span className="text-muted-foreground">
-        Ta dernière review date de {timeAgo(item.reviewedAt)}
+        {m.lastReview(timeAgo(item.reviewedAt, language))}
         {item.reviewedOid && (
           <>
             {" "}
             (<span className="font-mono">{item.reviewedOid.slice(0, 7)}</span>)
           </>
         )}
-        . Après un force-push, le diff inclut aussi ce que le rebase a apporté.
+        {m.forcePushNote}
       </span>
     </div>
   )
 }
 
 export function DiffView({ item }: { item: Item }) {
+  const { t } = useI18n()
+  const m = t.pull.diff
   const itemKey = item.key
   const htmlUrl = item.htmlUrl
   const canNarrow = hasNewCommitsSinceReview(item)
@@ -382,11 +382,10 @@ export function DiffView({ item }: { item: Item }) {
       <div className="flex flex-col gap-3">
         {range}
         <Alert variant="destructive">
-          <AlertTitle>Diff indisponible</AlertTitle>
+          <AlertTitle>{m.unavailable}</AlertTitle>
           <AlertDescription>
             {error.message}
-            {sinceReview &&
-              " Le commit de ta review a peut-être disparu après un force-push : affiche toute la PR."}
+            {sinceReview && m.reviewCommitGone}
           </AlertDescription>
         </Alert>
       </div>
@@ -427,13 +426,10 @@ export function DiffView({ item }: { item: Item }) {
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
         {data.sinceReview && (
           <span className="font-medium text-foreground">
-            {data.sinceReview.commits} commit
-            {data.sinceReview.commits > 1 ? "s" : ""} depuis ta review ·
+            {m.commitsSinceReview(data.sinceReview.commits)}
           </span>
         )}
-        <span>
-          {data.files.length} fichier{data.files.length > 1 ? "s" : ""}
-        </span>
+        <span>{m.files(data.files.length)}</span>
         <Counts
           additions={data.totalAdditions}
           deletions={data.totalDeletions}
@@ -447,7 +443,7 @@ export function DiffView({ item }: { item: Item }) {
               }}
             />
           </span>
-          {viewedCount}/{data.files.length} vus
+          {m.viewedCount(viewedCount, data.files.length)}
         </span>
         <a
           href={`${htmlUrl}/files`}
@@ -455,18 +451,16 @@ export function DiffView({ item }: { item: Item }) {
           rel="noreferrer"
           className="ml-auto inline-flex items-center gap-1 hover:text-foreground hover:underline"
         >
-          Ouvrir le diff sur GitHub
+          {m.openOnGitHub}
           <ExternalLinkIcon className="size-3" />
         </a>
       </div>
       {data.truncated && (
-        <p className="text-xs text-muted-foreground">
-          Seuls les 300 premiers fichiers sont affichés.
-        </p>
+        <p className="text-xs text-muted-foreground">{m.truncated}</p>
       )}
       <div className="grid gap-3 @3xl:grid-cols-[15rem_minmax(0,1fr)]">
         <nav
-          aria-label="Arborescence des fichiers"
+          aria-label={m.fileTree}
           className="max-h-72 overflow-y-auto rounded-lg border bg-card p-1.5 @3xl:sticky @3xl:top-0 @3xl:max-h-[calc(100svh-14rem)] @3xl:self-start"
         >
           <TreeItems nodes={tree} depth={0} onSelect={select} />

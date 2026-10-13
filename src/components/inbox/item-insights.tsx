@@ -2,7 +2,12 @@ import { useQuery } from "@tanstack/react-query"
 import { GaugeIcon, InfoIcon, RefreshCwIcon } from "lucide-react"
 import { Hint } from "./hint"
 import type { PullInsight } from "@/server/db/schema"
-import { INSIGHTS, ISSUE_INSIGHTS, concern, insightLabel } from "@/lib/insights"
+import {
+  concern,
+  insightLabel,
+  issueInsightSpecs,
+  pullInsightSpecs,
+} from "@/lib/insights"
 import type { InsightSpec } from "@/lib/insights"
 import { insightsQuery, useRefreshInsights } from "@/hooks/use-inbox"
 import type { SlackSubjectInput } from "@/hooks/use-inbox"
@@ -11,15 +16,12 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { Spinner } from "@/components/ui/spinner"
 import { cn } from "@/lib/utils"
 import { timeAgo } from "@/lib/format"
+import { useI18n } from "@/hooks/use-i18n"
+import type { Messages } from "@/lib/i18n/messages"
 import { MIN_AI_CONFIDENCE } from "@/server/inbox/priority"
 
 /** The specialist reviews, shown together as one « Expertise » tile. */
 const EXPERTISE = ["security", "data", "infra"]
-const EXPERTISE_LABEL: Record<string, string> = {
-  security: "sécurité",
-  data: "data / BDD",
-  infra: "infra",
-}
 
 function tone(level: number, unsure: boolean) {
   if (unsure) return "text-muted-foreground"
@@ -30,14 +32,15 @@ function tone(level: number, unsure: boolean) {
 
 type Kind = "PR" | "issue"
 
-const specsFor = (kind: Kind) => (kind === "PR" ? INSIGHTS : ISSUE_INSIGHTS)
+const specsFor = (kind: Kind, t: Messages) =>
+  kind === "PR" ? pullInsightSpecs(t) : issueInsightSpecs(t)
 
 /** The tiles as they will appear, so the loading state has the same shape. */
-function tileLabels(kind: Kind) {
-  const specs = specsFor(kind).filter((spec) => !EXPERTISE.includes(spec.id))
+function tileLabels(kind: Kind, t: Messages) {
+  const specs = specsFor(kind, t).filter((spec) => !EXPERTISE.includes(spec.id))
   return [
     ...specs.map((spec) => spec.label),
-    ...(kind === "PR" ? ["Expertise requise"] : []),
+    ...(kind === "PR" ? [t.pull.insights.expertiseRequired] : []),
   ]
 }
 
@@ -47,8 +50,10 @@ const TILE_CLASS =
 const CARD_CLASS =
   "flex flex-col gap-3 rounded-lg border border-primary/20 bg-accent/40 p-4"
 
-const formatConfidence = (confidence: number | null) =>
-  confidence === null ? "non fournie" : `${Math.round(confidence * 100)} %`
+const formatConfidence = (confidence: number | null, t: Messages) =>
+  confidence === null
+    ? t.pull.insights.confidenceMissing
+    : t.pull.insights.percent(Math.round(confidence * 100))
 
 /**
  * One KPI tile: the label on top, the value below. The loading state uses the
@@ -93,6 +98,7 @@ function Tile({
   unsure: boolean
   hint: React.ReactNode
 }) {
+  const { t } = useI18n()
   return (
     <TileFrame label={label} hint={hint}>
       <span
@@ -102,7 +108,7 @@ function Tile({
       </span>
       {unsure && (
         <span className="rounded border border-dashed px-1 text-[0.6rem] text-muted-foreground">
-          incertain
+          {t.pull.insights.unsure}
         </span>
       )}
     </TileFrame>
@@ -111,12 +117,15 @@ function Tile({
 
 /** What Jev answered, on the KPI's own scale, for the tile's hover. */
 function Scale({ spec, insight }: { spec: InsightSpec; insight: PullInsight }) {
+  const { t } = useI18n()
   if (spec.kind === "yesno")
     return (
       <span>
-        Probabilité de « {spec.yes.toLowerCase()} » :{" "}
-        <span className="font-mono">{Math.round(insight.value * 100)} %</span>{" "}
-        <span className="opacity-70">(« {spec.yes} » à partir de 50 %)</span>
+        {t.pull.insights.yesProbability(spec.yes.toLowerCase())}{" "}
+        <span className="font-mono">
+          {t.pull.insights.percent(Math.round(insight.value * 100))}
+        </span>{" "}
+        <span className="opacity-70">{t.pull.insights.yesFrom(spec.yes)}</span>
       </span>
     )
   return (
@@ -137,7 +146,7 @@ function Scale({ spec, insight }: { spec: InsightSpec; insight: PullInsight }) {
               : ""}
           </span>
           <span>
-            {level} : {spec.meanings[index]}
+            {t.pull.insights.levelMeaning(level, spec.meanings[index])}
           </span>
         </span>
       ))}
@@ -152,6 +161,7 @@ function SpecTile({
   spec: InsightSpec
   insight: PullInsight
 }) {
+  const { t } = useI18n()
   const unsure = (insight.confidence ?? 1) < MIN_AI_CONFIDENCE
   return (
     <Tile
@@ -165,10 +175,10 @@ function SpecTile({
           <span>{spec.hint}</span>
           <Scale spec={spec} insight={insight} />
           <span className="opacity-70">
-            Confiance de Jev : {formatConfidence(insight.confidence)}.
-            {unsure
-              ? " C'est sous 50 % : Jev n'est pas sûr de lui, cette valeur est donnée à titre indicatif. Vérifie toi-même."
-              : " Au-dessus de 50 %, la réponse est jugée fiable."}
+            {t.pull.insights.confidence(
+              formatConfidence(insight.confidence, t)
+            )}
+            {unsure ? t.pull.insights.unsureNote : t.pull.insights.sureNote}
           </span>
         </span>
       }
@@ -187,39 +197,34 @@ function Header({
   onRefresh?: () => void
   refreshing?: boolean
 }) {
-  const noun = kind === "PR" ? "la PR" : "l'issue"
+  const { t, language } = useI18n()
+  const m = t.pull.insights
+  const noun = kind === "PR" ? m.thePr : m.theIssue
   return (
     <header className="flex h-6 items-center gap-2">
       <GaugeIcon className="size-4 text-primary" />
-      <h3 className="text-sm font-semibold">KPI Jev</h3>
+      <h3 className="text-sm font-semibold">{m.title}</h3>
       <span className="text-xs text-muted-foreground">
-        {createdAt
-          ? timeAgo(createdAt)
-          : `Jev évalue ${noun}… (quelques secondes)`}
+        {createdAt ? timeAgo(createdAt, language) : m.evaluating(noun)}
       </span>
       <Hint
         instant
         content={
           <span className="flex max-w-80 flex-col gap-1">
-            <span className="font-medium">Comment lire ces KPI</span>
+            <span className="font-medium">{m.howToRead}</span>
             <span>
-              {kind === "PR"
-                ? "Jev, le modèle de décision de l'app, les estime d'après la description, les commentaires, la CI, les fichiers et le début du diff."
-                : "Jev, le modèle de décision de l'app, les estime d'après la description, les labels et les derniers commentaires."}{" "}
-              Survole une tuile pour son échelle.
+              {kind === "PR" ? m.sourcesPr : m.sourcesIssue} {m.hoverTile}
             </span>
             <span>
-              <span className="text-diff-add-strong">Vert</span> : rien à
-              signaler · <span className="text-heat-foreground">orange</span> :
-              à surveiller · <span className="text-destructive">rouge</span> : à
-              regarder.
+              <span className="text-diff-add-strong">{m.legend.green}</span>
+              {m.legend.fine}
+              <span className="text-heat-foreground">{m.legend.orange}</span>
+              {m.legend.watch}
+              <span className="text-destructive">{m.legend.red}</span>
+              {m.legend.look}
             </span>
-            <span>
-              « incertain » : Jev a moins de 50 % de confiance dans sa réponse.
-            </span>
-            <span className="opacity-70">
-              Le résultat est gardé 20 minutes ; ↻ le recalcule.
-            </span>
+            <span>{m.unsureLegend}</span>
+            <span className="opacity-70">{m.cacheNote}</span>
           </span>
         }
         className="flex cursor-help text-muted-foreground"
@@ -227,16 +232,13 @@ function Header({
         <InfoIcon className="size-3.5" />
       </Hint>
       {onRefresh && (
-        <Hint
-          content={`Recalcule les KPI avec l'état actuel de ${noun}.`}
-          className="ml-auto flex"
-        >
+        <Hint content={m.refreshHint(noun)} className="ml-auto flex">
           <Button
             variant="ghost"
             size="icon-xs"
             onClick={onRefresh}
             disabled={refreshing}
-            aria-label="Recalculer les KPI Jev"
+            aria-label={m.refreshLabel}
           >
             {refreshing ? <Spinner /> : <RefreshCwIcon />}
           </Button>
@@ -257,6 +259,7 @@ export function ItemInsights({
   /** For an issue outside the inbox: what Jev should read. */
   subject?: SlackSubjectInput
 }) {
+  const { t } = useI18n()
   const { data, isPending, error } = useQuery(insightsQuery(itemKey, subject))
   const refresh = useRefreshInsights(itemKey, subject)
 
@@ -265,7 +268,7 @@ export function ItemInsights({
       <section className={CARD_CLASS} aria-busy>
         <Header kind={kind} createdAt={null} />
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-          {tileLabels(kind).map((label) => (
+          {tileLabels(kind, t).map((label) => (
             <TileFrame key={label} label={label}>
               <Skeleton className="h-4 w-16" />
             </TileFrame>
@@ -276,13 +279,13 @@ export function ItemInsights({
   if (error)
     return (
       <p className="text-xs text-muted-foreground">
-        KPI Jev indisponibles : {error.message}
+        {t.pull.insights.unavailable(error.message)}
       </p>
     )
   if (!data.available) return null
 
   const byId = new Map(data.insights.map((insight) => [insight.id, insight]))
-  const main = specsFor(kind).filter(
+  const main = specsFor(kind, t).filter(
     (spec) => !EXPERTISE.includes(spec.id) && byId.has(spec.id)
   )
   const experts =
@@ -297,7 +300,7 @@ export function ItemInsights({
   )
 
   return (
-    <section aria-label="KPI Jev" className={CARD_CLASS}>
+    <section aria-label={t.pull.insights.title} className={CARD_CLASS}>
       <Header
         kind={kind}
         createdAt={data.createdAt}
@@ -310,28 +313,29 @@ export function ItemInsights({
         ))}
         {experts.length > 0 && (
           <Tile
-            label="Expertise requise"
+            label={t.pull.insights.expertiseRequired}
             value={
               required.length === 0
-                ? "Aucune"
+                ? t.pull.insights.noExpertise
                 : required
-                    .map((insight) => EXPERTISE_LABEL[insight.id])
+                    .map((insight) => t.pull.insights.expertise[insight.id])
                     .join(", ")
             }
             level={required.length === 0 ? 0 : 0.5}
             unsure={false}
             hint={
               <span className="flex max-w-80 flex-col gap-1">
-                <span className="font-medium">Expertise requise</span>
-                <span>
-                  Domaines qu'une personne spécialisée devrait valider avant le
-                  merge.
+                <span className="font-medium">
+                  {t.pull.insights.expertiseRequired}
                 </span>
+                <span>{t.pull.insights.expertiseHint}</span>
                 {experts.map((insight) => (
                   <span key={insight.id} className="font-mono opacity-80">
-                    {EXPERTISE_LABEL[insight.id]} :{" "}
-                    {Math.round(insight.value * 100)} % (confiance{" "}
-                    {formatConfidence(insight.confidence)})
+                    {t.pull.insights.expertiseLine(
+                      t.pull.insights.expertise[insight.id],
+                      t.pull.insights.percent(Math.round(insight.value * 100)),
+                      formatConfidence(insight.confidence, t)
+                    )}
                   </span>
                 ))}
               </span>

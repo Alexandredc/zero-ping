@@ -1,10 +1,19 @@
 import { Hint } from "./hint"
 import { URGENCY_LEVELS } from "@/server/inbox/priority"
 import { cn } from "@/lib/utils"
+import { useI18n } from "@/hooks/use-i18n"
+import type { Messages } from "@/lib/i18n/messages"
 
 /** Jev's urgency on the 0–100 scale of the priority gauge: 3 levels above « peut attendre ». */
 export function jevScore(urgency: number): number {
   return Math.round((urgency / (URGENCY_LEVELS.length - 1)) * 100)
+}
+
+/** Jev's urgency level in words, lowercased to read in a sentence. */
+export function jevUrgencyLabel(urgency: number, t: Messages): string {
+  const levels = t.pull.jev.urgencyLevels
+  const index = Math.min(Math.max(Math.round(urgency), 0), levels.length - 1)
+  return levels[index].toLowerCase()
 }
 
 /**
@@ -12,6 +21,7 @@ export function jevScore(urgency: number): number {
  * where no inbox rule applies, for teammates' PRs and sprint tickets.
  */
 export function JevGauge({ urgency }: { urgency: number | null }) {
+  const { t } = useI18n()
   const score = urgency === null ? null : jevScore(urgency)
   const level = Math.max(0.08, (score ?? 0) / 100)
   return (
@@ -21,23 +31,15 @@ export function JevGauge({ urgency }: { urgency: number | null }) {
       content={
         urgency === null ? (
           <>
-            <span className="font-medium">Pas encore évaluée par Jev</span>
-            <span className="opacity-70">
-              Jev l'évalue en arrière-plan ; elle sera classée au prochain
-              rafraîchissement. Une réponse trop peu sûre n'est pas comptée.
-            </span>
+            <span className="font-medium">{t.pull.jev.notRated}</span>
+            <span className="opacity-70">{t.pull.jev.notRatedHint}</span>
           </>
         ) : (
           <>
             <span className="font-medium">
-              Urgence Jev : {URGENCY_LEVELS[Math.round(urgency)].toLowerCase()}{" "}
-              ({score} sur 100)
+              {t.pull.jev.urgency(jevUrgencyLabel(urgency, t), score ?? 0)}
             </span>
-            <span className="opacity-70">
-              Estimée d'après le titre, la description, les labels et les
-              derniers commentaires. Plus le score est haut, plus c'est à
-              traiter tôt.
-            </span>
+            <span className="opacity-70">{t.pull.jev.urgencyHint}</span>
           </>
         )
       }
