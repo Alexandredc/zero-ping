@@ -2,6 +2,7 @@ import { and, desc, eq, gt, inArray, lt } from "drizzle-orm"
 import type { Database } from "@/server/db/client"
 import { attentionEvents, settings } from "@/server/db/schema"
 import type { AttentionKind, Item } from "@/server/db/schema"
+import type { Messages } from "@/lib/i18n/messages"
 
 export type AttentionDraft = {
   itemKey: string
@@ -33,13 +34,16 @@ function reference(item: Pick<Item, "repoFullName" | "number" | "title">) {
 /**
  * Compares an item before and after enrichment and describes what newly needs
  * the viewer, if anything. Only transitions count, so a sync that changes
- * nothing never notifies twice.
+ * nothing never notifies twice. The text is written now, in `t`'s language,
+ * and stored with the event.
  */
 export function detectAttention(
   before: Item,
   after: Snapshot,
+  t: Messages,
   now: Date = new Date()
 ): AttentionDraft | null {
+  const m = t.server.attention
   if (after.state !== "OPEN") return null
   if (before.doneAt || (before.snoozedUntil && before.snoozedUntil > now))
     return null
@@ -52,10 +56,10 @@ export function detectAttention(
       kind: "review",
       title:
         after.reviewRequest === "team"
-          ? "Review demandée à ton équipe"
+          ? m.reviewTeam
           : after.reviewRequest === "direct"
-            ? "Review demandée"
-            : "Corrections poussées après ta review",
+            ? m.reviewDirect
+            : m.fixesPushed,
       body: ref,
     }
   }
@@ -63,7 +67,7 @@ export function detectAttention(
     return {
       ...base,
       kind: "awaiting",
-      title: `@${after.awaitingFrom ?? "quelqu'un"} attend ta réponse`,
+      title: m.awaiting(after.awaitingFrom ?? m.someone),
       body: `${ref}\n${after.awaitingExcerpt ?? ""}`.trim(),
     }
   }
@@ -75,14 +79,14 @@ export function detectAttention(
       return {
         ...base,
         kind: "changes",
-        title: "Changements demandés sur ta PR",
+        title: m.changesRequested,
         body: ref,
       }
     }
     const failing = (state: string | null) =>
       state === "FAILURE" || state === "ERROR"
     if (failing(after.ciState) && !failing(before.ciState)) {
-      return { ...base, kind: "ci", title: "La CI de ta PR échoue", body: ref }
+      return { ...base, kind: "ci", title: m.ciFailing, body: ref }
     }
   }
   return null

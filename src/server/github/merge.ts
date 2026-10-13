@@ -1,4 +1,5 @@
 import type { Octokit } from "octokit"
+import type { Messages } from "@/lib/i18n/messages"
 
 export type MergeMethod = "SQUASH" | "MERGE" | "REBASE"
 
@@ -20,32 +21,37 @@ export type MergeInfo = {
 
 type Ref = { owner: string; repo: string; number: number }
 
-const BLOCKED_REASON: Record<string, string> = {
-  BLOCKED:
-    "Bloquée par les règles de la branche : review ou checks obligatoires manquants.",
-  BEHIND: "La branche est en retard sur la base : mets-la à jour d'abord.",
-  DIRTY: "Conflits avec la branche de base : à résoudre avant de merger.",
-  DRAFT: "La PR est en brouillon.",
-  UNKNOWN:
-    "GitHub calcule encore si la PR peut être mergée : réessaie dans un instant.",
+function blockedReason(status: string, t: Messages): string {
+  const m = t.server.merge
+  const reasons: Record<string, string> = {
+    BLOCKED: m.blocked,
+    BEHIND: m.behind,
+    DIRTY: m.dirty,
+    DRAFT: m.draft,
+    UNKNOWN: m.unknown,
+  }
+  return reasons[status] ?? m.state(status)
 }
 
 /** Merge states where GitHub accepts a merge; UNSTABLE only has non-required checks failing. */
 const MERGEABLE_STATES = new Set(["CLEAN", "UNSTABLE", "HAS_HOOKS"])
 
-export function toMergeInfo(raw: {
-  squashMergeAllowed: boolean
-  mergeCommitAllowed: boolean
-  rebaseMergeAllowed: boolean
-  deleteBranchOnMerge: boolean
-  viewerDefaultMergeMethod: MergeMethod
-  pullRequest: {
-    title: string
-    mergeStateStatus: string
-    headRefName: string
-    isCrossRepository: boolean
-  }
-}): MergeInfo {
+export function toMergeInfo(
+  raw: {
+    squashMergeAllowed: boolean
+    mergeCommitAllowed: boolean
+    rebaseMergeAllowed: boolean
+    deleteBranchOnMerge: boolean
+    viewerDefaultMergeMethod: MergeMethod
+    pullRequest: {
+      title: string
+      mergeStateStatus: string
+      headRefName: string
+      isCrossRepository: boolean
+    }
+  },
+  t: Messages
+): MergeInfo {
   const methods: MergeMethod[] = [
     ...(raw.squashMergeAllowed ? (["SQUASH"] as const) : []),
     ...(raw.mergeCommitAllowed ? (["MERGE"] as const) : []),
@@ -63,8 +69,8 @@ export function toMergeInfo(raw: {
     blockedReason: canMerge
       ? null
       : methods.length === 0
-        ? "Aucune méthode de merge n'est autorisée sur ce repo."
-        : (BLOCKED_REASON[status] ?? `État de merge : ${status}.`),
+        ? t.server.merge.noMethod
+        : blockedReason(status, t),
     headRef: raw.pullRequest.headRefName,
     autoDeletesBranch: raw.deleteBranchOnMerge,
     isCrossRepository: raw.pullRequest.isCrossRepository,
@@ -74,7 +80,8 @@ export function toMergeInfo(raw: {
 
 export async function fetchMergeInfo(
   octokit: Octokit,
-  ref: Ref
+  ref: Ref,
+  t: Messages
 ): Promise<MergeInfo> {
   const data: { repository: Parameters<typeof toMergeInfo>[0] } =
     await octokit.graphql(
@@ -87,16 +94,18 @@ export async function fetchMergeInfo(
       }`,
       { owner: ref.owner, repo: ref.repo, number: ref.number }
     )
-  return toMergeInfo(data.repository)
+  return toMergeInfo(data.repository, t)
 }
 
 export async function mergePull(
   octokit: Octokit,
   ref: Ref,
-  options: { method: MergeMethod; deleteBranch: boolean }
+  options: { method: MergeMethod; deleteBranch: boolean },
+  t: Messages
 ): Promise<{ deletedBranch: string | null }> {
-  const info = await fetchMergeInfo(octokit, ref)
-  if (!info.canMerge) throw new Error(info.blockedReason ?? "Merge impossible.")
+  const info = await fetchMergeInfo(octokit, ref, t)
+  if (!info.canMerge)
+    throw new Error(info.blockedReason ?? t.server.merge.impossible)
   await octokit.rest.pulls.merge({
     owner: ref.owner,
     repo: ref.repo,

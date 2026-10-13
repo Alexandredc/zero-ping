@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest"
+import { messagesFor } from "@/lib/i18n/messages"
 import {
   buildReplyPrompt,
   parsePermalink,
@@ -45,12 +46,16 @@ describe("buildReplyPrompt", () => {
 
 describe("parseReply", () => {
   it("requires a confirmed send", () => {
-    expect(parseReply({ sent: true, permalink: "" })).toEqual({
+    const fr = messagesFor("fr")
+    expect(parseReply({ sent: true, permalink: "" }, fr)).toEqual({
       permalink: null,
     })
-    expect(() => parseReply({ sent: false, permalink: "" })).toThrow(
+    expect(() => parseReply({ sent: false, permalink: "" }, fr)).toThrow(
       "pas confirmé"
     )
+    expect(() =>
+      parseReply({ sent: false, permalink: "" }, messagesFor("en"))
+    ).toThrow("Slack did not confirm the message was sent.")
   })
 })
 

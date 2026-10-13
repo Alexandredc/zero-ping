@@ -1,5 +1,6 @@
 import { z } from "zod"
 import type { AgentKind } from "@/server/agents/runner"
+import type { Messages } from "@/lib/i18n/messages"
 
 export type SlackThreadRef = { channelId: string; threadTs: string }
 
@@ -69,8 +70,11 @@ export function buildReplyPrompt(
   ].join("\n")
 }
 
-export function parseReply(answer: unknown): { permalink: string | null } {
+export function parseReply(
+  answer: unknown,
+  t: Messages
+): { permalink: string | null } {
   const { sent, permalink } = replySchema.parse(answer)
-  if (!sent) throw new Error("Slack n'a pas confirmé l'envoi du message.")
+  if (!sent) throw new Error(t.server.errors.slackNotConfirmed)
   return { permalink: permalink || null }
 }

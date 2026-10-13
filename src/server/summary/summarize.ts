@@ -1,4 +1,6 @@
 import { z } from "zod"
+import { LANGUAGE_PROMPT_NAMES } from "@/lib/i18n/core"
+import type { Language } from "@/lib/i18n/core"
 import type {
   Item,
   SlackDiscussion,
@@ -111,11 +113,12 @@ const LENGTH_RULES: Record<SummaryLength, string[]> = {
 
 export function buildSummaryPrompt(
   readerLogin: string,
+  language: Language,
   length: SummaryLength = "detailed"
 ): string {
   return [
     `Summarise the GitHub conversation given on stdin for ${readerLogin}, a lead developer who has not read it.`,
-    "Write in French, plainly. Name people with their handle.",
+    `Write in ${LANGUAGE_PROMPT_NAMES[language]}, plainly. Name people with their handle.`,
     ...LENGTH_RULES[length],
     `In expectedFromMe, say what ${readerLogin} is expected to do (review, answer someone, decide…), or leave it empty.`,
     "Only use what the conversation says: do not invent facts. Do not use any tool.",

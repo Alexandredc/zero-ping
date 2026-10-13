@@ -1,11 +1,16 @@
 import { describe, expect, it } from "vitest"
 import {
   buildChatInput,
+  buildChatPrompt,
+  chatJsonSchema,
   formatDiff,
   formatItemFacts,
   parseChatAnswer,
 } from "./chat"
-import { INSIGHTS } from "@/lib/insights"
+import { pullInsightSpecs } from "@/lib/insights"
+import { messagesFor } from "@/lib/i18n/messages"
+
+const INSIGHTS = pullInsightSpecs(messagesFor("fr"))
 
 const file = (filename: string, patch: string) => ({
   filename,
@@ -103,5 +108,13 @@ describe("parseChatAnswer", () => {
   it("rejects an empty answer", () => {
     expect(parseChatAnswer({ answer: " Oui. " })).toBe("Oui.")
     expect(() => parseChatAnswer({ answer: "" })).toThrow()
+  })
+})
+
+describe("buildChatPrompt", () => {
+  it("answers in the chosen language", () => {
+    expect(buildChatPrompt("lead", "fr")).toContain("Write in French")
+    expect(buildChatPrompt("lead", "en")).toContain("Write in English")
+    expect(JSON.stringify(chatJsonSchema("en"))).toContain("English Markdown")
   })
 })

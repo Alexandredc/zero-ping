@@ -1,7 +1,10 @@
+import { messagesFor } from "@/lib/i18n/messages"
 import { describe, expect, it } from "vitest"
 import { computePriority } from "./priority"
 import type { PriorityInput } from "./priority"
 
+const fr = messagesFor("fr")
+const en = messagesFor("en")
 const NOW = new Date("2026-10-12T12:00:00Z")
 
 const base: PriorityInput = {
@@ -28,14 +31,18 @@ const base: PriorityInput = {
 }
 
 const labels = (input: Partial<PriorityInput>) =>
-  computePriority({ ...base, ...input }, NOW).reasons.map(
+  computePriority({ ...base, ...input }, fr, NOW).reasons.map(
     (reason) => reason.label
   )
 
 describe("computePriority", () => {
   it("ranks a direct review request above a team request", () => {
-    const direct = computePriority({ ...base, reviewRequest: "direct" }, NOW)
-    const team = computePriority({ ...base, reviewRequest: "team" }, NOW)
+    const direct = computePriority(
+      { ...base, reviewRequest: "direct" },
+      fr,
+      NOW
+    )
+    const team = computePriority({ ...base, reviewRequest: "team" }, fr, NOW)
     expect(direct.priority).toBeGreaterThan(team.priority)
   })
 
@@ -51,6 +58,7 @@ describe("computePriority", () => {
   it("grows with the waiting time, capped at 20 points", () => {
     const fiveDays = computePriority(
       { ...base, waitingSince: new Date("2026-10-07T12:00:00Z") },
+      fr,
       NOW
     )
     expect(fiveDays.reasons).toContainEqual(
@@ -61,6 +69,7 @@ describe("computePriority", () => {
     )
     const twoDays = computePriority(
       { ...base, waitingSince: new Date("2026-10-10T12:00:00Z") },
+      fr,
       NOW
     )
     expect(twoDays.reasons).toContainEqual(
@@ -76,15 +85,19 @@ describe("computePriority", () => {
     expect(labels({ labels: ["hotfixes-doc"] })).not.toContain("Label urgent")
     expect(labels({ additions: 40, deletions: 10 })).toContain("Petite PR")
     expect(
-      computePriority({ ...base, reviewRequest: "direct", isDraft: true }, NOW)
-        .priority
+      computePriority(
+        { ...base, reviewRequest: "direct", isDraft: true },
+        fr,
+        NOW
+      ).priority
     ).toBe(10)
   })
 
   it("treats a failing CI as a reason to act on the viewer's own PR only", () => {
-    const review = computePriority({ ...base, ciState: "FAILURE" }, NOW)
+    const review = computePriority({ ...base, ciState: "FAILURE" }, fr, NOW)
     const mine = computePriority(
       { ...base, view: "mine", ciState: "FAILURE" },
+      fr,
       NOW
     )
     expect(review.reasons).toContainEqual(
@@ -98,6 +111,7 @@ describe("computePriority", () => {
   it("ignores a low-confidence AI urgency and asks for a check", () => {
     const confident = computePriority(
       { ...base, aiUrgency: 3, aiConfidence: 0.9 },
+      fr,
       NOW
     )
     expect(confident.reasons).toContainEqual(
@@ -108,6 +122,7 @@ describe("computePriority", () => {
     )
     const unsure = computePriority(
       { ...base, aiUrgency: 3, aiConfidence: 0.2 },
+      fr,
       NOW
     )
     expect(unsure.priority).toBe(0)
@@ -118,6 +133,7 @@ describe("computePriority", () => {
     expect(
       computePriority(
         { ...base, state: "MERGED", reviewRequest: "direct" },
+        fr,
         NOW
       ).priority
     ).toBe(0)
@@ -135,6 +151,7 @@ describe("computePriority", () => {
         aiUrgency: 3,
         aiConfidence: 1,
       },
+      fr,
       NOW
     )
     expect(everything.priority).toBe(100)
@@ -160,6 +177,7 @@ describe("priority reasons", () => {
         aiUrgency: 2,
         aiConfidence: 0.8,
       },
+      fr,
       NOW
     )
     expect(reasons.length).toBeGreaterThan(8)
@@ -182,5 +200,33 @@ describe("priority reasons", () => {
         reviewedState: "APPROVED",
       })
     ).toContain("Re-review")
+  })
+})
+
+describe("priority reasons in English", () => {
+  it("are written in the chosen language", () => {
+    const { reasons } = computePriority(
+      {
+        ...base,
+        reviewRequest: "direct",
+        waitingSince: new Date("2026-10-07T12:00:00Z"),
+        aiUrgency: 3,
+        aiConfidence: 0.9,
+      },
+      en,
+      NOW
+    )
+    expect(reasons).toContainEqual(
+      expect.objectContaining({
+        label: "Review requested from you",
+        hint: "You are named personally as a reviewer.",
+      })
+    )
+    expect(reasons.map((reason) => reason.label)).toEqual(
+      expect.arrayContaining(["Waiting for 5 d", "AI: blocking or urgent"])
+    )
+    expect(reasons.find((r) => r.label.startsWith("AI"))?.hint).toContain(
+      "(confidence 90%)"
+    )
   })
 })

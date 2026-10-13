@@ -31,7 +31,8 @@ describe("toReviewerOptions", () => {
     const options = toReviewerOptions(
       raw,
       [{ slug: "front", name: "Front" }],
-      "Lead"
+      "Lead",
+      "fr"
     )
     expect(options.requested).toEqual(["lead", "team:backend"])
     expect(options.candidates.map((c) => c.id)).toEqual([
@@ -46,6 +47,14 @@ describe("toReviewerOptions", () => {
     expect(options.candidates[1].reviewState).toBe("APPROVED")
     expect(options.candidates[2].name).toBeNull()
     expect(options.candidates[3].label).toBe("@lead (toi)")
+    expect(options.candidates[4].label).toBe("équipe backend")
+  })
+
+  it("labels the viewer and teams in English", () => {
+    const options = toReviewerOptions(raw, [], "Lead", "en")
+    const labels = options.candidates.map((c) => c.label)
+    expect(labels).toContain("@lead (you)")
+    expect(labels).toContain("team backend")
   })
 })
 

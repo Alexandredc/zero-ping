@@ -1,5 +1,7 @@
 import type { Octokit } from "octokit"
 import { TEAM_PREFIX } from "@/server/team/labels"
+import { messagesFor } from "@/lib/i18n/messages"
+import type { Language } from "@/lib/i18n/core"
 
 type Ref = { owner: string; repo: string; number: number }
 
@@ -49,8 +51,10 @@ export type RawTeam = { slug: string; name: string }
 export function toReviewerOptions(
   raw: RawReviewerOptions,
   teams: RawTeam[],
-  viewerLogin: string
+  viewerLogin: string,
+  language: Language
 ): ReviewerOptions {
+  const t = messagesFor(language)
   const pull = raw.pullRequest
   const lower = (login: string) => login.toLowerCase()
   const author = pull.author ? lower(pull.author.login) : null
@@ -91,7 +95,9 @@ export function toReviewerOptions(
   const people: ReviewerCandidate[] = [...users.values()].map((user) => ({
     id: user.login,
     label:
-      lower(user.login) === viewer ? `@${user.login} (toi)` : `@${user.login}`,
+      lower(user.login) === viewer
+        ? t.server.reviewers.viewer(user.login)
+        : `@${user.login}`,
     name: user.name || null,
     kind: "user",
     suggested: suggested.has(lower(user.login)),
@@ -100,7 +106,7 @@ export function toReviewerOptions(
   // Suggested people first, then those who already know the PR, then the rest.
   const rank = (candidate: ReviewerCandidate) =>
     candidate.suggested ? 0 : candidate.reviewState ? 1 : 2
-  people.sort((a, b) => rank(a) - rank(b) || a.id.localeCompare(b.id, "fr"))
+  people.sort((a, b) => rank(a) - rank(b) || a.id.localeCompare(b.id, language))
 
   // A requested team stays listed, so it can be withdrawn, even without read:org.
   const teamSlugs = new Set(teams.map((team) => lower(team.slug)))
@@ -112,13 +118,13 @@ export function toReviewerOptions(
   const teamCandidates: ReviewerCandidate[] = [...teams, ...requestedTeams]
     .map((team) => ({
       id: `${TEAM_PREFIX}${team.slug}`,
-      label: `équipe ${team.slug}`,
+      label: t.server.reviewers.team(team.slug),
       name: team.name === team.slug ? null : team.name,
       kind: "team" as const,
       suggested: false,
       reviewState: null,
     }))
-    .sort((a, b) => a.id.localeCompare(b.id, "fr"))
+    .sort((a, b) => a.id.localeCompare(b.id, language))
 
   return { requested, candidates: [...people, ...teamCandidates] }
 }
@@ -146,7 +152,8 @@ export function reviewerChanges(requested: string[], wanted: string[]) {
 export async function fetchReviewerOptions(
   octokit: Octokit,
   ref: Ref,
-  viewerLogin: string
+  viewerLogin: string,
+  language: Language
 ): Promise<ReviewerOptions> {
   const [data, teams] = await Promise.all([
     octokit.graphql<{ repository: RawReviewerOptions }>(
@@ -171,7 +178,7 @@ export async function fetchReviewerOptions(
       .then((response) => response.data as RawTeam[])
       .catch(() => []),
   ])
-  return toReviewerOptions(data.repository, teams, viewerLogin)
+  return toReviewerOptions(data.repository, teams, viewerLogin, language)
 }
 
 /** Requests the new reviewers and withdraws the removed ones on GitHub. */

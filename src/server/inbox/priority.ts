@@ -1,3 +1,5 @@
+import type { Messages } from "@/lib/i18n/messages"
+
 export type PriorityReason = {
   label: string
   weight: number
@@ -38,7 +40,10 @@ const URGENT_LABEL =
   /\b(urgent|hotfix|blocking|blocker|critical|p0|sev[ -]?[01])\b/i
 const DAY_MS = 24 * 60 * 60 * 1000
 
-/** Jev urgency levels, in the order of the score rubric. */
+/**
+ * Jev urgency levels, in the order of the score rubric. They stay the rubric Jev
+ * scores against whatever the language; `t.server.priority.urgencyLevels` shows them.
+ */
 export const URGENCY_LEVELS = [
   "Peut attendre",
   "Normale",
@@ -46,16 +51,13 @@ export const URGENCY_LEVELS = [
   "Bloquante ou urgente",
 ] as const
 
-export const NEEDS_CHECK_HINT =
-  "Jev a répondu avec une confiance trop faible (moins de 50 %) : son estimation n'est pas comptée dans le score. Regarde toi-même si c'est urgent."
-
 /** Below this Jev confidence, the AI signal is ignored and flagged for review. */
 export const MIN_AI_CONFIDENCE = 0.5
 
-function formatConfidence(confidence: number | null): string {
+function formatConfidence(confidence: number | null, t: Messages): string {
   return confidence === null
-    ? "non fournie"
-    : `${Math.round(confidence * 100)} %`
+    ? t.server.priority.confidenceMissing
+    : t.server.priority.confidence(Math.round(confidence * 100))
 }
 
 /** The viewer reviewed the PR and its head moved since. */
@@ -69,10 +71,13 @@ export function hasNewCommitsSinceReview(
   )
 }
 
+/** `t` writes the reasons: they are stored with the item and shown as they are. */
 export function computePriority(
   input: PriorityInput,
+  t: Messages,
   now: Date = new Date()
 ): PriorityResult {
+  const m = t.server.priority
   const reasons: PriorityReason[] = []
   const add = (label: string, weight: number, hint: string) =>
     reasons.push({ label, weight, hint })
@@ -82,9 +87,9 @@ export function computePriority(
       priority: 0,
       reasons: [
         {
-          label: "Fermée",
+          label: m.closed,
           weight: 0,
-          hint: "Mergée ou fermée : rien à faire.",
+          hint: m.closedHint,
         },
       ],
       needsCheck: false,
@@ -92,131 +97,64 @@ export function computePriority(
   }
 
   if (input.reviewRequest === "direct")
-    add(
-      "Review demandée à toi",
-      30,
-      "Tu es nommé personnellement comme reviewer."
-    )
-  if (input.reviewRequest === "team")
-    add(
-      "Review demandée à ton équipe",
-      15,
-      "La demande vise une de tes équipes : un collègue peut aussi la prendre."
-    )
+    add(m.reviewDirect, 30, m.reviewDirectHint)
+  if (input.reviewRequest === "team") add(m.reviewTeam, 15, m.reviewTeamHint)
   if (
     input.reviewRequest &&
     input.approvals > 0 &&
     input.pendingReviewers <= 1
   ) {
-    add(
-      "Il ne manque que ta review",
-      15,
-      "La PR a déjà au moins une approbation et tu es le dernier reviewer attendu."
-    )
+    add(m.lastReviewer, 15, m.lastReviewerHint)
   }
 
   if (hasNewCommitsSinceReview(input)) {
     if (input.reviewedState === "CHANGES_REQUESTED" && !input.reviewRequest)
-      add(
-        "Corrections poussées",
-        25,
-        "Tu avais demandé des changements et de nouveaux commits sont arrivés depuis : à revoir."
-      )
-    else if (input.reviewRequest)
-      add(
-        "Re-review",
-        5,
-        "Tu as déjà reviewé cette PR : seuls les commits arrivés depuis ta review sont à lire."
-      )
+      add(m.fixesPushed, 25, m.fixesPushedHint)
+    else if (input.reviewRequest) add(m.reReview, 5, m.reReviewHint)
   }
 
-  if (input.awaitingMe)
-    add(
-      "On attend ta réponse",
-      25,
-      "Quelqu'un t'a mentionné ou a répondu après toi dans un fil, et tu n'as pas encore réagi."
-    )
+  if (input.awaitingMe) add(m.awaiting, 25, m.awaitingHint)
   if ((input.aiQuestionProbability ?? 0) >= 0.7)
-    add(
-      "Question posée",
-      10,
-      "Jev estime que le message t'adresse une vraie question ou une décision à prendre."
-    )
+    add(m.question, 10, m.questionHint)
 
   if (input.view === "mine") {
     if (input.reviewDecision === "CHANGES_REQUESTED")
-      add(
-        "Changements demandés",
-        15,
-        "Un reviewer a demandé des changements sur ta PR."
-      )
-    if (input.reviewDecision === "APPROVED")
-      add(
-        "Approuvée, prête à merger",
-        10,
-        "Ta PR est approuvée : il ne reste qu'à la merger."
-      )
+      add(m.changesRequested, 15, m.changesRequestedHint)
+    if (input.reviewDecision === "APPROVED") add(m.approved, 10, m.approvedHint)
   }
 
   if (input.labels.some((label) => URGENT_LABEL.test(label)))
-    add(
-      "Label urgent",
-      20,
-      "Un label signale l'urgence (urgent, hotfix, blocking, critical, p0…)."
-    )
+    add(m.urgentLabel, 20, m.urgentLabelHint)
 
   if (input.waitingSince) {
     const days = Math.floor(
       (now.getTime() - input.waitingSince.getTime()) / DAY_MS
     )
-    if (days >= 1)
-      add(
-        `En attente depuis ${days} j`,
-        Math.min(20, days * 4),
-        "Depuis la demande de review ou le message sans réponse : 4 points par jour, 20 au maximum."
-      )
+    if (days >= 1) add(m.waiting(days), Math.min(20, days * 4), m.waitingHint)
   }
 
   if (input.kind === "PullRequest" && input.additions !== null) {
     const size = input.additions + (input.deletions ?? 0)
-    if (size <= 100)
-      add(
-        "Petite PR",
-        10,
-        "100 lignes modifiées ou moins : rapide à reviewer pour débloquer quelqu'un."
-      )
-    else if (size > 1000)
-      add(
-        "Très grosse PR",
-        -5,
-        "Plus de 1 000 lignes modifiées : à planifier plutôt qu'à glisser entre deux tâches."
-      )
+    if (size <= 100) add(m.smallPull, 10, m.smallPullHint)
+    else if (size > 1000) add(m.hugePull, -5, m.hugePullHint)
   }
 
   if (input.ciState === "FAILURE" || input.ciState === "ERROR") {
     add(
-      "CI en échec",
+      m.ciFailing,
       input.view === "mine" ? 15 : -10,
-      input.view === "mine"
-        ? "La CI de ta PR échoue : c'est à toi de la corriger."
-        : "La CI échoue : l'auteur devra sans doute modifier la PR avant ta review."
+      input.view === "mine" ? m.ciFailingMineHint : m.ciFailingHint
     )
   }
-  if (input.isDraft)
-    add(
-      "Brouillon",
-      -20,
-      "La PR est en brouillon : l'auteur ne la considère pas encore prête."
-    )
+  if (input.isDraft) add(m.draft, -20, m.draftHint)
 
   let needsCheck = false
   if (input.aiUrgency !== null) {
     if ((input.aiConfidence ?? 1) >= MIN_AI_CONFIDENCE) {
-      const level = URGENCY_LEVELS[Math.round(input.aiUrgency)]
       add(
-        `IA : ${level.toLowerCase()}`,
+        m.ai(m.urgencyLevels[Math.round(input.aiUrgency)]),
         Math.round(input.aiUrgency * 10),
-        `Urgence estimée par Jev à partir du titre, de la description, des labels et des derniers commentaires (confiance ${formatConfidence(input.aiConfidence)}).`
+        m.aiHintWithConfidence(formatConfidence(input.aiConfidence, t))
       )
     } else {
       needsCheck = true

@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest"
-import { buildSearchInput, parseSearchAnswer } from "./smart-search"
+import {
+  buildSearchInput,
+  buildSearchPrompt,
+  parseSearchAnswer,
+  searchJsonSchema,
+} from "./smart-search"
 
 describe("buildSearchInput", () => {
   it("lists each item with its facts, summary and description", () => {
@@ -40,5 +45,16 @@ describe("parseSearchAnswer", () => {
       { key: "b", reason: "frais" },
       { key: "a", reason: "port" },
     ])
+  })
+})
+
+describe("buildSearchPrompt", () => {
+  it("writes the reasons in the chosen language and matches across languages", () => {
+    const prompt = buildSearchPrompt("PR", "en")
+    expect(prompt).toContain("a few English words")
+    expect(prompt).toContain("in French or English")
+    expect(JSON.stringify(searchJsonSchema("fr"))).toContain(
+      "a few French words"
+    )
   })
 })

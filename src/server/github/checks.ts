@@ -1,4 +1,5 @@
 import type { Octokit } from "octokit"
+import type { Messages } from "@/lib/i18n/messages"
 
 export type FailedCheck = {
   name: string
@@ -158,13 +159,12 @@ export async function fetchChecks(
 /** Re-runs only the failed jobs of each failed workflow run. */
 export async function rerunFailedJobs(
   octokit: Octokit,
-  ref: Ref
+  ref: Ref,
+  t: Messages
 ): Promise<number> {
   const { rerunnableRuns } = await fetchChecks(octokit, ref)
   if (rerunnableRuns.length === 0)
-    throw new Error(
-      "Aucun job GitHub Actions à relancer : la CI en échec est externe."
-    )
+    throw new Error(t.server.errors.nothingToRerun)
   await Promise.all(
     rerunnableRuns.map((runId) =>
       octokit.rest.actions.reRunWorkflowFailedJobs({

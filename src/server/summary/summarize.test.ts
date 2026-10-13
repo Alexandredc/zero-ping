@@ -99,9 +99,15 @@ describe("buildSummaryInput", () => {
 
 describe("summary prompt and answer", () => {
   it("asks for French and for what the reader must do", () => {
-    const prompt = buildSummaryPrompt("lead")
+    const prompt = buildSummaryPrompt("lead", "fr")
     expect(prompt).toContain("in French")
     expect(prompt).toContain("lead is expected to do")
+  })
+
+  it("asks for English when it is the chosen language", () => {
+    const prompt = buildSummaryPrompt("lead", "en")
+    expect(prompt).toContain("Write in English")
+    expect(prompt).not.toContain("French")
   })
 
   it("validates the structured answer", () => {
@@ -119,13 +125,13 @@ describe("summary prompt and answer", () => {
 
 describe("summary lengths", () => {
   it("gives each length its own budget", () => {
-    expect(buildSummaryPrompt("lead", "short")).toContain(
+    expect(buildSummaryPrompt("lead", "fr", "short")).toContain(
       "one sentence of at most 25 words"
     )
-    expect(buildSummaryPrompt("lead", "standard")).toContain(
+    expect(buildSummaryPrompt("lead", "fr", "standard")).toContain(
       "at most 4 short bullet points"
     )
-    expect(buildSummaryPrompt("lead", "detailed")).toContain(
+    expect(buildSummaryPrompt("lead", "fr", "detailed")).toContain(
       "Cover every decision"
     )
   })
