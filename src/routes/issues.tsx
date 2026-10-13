@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query"
 import { createFileRoute, useNavigate } from "@tanstack/react-router"
-import { Fragment, useEffect, useRef, useState } from "react"
+import { Fragment, useEffect, useMemo, useRef, useState } from "react"
 import {
   ChevronDownIcon,
   ChevronRightIcon,
@@ -14,7 +14,7 @@ import {
 import { z } from "zod"
 import { Hint } from "@/components/inbox/hint"
 import { JevGauge } from "@/components/inbox/jev-gauge"
-import { PAGE_META } from "@/components/inbox/pages"
+import { PAGE_ICONS } from "@/components/inbox/pages"
 import { Sidebar } from "@/components/inbox/sidebar"
 import { WorkItemPreview } from "@/components/issues/work-item-preview"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -41,6 +41,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { Switch } from "@/components/ui/switch"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { useHotkeys } from "@/hooks/use-hotkeys"
+import { useI18n } from "@/hooks/use-i18n"
 import { DetailPlaceholder } from "@/components/inbox/detail-placeholder"
 import {
   MatchReason,
@@ -56,9 +57,11 @@ import { applyFilters, byDate } from "@/lib/list-filters"
 import { sortOptions } from "@/lib/sorts"
 import type { FilterDef } from "@/lib/list-filters"
 import { issuesQuery, useSavePreferences } from "@/hooks/use-inbox"
-import { avatarUrl, timeAgo } from "@/lib/format"
+import { avatarUrl, elapsed } from "@/lib/format"
+import type { Language } from "@/lib/i18n/core"
+import type { Messages } from "@/lib/i18n/messages"
 import { cn } from "@/lib/utils"
-import { sprintDay } from "@/server/issues/sprint"
+import { sprintDay } from "@/server/issues/iteration"
 import type { Sprint, SprintStatus, WorkItem } from "@/server/issues/sprint"
 
 const TABS = ["assigned", "mine", "team"] as const
@@ -76,14 +79,6 @@ export const Route = createFileRoute("/issues")({
   component: IssuesPage,
 })
 
-const TAB_HINT: Record<Tab, string> = {
-  assigned:
-    "Tes issues ouvertes dans tous les repos, celles du sprint d'abord.",
-  mine: "Tes tâches du sprint courant, colonne par colonne du board.",
-  team: "Tout le sprint courant de l'équipe, colonne par colonne du board.",
-}
-
-const NO_STATUS = "Sans statut"
 const UNASSIGNED = "__unassigned"
 const EVERYONE = "__everyone"
 
@@ -99,44 +94,44 @@ const SORTS = sortOptions<Sort>({
   oldest: "oldest",
 })
 
-const URGENCY = ["Peut attendre", "Normale", "Importante", "Bloquante"]
-
-const ISSUE_FILTERS: FilterDef<WorkItem>[] = [
-  {
-    id: "kind",
-    label: "Type",
-    valuesOf: (item) => [item.kind],
-    options: [
-      { value: "issue", label: "Issue" },
-      { value: "pull", label: "PR" },
-      { value: "draft", label: "Brouillon du board" },
-    ],
-  },
-  {
-    id: "status",
-    label: "Statut",
-    valuesOf: (item) => [item.status ?? "Sans statut"],
-  },
-  {
-    id: "jev",
-    label: "Urgence Jev",
-    valuesOf: (item) => (item.urgency === null ? [] : [String(item.urgency)]),
-    options: [3, 2, 1, 0].map((level) => ({
-      value: String(level),
-      label: URGENCY[level],
-    })),
-  },
-  {
-    id: "repo",
-    label: "Repo",
-    valuesOf: (item) => (item.repo ? [item.repo.split("/")[1]] : []),
-  },
-  {
-    id: "label",
-    label: "Label",
-    valuesOf: (item) => item.labels.map((label) => label.name),
-  },
-]
+function issueFilters(t: Messages): FilterDef<WorkItem>[] {
+  const labels = t.issues.filters
+  return [
+    {
+      id: "kind",
+      label: labels.kind,
+      valuesOf: (item) => [item.kind],
+      options: (["issue", "pull", "draft"] as const).map((kind) => ({
+        value: kind,
+        label: labels.kinds[kind],
+      })),
+    },
+    {
+      id: "status",
+      label: labels.status,
+      valuesOf: (item) => [item.status ?? t.issues.noStatus],
+    },
+    {
+      id: "jev",
+      label: labels.jev,
+      valuesOf: (item) => (item.urgency === null ? [] : [String(item.urgency)]),
+      options: [3, 2, 1, 0].map((level) => ({
+        value: String(level),
+        label: t.issues.urgency[level],
+      })),
+    },
+    {
+      id: "repo",
+      label: labels.repo,
+      valuesOf: (item) => (item.repo ? [item.repo.split("/")[1]] : []),
+    },
+    {
+      id: "label",
+      label: labels.label,
+      valuesOf: (item) => item.labels.map((label) => label.name),
+    },
+  ]
+}
 
 /** Jev's most urgent first, unscored tickets after; the most recent breaks ties. */
 function sortItems(items: WorkItem[], sort: Sort): WorkItem[] {
@@ -152,7 +147,11 @@ function sortItems(items: WorkItem[], sort: Sort): WorkItem[] {
 }
 
 /** One group per board column, in the board's order; items without a status close the list. */
-function groupByStatus(items: WorkItem[], statuses: SprintStatus[]): Group[] {
+function groupByStatus(
+  items: WorkItem[],
+  statuses: SprintStatus[],
+  noStatus: string
+): Group[] {
   const groups: Group[] = statuses
     .map((status) => ({
       name: status.name,
@@ -162,8 +161,7 @@ function groupByStatus(items: WorkItem[], statuses: SprintStatus[]): Group[] {
     .filter((group) => group.items.length > 0)
   const known = new Set(statuses.map((s) => s.name))
   const rest = items.filter((item) => !item.status || !known.has(item.status))
-  if (rest.length > 0)
-    groups.push({ name: NO_STATUS, color: null, items: rest })
+  if (rest.length > 0) groups.push({ name: noStatus, color: null, items: rest })
   return groups
 }
 
@@ -220,6 +218,7 @@ function WorkStrip({
   showAssignees: boolean
   onSelect: () => void
 }) {
+  const { t, language } = useI18n()
   const color = statuses.find((s) => s.name === item.status)?.color ?? null
   const [owner, name] = item.repo?.split("/") ?? []
   return (
@@ -242,7 +241,7 @@ function WorkStrip({
                 <span className="opacity-60">#{item.number}</span>
               </>
             ) : (
-              "Brouillon du projet"
+              t.issues.projectDraft
             )}
           </span>
           <span className="ml-auto flex shrink-0 items-center gap-1.5">
@@ -256,12 +255,12 @@ function WorkStrip({
             )}
             {item.updatedAt && (
               <span className="min-w-14 text-right whitespace-nowrap tabular-nums">
-                {timeAgo(item.updatedAt).replace(/^il y a /, "")}
+                {elapsed(item.updatedAt, language)}
               </span>
             )}
             {showAssignees &&
               (item.assignees.length === 0 ? (
-                <Hint instant className="flex" content="Non assignée">
+                <Hint instant className="flex" content={t.issues.unassigned}>
                   <span className="size-5 rounded-full border border-dashed" />
                 </Hint>
               ) : (
@@ -310,12 +309,15 @@ function WorkStrip({
 
 /** The sprint's clock and its spread across the board's columns, sized for the list column. */
 /** `11 oct. → 24 oct.`: the days the sprint covers, its last day included. */
-function sprintPeriod(iteration: { startDate: string; duration: number }) {
+function sprintPeriod(
+  iteration: { startDate: string; duration: number },
+  language: Language
+) {
   const start = new Date(`${iteration.startDate}T00:00:00`)
   const end = new Date(start)
   end.setDate(end.getDate() + iteration.duration - 1)
   const format = (date: Date) =>
-    date.toLocaleDateString("fr", { day: "numeric", month: "short" })
+    date.toLocaleDateString(language, { day: "numeric", month: "short" })
   return `${format(start)} → ${format(end)}`
 }
 
@@ -347,11 +349,12 @@ function useCollapsedGroups() {
 }
 
 function SprintStrip({ sprint, items }: { sprint: Sprint; items: WorkItem[] }) {
+  const { t, language } = useI18n()
   const iteration = sprint.iteration
   if (!iteration) return null
   const day = sprintDay(iteration)
   const left = iteration.duration - day
-  const groups = groupByStatus(items, sprint.statuses)
+  const groups = groupByStatus(items, sprint.statuses, t.issues.noStatus)
   return (
     <div className="flex flex-col gap-1.5 border-b px-4 py-2.5">
       <div className="flex items-baseline justify-between gap-2 text-xs">
@@ -359,18 +362,19 @@ function SprintStrip({ sprint, items }: { sprint: Sprint; items: WorkItem[] }) {
           <span className="font-semibold">{iteration.title}</span>
           <span className="text-muted-foreground">
             {" "}
-            · {sprintPeriod(iteration)}
+            · {sprintPeriod(iteration, language)}
           </span>
         </span>
         <span className="text-muted-foreground tabular-nums">
-          jour <span className="font-medium text-foreground">{day}</span>/
-          {iteration.duration} · {left} restant{left > 1 ? "s" : ""}
+          {t.issues.sprint.day}{" "}
+          <span className="font-medium text-foreground">{day}</span>/
+          {iteration.duration} · {t.issues.sprint.left(left)}
         </span>
       </div>
       <div
         className="flex gap-0.5"
         role="img"
-        aria-label={`Jour ${day} sur ${iteration.duration}`}
+        aria-label={t.issues.sprint.dayOf(day, iteration.duration)}
       >
         {Array.from({ length: iteration.duration }, (_, index) => (
           <span
@@ -429,6 +433,9 @@ function workCandidate(item: WorkItem) {
 }
 
 function IssuesPage() {
+  const { t, language } = useI18n()
+  const issueCopy = t.issues
+  const filterDefs = useMemo(() => issueFilters(t), [t])
   const search = Route.useSearch()
   const tab = search.tab
   const navigate = useNavigate({ from: "/issues" })
@@ -458,7 +465,9 @@ function IssuesPage() {
       count: sprintItems.filter((item) => item.assignees.includes(login))
         .length,
     }))
-    .sort((a, b) => b.count - a.count || a.login.localeCompare(b.login, "fr"))
+    .sort(
+      (a, b) => b.count - a.count || a.login.localeCompare(b.login, language)
+    )
   const unassigned = sprintItems.filter((item) => item.assignees.length === 0)
   const teamItems =
     person === EVERYONE
@@ -470,7 +479,7 @@ function IssuesPage() {
   const filters = useListFilters(`issues:${tab}`)
   const tabItems =
     tab === "assigned" ? assigned : tab === "mine" ? mine : teamItems
-  const filtered = applyFilters(tabItems, ISSUE_FILTERS, filters.selection)
+  const filtered = applyFilters(tabItems, filterDefs, filters.selection)
   const smart = useSmartSearch({
     kind: "issue",
     items: filtered,
@@ -485,7 +494,7 @@ function IssuesPage() {
     ? // Claude's order is the answer: one group, not split by column.
       [
         {
-          name: "Trouvées par la recherche IA",
+          name: issueCopy.groups.aiSearch,
           color: null,
           items: smart.visible,
         },
@@ -493,21 +502,27 @@ function IssuesPage() {
     : tab === "assigned"
       ? [
           {
-            name: currentSprint ? `Dans le ${currentSprint}` : "Assignées",
+            name: currentSprint
+              ? issueCopy.groups.inSprint(currentSprint)
+              : issueCopy.groups.assigned,
             color: null,
             items: shown(assigned).filter(
               (item) => currentSprint && item.sprint === currentSprint
             ),
           },
           {
-            name: "Hors sprint",
+            name: issueCopy.groups.offSprint,
             color: null,
             items: shown(assigned).filter(
               (item) => !currentSprint || item.sprint !== currentSprint
             ),
           },
         ].filter((group) => group.items.length > 0)
-      : groupByStatus(shown(tab === "mine" ? mine : teamItems), statuses)
+      : groupByStatus(
+          shown(tab === "mine" ? mine : teamItems),
+          statuses,
+          issueCopy.noStatus
+        )
   const sortedGroups = smart.ai
     ? groups
     : groups.map((group) => ({
@@ -570,14 +585,14 @@ function IssuesPage() {
 
   const project = sprint?.project
   const projects = data?.projects ?? []
-  const Icon = PAGE_META.issues.icon
+  const Icon = PAGE_ICONS.issues
   const personLabel =
     person === EVERYONE
-      ? "Tout le monde"
+      ? issueCopy.people.everyone
       : person === UNASSIGNED
-        ? "Non assignées"
+        ? issueCopy.people.unassigned
         : sameLogin(person, viewerLogin)
-          ? "Toi"
+          ? issueCopy.people.you
           : person
 
   return (
@@ -594,9 +609,11 @@ function IssuesPage() {
             <div className="min-w-0">
               <h1 className="flex items-center gap-2 font-heading text-lg font-semibold tracking-tight">
                 <Icon className="size-5 shrink-0 text-muted-foreground" />
-                {PAGE_META.issues.label}
+                {t.nav.pages.issues}
               </h1>
-              <p className="text-xs text-muted-foreground">{TAB_HINT[tab]}</p>
+              <p className="text-xs text-muted-foreground">
+                {issueCopy.tabHints[tab]}
+              </p>
             </div>
             {projects.length > 1 && (
               <DropdownMenu>
@@ -611,12 +628,16 @@ function IssuesPage() {
                   }
                 >
                   <KanbanSquareIcon data-icon="inline-start" />
-                  <span className="truncate">{project?.title ?? "Projet"}</span>
+                  <span className="truncate">
+                    {project?.title ?? issueCopy.project}
+                  </span>
                   <ChevronDownIcon data-icon="inline-end" />
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-72">
                   <DropdownMenuGroup>
-                    <DropdownMenuLabel>Projet du sprint</DropdownMenuLabel>
+                    <DropdownMenuLabel>
+                      {issueCopy.sprintProject}
+                    </DropdownMenuLabel>
                     <DropdownMenuRadioGroup
                       value={
                         project ? `${project.owner}/${project.number}` : ""
@@ -652,23 +673,23 @@ function IssuesPage() {
                     search: { tab: value[0] as Tab, item: undefined },
                   })
               }}
-              aria-label="Choisir la liste"
+              aria-label={issueCopy.tabs.label}
               className="flex-wrap"
             >
               <ToggleGroupItem value="assigned">
-                Assignées
+                {issueCopy.tabs.assigned}
                 <span className="font-mono text-xs tabular-nums">
                   {assigned.length}
                 </span>
               </ToggleGroupItem>
               <ToggleGroupItem value="mine" disabled={!currentSprint}>
-                Mon sprint
+                {issueCopy.tabs.mine}
                 <span className="font-mono text-xs tabular-nums">
                   {mine.length}
                 </span>
               </ToggleGroupItem>
               <ToggleGroupItem value="team" disabled={!currentSprint}>
-                Équipe
+                {issueCopy.tabs.team}
                 <span className="font-mono text-xs tabular-nums">
                   {sprintItems.length}
                 </span>
@@ -681,7 +702,7 @@ function IssuesPage() {
                 void navigate({ search: (prev) => ({ ...prev, sort }) })
               }
               items={tabItems}
-              filters={ISSUE_FILTERS}
+              filters={filterDefs}
               selection={filters.selection}
               onToggle={filters.toggle}
               onClear={filters.clear}
@@ -689,7 +710,7 @@ function IssuesPage() {
           </div>
         </header>
         <ActiveFilters
-          filters={ISSUE_FILTERS}
+          filters={filterDefs}
           selection={filters.selection}
           onToggle={filters.toggle}
           onClear={filters.clear}
@@ -725,7 +746,9 @@ function IssuesPage() {
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="start" className="w-64">
                     <DropdownMenuGroup>
-                      <DropdownMenuLabel>Tâches de…</DropdownMenuLabel>
+                      <DropdownMenuLabel>
+                        {issueCopy.people.tasksOf}
+                      </DropdownMenuLabel>
                       <DropdownMenuRadioGroup
                         value={person}
                         onValueChange={(value) => {
@@ -734,7 +757,7 @@ function IssuesPage() {
                         }}
                       >
                         <DropdownMenuRadioItem value={EVERYONE}>
-                          Tout le monde
+                          {issueCopy.people.everyone}
                           <span className="ml-auto font-mono text-xs text-muted-foreground">
                             {sprintItems.length}
                           </span>
@@ -742,7 +765,9 @@ function IssuesPage() {
                         {people.map(({ login, count }) => (
                           <DropdownMenuRadioItem key={login} value={login}>
                             <PersonAvatar login={login} className="size-4" />
-                            {sameLogin(login, viewerLogin) ? "Toi" : login}
+                            {sameLogin(login, viewerLogin)
+                              ? issueCopy.people.you
+                              : login}
                             <span className="ml-auto font-mono text-xs text-muted-foreground">
                               {count}
                             </span>
@@ -750,7 +775,7 @@ function IssuesPage() {
                         ))}
                         {unassigned.length > 0 && (
                           <DropdownMenuRadioItem value={UNASSIGNED}>
-                            Non assignées
+                            {issueCopy.people.unassigned}
                             <span className="ml-auto font-mono text-xs text-muted-foreground">
                               {unassigned.length}
                             </span>
@@ -767,7 +792,7 @@ function IssuesPage() {
                   checked={showEpics}
                   onCheckedChange={setShowEpics}
                 />
-                Epics
+                {issueCopy.epics}
               </label>
             </div>
           </>
@@ -788,7 +813,7 @@ function IssuesPage() {
             {data?.sprintError && tab !== "assigned" && (
               <Alert variant="destructive" className="m-3 w-auto">
                 <TriangleAlertIcon />
-                <AlertTitle>Sprint indisponible</AlertTitle>
+                <AlertTitle>{issueCopy.sprintUnavailable}</AlertTitle>
                 <AlertDescription>{data.sprintError}</AlertDescription>
               </Alert>
             )}
@@ -802,13 +827,13 @@ function IssuesPage() {
                     <EmptyMedia variant="icon">
                       <CircleDotIcon />
                     </EmptyMedia>
-                    <EmptyTitle>Rien ici</EmptyTitle>
+                    <EmptyTitle>{issueCopy.empty.title}</EmptyTitle>
                     <EmptyDescription>
                       {!project && tab !== "assigned"
-                        ? "Aucun projet GitHub de tes repos suivis n'a de champ itération (le token doit avoir le scope read:project)."
+                        ? issueCopy.empty.noProject
                         : tab === "assigned"
-                          ? "Aucune issue ouverte ne t'est assignée."
-                          : "Aucune tâche dans le sprint courant pour ce filtre."}
+                          ? issueCopy.empty.noAssigned
+                          : issueCopy.empty.noTask}
                     </EmptyDescription>
                   </EmptyHeader>
                 </Empty>
@@ -873,13 +898,13 @@ function IssuesPage() {
         <DetailPlaceholder
           title={
             flat.length > 0
-              ? `${flat.length} ticket${flat.length > 1 ? "s" : ""} dans la liste`
-              : "Rien à ouvrir ici"
+              ? issueCopy.placeholder.count(flat.length)
+              : issueCopy.placeholder.nothing
           }
         >
           {flat.length > 0
-            ? "Choisis-en un à gauche pour lire sa conversation et changer son statut, ou appuie sur ↓ pour commencer par le premier."
-            : "Change d'onglet ou de filtres pour retrouver tes tickets."}
+            ? issueCopy.placeholder.pick
+            : issueCopy.placeholder.changeFilters}
         </DetailPlaceholder>
       )}
     </div>

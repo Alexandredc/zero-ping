@@ -3,6 +3,8 @@ import type { Database } from "@/server/db/client"
 import { items, repos, settings, teamPulls } from "@/server/db/schema"
 import { recordAttention } from "@/server/inbox/attention"
 import { getPreferences } from "@/server/preferences"
+import { getMessages } from "@/server/i18n"
+import type { Messages } from "@/lib/i18n/messages"
 import { isRecapDue, localDate } from "./schedule"
 import { startStandup } from "./standup"
 
@@ -14,22 +16,17 @@ export type RecapCounts = {
   team: number
 }
 
-const plural = (count: number, one: string, many: string) =>
-  `${count} ${count > 1 ? many : one}`
-
 /** "3 reviews, 2 réponses attendues, 1 CI rouge", or a calm sentence. */
-export function recapLine(counts: RecapCounts): string {
+export function recapLine(counts: RecapCounts, t: Messages): string {
+  const line = t.recap.line
   const parts = [
-    counts.review > 0 && plural(counts.review, "review", "reviews"),
-    counts.awaiting > 0 &&
-      plural(counts.awaiting, "réponse attendue", "réponses attendues"),
-    counts.ciFailing > 0 && plural(counts.ciFailing, "CI rouge", "CI rouges"),
-    counts.readyToMerge > 0 &&
-      plural(counts.readyToMerge, "PR à merger", "PR à merger"),
-    counts.team > 0 &&
-      plural(counts.team, "PR d'équipe bloquée", "PR d'équipe bloquées"),
+    counts.review > 0 && line.reviews(counts.review),
+    counts.awaiting > 0 && line.awaiting(counts.awaiting),
+    counts.ciFailing > 0 && line.ciFailing(counts.ciFailing),
+    counts.readyToMerge > 0 && line.readyToMerge(counts.readyToMerge),
+    counts.team > 0 && line.team(counts.team),
   ].filter(Boolean)
-  return parts.length > 0 ? parts.join(", ") : "Rien ne t'attend ce matin."
+  return parts.length > 0 ? parts.join(line.separator) : line.calm
 }
 
 function activeCondition(now: Date) {
@@ -60,8 +57,9 @@ export async function buildRecap(db: Database, now: Date = new Date()) {
       .limit(5)
       .then((rows) => rows.map((row) => row.item))
 
-  const [review, awaiting, ciFailing, readyToMerge, team, lists] =
+  const [{ t }, review, awaiting, ciFailing, readyToMerge, team, lists] =
     await Promise.all([
+      getMessages(db),
       count(eq(items.view, "review")),
       count(eq(items.view, "awaiting")),
       count(
@@ -81,7 +79,7 @@ export async function buildRecap(db: Database, now: Date = new Date()) {
   const counts = { review, awaiting, ciFailing, readyToMerge, team }
   return {
     counts,
-    line: recapLine(counts),
+    line: recapLine(counts, t),
     review: lists[0],
     awaiting: lists[1],
     mine: lists[2],
@@ -110,12 +108,15 @@ export async function runDailyRecap(db: Database, now: Date = new Date()) {
     .insert(settings)
     .values({ key: RECAP_KEY, value: { date } })
     .onConflictDoUpdate({ target: settings.key, set: { value: { date } } })
-  const recap = await buildRecap(db, now)
+  const [recap, { t }] = await Promise.all([
+    buildRecap(db, now),
+    getMessages(db),
+  ])
   await recordAttention(db, [
     {
       itemKey: "recap",
       kind: "recap",
-      title: "Ton récap du jour",
+      title: t.recap.notification.title,
       body: recap.line,
     },
   ])

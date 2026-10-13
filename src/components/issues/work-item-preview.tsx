@@ -28,6 +28,7 @@ import {
   useSetWorkItemStatus,
   workConversationQuery,
 } from "@/hooks/use-inbox"
+import { useI18n } from "@/hooks/use-i18n"
 import { avatarUrl } from "@/lib/format"
 import type { SprintStatus, WorkItem } from "@/server/issues/sprint"
 
@@ -51,10 +52,11 @@ function StatusMenu({
   statuses: SprintStatus[]
   board: { projectId: string; fieldId: string } | null
 }) {
+  const { t } = useI18n()
   const move = useSetWorkItemStatus()
   const color = statuses.find((s) => s.name === item.status)?.color
   const canMove = Boolean(board && item.projectItemId && statuses.length > 0)
-  const label = item.status ?? "Sans statut"
+  const label = item.status ?? t.issues.noStatus
   if (!canMove)
     return item.status ? (
       <span className="inline-flex items-center gap-1.5 rounded-md border px-1.5 text-xs leading-5">
@@ -64,7 +66,7 @@ function StatusMenu({
     ) : null
   return (
     <DropdownMenu>
-      <ActionHint content="Change la colonne du ticket sur le board GitHub du projet.">
+      <ActionHint content={t.issues.preview.statusHint}>
         <DropdownMenuTrigger
           render={
             <Button variant="outline" size="xs" disabled={move.isPending} />
@@ -81,7 +83,7 @@ function StatusMenu({
       </ActionHint>
       <DropdownMenuContent align="start" className="w-60">
         <DropdownMenuGroup>
-          <DropdownMenuLabel>Déplacer dans…</DropdownMenuLabel>
+          <DropdownMenuLabel>{t.issues.preview.moveTo}</DropdownMenuLabel>
           <DropdownMenuRadioGroup
             value={item.status ?? ""}
             onValueChange={(value) => {
@@ -127,6 +129,8 @@ export function WorkItemPreview({
   fullscreen?: boolean
   onToggleFullscreen?: () => void
 }) {
+  const { t } = useI18n()
+  const copy = t.issues.preview
   const kind = item.kind === "pull" ? "PullRequest" : "Issue"
   const readable = item.kind !== "draft"
   const { data, isPending, error } = useQuery({
@@ -168,7 +172,7 @@ export function WorkItemPreview({
   return (
     <section
       className="flex h-full min-w-0 flex-1 flex-col bg-background"
-      aria-label="Aperçu"
+      aria-label={copy.label}
     >
       <header className="flex flex-col gap-3 border-b px-5 py-4">
         <div className="flex items-start gap-3">
@@ -176,7 +180,7 @@ export function WorkItemPreview({
             <p className="font-mono text-xs text-muted-foreground">
               {item.repo
                 ? `${item.repo}#${item.number}`
-                : "Brouillon du projet"}
+                : t.issues.projectDraft}
             </p>
             <h2 className="font-heading text-xl leading-tight font-semibold tracking-tight">
               {item.title}
@@ -188,12 +192,12 @@ export function WorkItemPreview({
               onToggle={onToggleFullscreen}
             />
           )}
-          <ActionHint content="Fermer l'aperçu (Échap)">
+          <ActionHint content={copy.close}>
             <Button
               variant="ghost"
               size="icon-sm"
               onClick={onClose}
-              aria-label="Fermer"
+              aria-label={t.common.close}
             >
               <XIcon />
             </Button>
@@ -221,7 +225,7 @@ export function WorkItemPreview({
           ))}
           <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
             {item.assignees.length === 0
-              ? "Non assignée"
+              ? t.issues.unassigned
               : item.assignees.map((login) => (
                   <Hint
                     key={login}
@@ -247,7 +251,7 @@ export function WorkItemPreview({
               render={<a href={item.url} target="_blank" rel="noreferrer" />}
             >
               <GitHubIcon data-icon="inline-start" />
-              Ouvrir
+              {t.common.open}
               <Kbd>o</Kbd>
             </Button>
           )}
@@ -259,8 +263,7 @@ export function WorkItemPreview({
           {!readable && (
             <p className="flex items-center gap-2 text-sm text-muted-foreground">
               <FileTextIcon className="size-4" />
-              Brouillon du board, sans conversation : ouvre le projet sur GitHub
-              pour le détailler.
+              {copy.draftNoConversation}
             </p>
           )}
           {readable && item.url && (
@@ -294,7 +297,7 @@ export function WorkItemPreview({
             {target.type === "thread" ? (
               <>
                 <span className="truncate">
-                  Réponse dans le fil GitHub{" "}
+                  {copy.replyInThread}{" "}
                   <span className="font-mono">{target.path}</span>
                 </span>
                 <Button
@@ -302,15 +305,15 @@ export function WorkItemPreview({
                   size="xs"
                   onClick={() => setTarget({ type: "conversation" })}
                 >
-                  Répondre à la conversation
+                  {copy.replyToConversation}
                 </Button>
               </>
             ) : (
-              <span>Commentaire sur la conversation GitHub</span>
+              <span>{copy.commentOnConversation}</span>
             )}
             <span className="ml-auto hidden items-center gap-1 sm:flex">
-              <Kbd>r</Kbd> pour écrire, <Kbd>⌘</Kbd>
-              <Kbd>Entrée</Kbd> pour envoyer
+              <Kbd>r</Kbd> {copy.toWrite} <Kbd>⌘</Kbd>
+              <Kbd>{copy.enter}</Kbd> {copy.toSend}
             </span>
           </div>
           <MentionTextarea
@@ -325,7 +328,7 @@ export function WorkItemPreview({
               }
               if (event.key === "Escape") event.currentTarget.blur()
             }}
-            placeholder="Écris ton commentaire en Markdown…"
+            placeholder={copy.placeholder}
             className="max-h-60 min-h-16"
           />
           <div className="flex justify-end">
@@ -339,7 +342,7 @@ export function WorkItemPreview({
               ) : (
                 <GitHubIcon data-icon="inline-start" />
               )}
-              Envoyer sur GitHub
+              {copy.sendOnGitHub}
             </Button>
           </div>
         </footer>

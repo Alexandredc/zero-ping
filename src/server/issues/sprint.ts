@@ -1,5 +1,11 @@
 import type { Octokit } from "octokit"
+import { getMessages } from "@/server/i18n"
+import { currentIteration } from "./iteration"
+import type { Iteration } from "./iteration"
 import type { ScoreSubject } from "@/server/ai/scores"
+
+export { currentIteration, sprintDay } from "./iteration"
+export type { Iteration } from "./iteration"
 
 /** One option of the project's Status field, in the board's order. */
 export type SprintStatus = { id: string; name: string; color: string }
@@ -29,8 +35,6 @@ export type WorkItem = {
   urgency: number | null
 }
 
-export type Iteration = { title: string; startDate: string; duration: number }
-
 export type SprintProjectRef = { owner: string; number: number; title: string }
 
 export type Sprint = {
@@ -52,31 +56,6 @@ export const OPTION_COLOR: Record<string, string> = {
   RED: "#f85149",
   PINK: "#db61a2",
   PURPLE: "#ab7df8",
-}
-
-const DAY_MS = 24 * 60 * 60 * 1000
-
-/** The iteration that contains `today`, from the field's planned iterations. */
-export function currentIteration(
-  iterations: Iteration[],
-  today: Date = new Date()
-): Iteration | null {
-  return (
-    iterations.find((iteration) => {
-      const start = new Date(`${iteration.startDate}T00:00:00`).getTime()
-      return (
-        today.getTime() >= start &&
-        today.getTime() < start + iteration.duration * DAY_MS
-      )
-    }) ?? null
-  )
-}
-
-/** Day of the sprint, from 1 to its duration. */
-export function sprintDay(iteration: Iteration, today: Date = new Date()) {
-  const start = new Date(`${iteration.startDate}T00:00:00`).getTime()
-  const day = Math.floor((today.getTime() - start) / DAY_MS) + 1
-  return Math.min(Math.max(day, 1), iteration.duration)
 }
 
 /** Epics frame the sprint but are nobody's task: a Category field or the title tells them. */
@@ -306,8 +285,12 @@ export async function fetchSprintBoard(
     { owner: project.owner, number: project.number }
   )
   const board = data.repositoryOwner?.projectV2
-  if (!board)
-    throw new Error(`Projet ${project.owner}/${project.number} introuvable.`)
+  if (!board) {
+    const { t } = await getMessages()
+    throw new Error(
+      t.issues.errors.projectNotFound(`${project.owner}/${project.number}`)
+    )
+  }
   const fields = board.fields.nodes
   const field = sprintField(fields)
   const statusField = selectField(fields, /^status$/i)
