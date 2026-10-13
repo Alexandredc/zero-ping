@@ -6,7 +6,7 @@ import { z } from "zod"
 import { DetailPanel } from "@/components/inbox/detail-panel"
 import { ReviewDialog } from "@/components/inbox/review-dialog"
 import type { PendingReview } from "@/components/inbox/review-dialog"
-import { FOLDER_META } from "@/components/inbox/folders"
+import { FOLDER_ICONS } from "@/components/inbox/folders"
 import { ItemStrip } from "@/components/inbox/item-strip"
 import { DetailPlaceholder } from "@/components/inbox/detail-placeholder"
 import {
@@ -21,9 +21,9 @@ import {
   useListFilters,
 } from "@/components/inbox/list-controls"
 import {
-  PULL_FILTERS,
   PULL_SORT_OPTIONS,
   PULL_SORTS,
+  pullFilters,
   serverSort,
   sortPulls,
 } from "@/components/inbox/pull-list-options"
@@ -60,6 +60,7 @@ import {
   useInboxActions,
 } from "@/hooks/use-inbox"
 import { useHotkeys } from "@/hooks/use-hotkeys"
+import { useI18n } from "@/hooks/use-i18n"
 
 const searchSchema = z.object({
   folder: z
@@ -89,16 +90,6 @@ export const Route = createFileRoute("/")({
   component: InboxPage,
 })
 
-const EMPTY_COPY = {
-  review:
-    "Aucune review en attente. Les nouvelles demandes apparaîtront ici dans la minute.",
-  awaiting: "Personne n'attend de réponse de ta part.",
-  mine: "Aucune PR ouverte à ton nom.",
-  other: "Rien d'autre dans les repos suivis.",
-  snoozed: "Rien en pause.",
-  done: "Rien de traité pour l'instant. Utilise e pour marquer un élément comme traité.",
-}
-
 function pullCandidate(item: InboxItem) {
   return {
     key: item.key,
@@ -118,6 +109,9 @@ function pullCandidate(item: InboxItem) {
 function InboxPage() {
   const search = Route.useSearch()
   const navigate = useNavigate({ from: "/" })
+  const { t, language } = useI18n()
+  const copy = t.inbox.list
+  const filterDefs = pullFilters(t)
   const allPulls = search.folder === "mine" && search.scope === "all"
   const { data, isPending } = useQuery(
     inboxQuery(
@@ -141,7 +135,7 @@ function InboxPage() {
   )
   const loaded = data?.items ?? []
   const listed = sortPulls(
-    applyFilters(loaded, PULL_FILTERS, filters.selection),
+    applyFilters(loaded, filterDefs, filters.selection),
     search.sort
   )
   const smart = useSmartSearch({
@@ -259,15 +253,16 @@ function InboxPage() {
     r: () => composerRef.current?.focus(),
   })
 
-  const meta = FOLDER_META[search.folder]
+  const meta = t.nav.folders[search.folder]
+  const FolderIcon = FOLDER_ICONS[search.folder]
   const canSort = search.folder !== "done"
   const snoozeOptions = [
     {
-      label: "Dans 3 heures",
+      label: copy.snoozeIn3Hours,
       until: () => new Date(Date.now() + 3 * 3600_000),
     },
-    { label: "Demain matin", until: () => nextMorning() },
-    { label: "Lundi matin", until: () => nextMorning(1) },
+    { label: copy.snoozeTomorrowMorning, until: () => nextMorning() },
+    { label: copy.snoozeMondayMorning, until: () => nextMorning(1) },
   ]
 
   return (
@@ -290,7 +285,7 @@ function InboxPage() {
         <header className="flex items-baseline justify-between gap-2 border-b px-4 py-3">
           <div>
             <h1 className="flex items-center gap-2 font-heading text-lg font-semibold tracking-tight">
-              <meta.icon className="size-5 shrink-0 text-muted-foreground" />
+              <FolderIcon className="size-5 shrink-0 text-muted-foreground" />
               {meta.label}
               {search.folder === "other" && data && (
                 <span className="font-mono text-sm font-normal text-muted-foreground tabular-nums">
@@ -299,9 +294,7 @@ function InboxPage() {
               )}
             </h1>
             <p className="text-xs text-muted-foreground">
-              {allPulls
-                ? "Toutes les PR ouvertes des repos suivis, classées par l'urgence qu'estime Jev."
-                : meta.hint}
+              {allPulls ? copy.allPullsHint : meta.hint}
             </p>
             {search.folder === "mine" && (
               <ToggleGroup
@@ -314,11 +307,11 @@ function InboxPage() {
                       search: (prev) => ({ ...prev, scope, item: undefined }),
                     })
                 }}
-                aria-label="Choisir les PR"
+                aria-label={copy.choosePulls}
                 className="mt-2"
               >
-                <ToggleGroupItem value="mine">Mes PR</ToggleGroupItem>
-                <ToggleGroupItem value="all">Toutes les PR</ToggleGroupItem>
+                <ToggleGroupItem value="mine">{copy.myPulls}</ToggleGroupItem>
+                <ToggleGroupItem value="all">{copy.allPulls}</ToggleGroupItem>
               </ToggleGroup>
             )}
           </div>
@@ -329,14 +322,14 @@ function InboxPage() {
               void navigate({ search: (prev) => ({ ...prev, sort }) })
             }
             items={loaded}
-            filters={PULL_FILTERS}
+            filters={filterDefs}
             selection={filters.selection}
             onToggle={filters.toggle}
             onClear={filters.clear}
           />
         </header>
         <ActiveFilters
-          filters={PULL_FILTERS}
+          filters={filterDefs}
           selection={filters.selection}
           onToggle={filters.toggle}
           onClear={filters.clear}
@@ -352,7 +345,7 @@ function InboxPage() {
             )}
           >
             <Checkbox
-              aria-label="Tout sélectionner"
+              aria-label={copy.selectAll}
               checked={selecting && selection.length === items.length}
               indeterminate={selecting && selection.length < items.length}
               onCheckedChange={(value) =>
@@ -364,13 +357,12 @@ function InboxPage() {
             {selecting ? (
               <>
                 <span className="font-medium tabular-nums">
-                  {selection.length} sélectionné
-                  {selection.length > 1 ? "s" : ""}
+                  {copy.selected(selection.length)}
                 </span>
                 <div className="ml-auto flex items-center gap-1">
                   <Button size="xs" onClick={bulkDone}>
                     <CheckIcon data-icon="inline-start" />
-                    {search.folder === "done" ? "Remettre" : "Traités"}
+                    {search.folder === "done" ? copy.restore : copy.markDone}
                   </Button>
                   {search.folder !== "done" && (
                     <DropdownMenu>
@@ -378,12 +370,12 @@ function InboxPage() {
                         render={<Button variant="outline" size="xs" />}
                       >
                         <ClockIcon data-icon="inline-start" />
-                        Pause
+                        {copy.snooze}
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end" className="w-60">
                         <DropdownMenuGroup>
                           <DropdownMenuLabel>
-                            Faire revenir la sélection…
+                            {copy.snoozeSelection}
                           </DropdownMenuLabel>
                           {snoozeOptions.map((option) => (
                             <DropdownMenuItem
@@ -392,7 +384,7 @@ function InboxPage() {
                             >
                               {option.label}
                               <span className="ml-auto text-xs text-muted-foreground">
-                                {formatWhen(option.until())}
+                                {formatWhen(option.until(), language)}
                               </span>
                             </DropdownMenuItem>
                           ))}
@@ -404,7 +396,7 @@ function InboxPage() {
                     variant="ghost"
                     size="icon-xs"
                     onClick={clearSelection}
-                    aria-label="Vider la sélection (Échap)"
+                    aria-label={copy.clearSelection}
                   >
                     <XIcon />
                   </Button>
@@ -413,7 +405,7 @@ function InboxPage() {
             ) : (
               <span className="flex items-center gap-1">
                 <Kbd>↑</Kbd>
-                <Kbd>↓</Kbd> naviguer · <Kbd>x</Kbd> sélectionner
+                <Kbd>↓</Kbd> {copy.navigate} · <Kbd>x</Kbd> {copy.select}
               </span>
             )}
           </div>
@@ -439,9 +431,9 @@ function InboxPage() {
                     <EmptyMedia variant="icon">
                       <InboxIcon />
                     </EmptyMedia>
-                    <EmptyTitle>Rien ici</EmptyTitle>
+                    <EmptyTitle>{copy.empty.title}</EmptyTitle>
                     <EmptyDescription>
-                      {EMPTY_COPY[search.folder]}
+                      {copy.empty[search.folder]}
                     </EmptyDescription>
                   </EmptyHeader>
                 </Empty>
@@ -481,13 +473,13 @@ function InboxPage() {
         <DetailPlaceholder
           title={
             items.length > 0
-              ? `${items.length} élément${items.length > 1 ? "s" : ""} dans la liste`
-              : "Rien à ouvrir ici"
+              ? t.inbox.placeholder.count(items.length)
+              : t.inbox.placeholder.nothingToOpen
           }
         >
           {items.length > 0
-            ? "Choisis-en un à gauche, ou appuie sur ↓ pour commencer par le plus prioritaire."
-            : "Change de dossier ou de filtres pour retrouver tes PR et issues."}
+            ? t.inbox.placeholder.pickOne
+            : t.inbox.placeholder.changeFolder}
         </DetailPlaceholder>
       )}
       {pendingReview && (

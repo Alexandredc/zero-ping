@@ -1,4 +1,5 @@
 import { Kbd } from "@/components/ui/kbd"
+import { useI18n } from "@/hooks/use-i18n"
 
 /** A list whose top row slides into an open panel: what picking an item does. */
 function PickIllustration() {
@@ -175,6 +176,7 @@ export function DetailPlaceholder({
   title: string
   children: React.ReactNode
 }) {
+  const { t } = useI18n()
   return (
     <div className="hidden flex-1 items-center justify-center p-8 lg:flex">
       <div className="flex max-w-sm flex-col items-center gap-5 text-center">
@@ -189,8 +191,9 @@ export function DetailPlaceholder({
         </div>
         <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
           <Kbd>↑</Kbd>
-          <Kbd>↓</Kbd> pour parcourir · <Kbd>f</Kbd> plein écran · <Kbd>o</Kbd>{" "}
-          ouvrir sur GitHub
+          <Kbd>↓</Kbd> {t.inbox.placeholder.browse} · <Kbd>f</Kbd>{" "}
+          {t.inbox.placeholder.fullscreen} · <Kbd>o</Kbd>{" "}
+          {t.inbox.placeholder.openOnGitHub}
         </p>
       </div>
     </div>

@@ -19,6 +19,8 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { filterOptions, toggleValue } from "@/lib/list-filters"
 import type { FilterDef, FilterSelection } from "@/lib/list-filters"
+import type { SortOption } from "@/lib/sorts"
+import { useI18n } from "@/hooks/use-i18n"
 
 /** Filters of a list, kept per page in this browser. */
 export function useListFilters(storageKey: string) {
@@ -47,8 +49,6 @@ export function useListFilters(storageKey: string) {
     clear: () => update({}),
   }
 }
-
-export type SortOption<TValue extends string> = { value: TValue; label: string }
 
 /** A filter with a few options sits in the menu; a longer one opens a submenu. */
 const INLINE_OPTIONS = 5
@@ -88,29 +88,38 @@ export function ListMenus<T, TSort extends string>({
   sorts?: SortOption<TSort>[]
   onSort?: (sort: TSort) => void
 }) {
+  const { t, language } = useI18n()
   const groups = filters
-    .map((def) => ({ def, options: filterOptions(items, def) }))
+    .map((def) => ({ def, options: filterOptions(items, def, language) }))
     // A filter every item passes, or none, has nothing to pick from; one in use stays.
     .filter(
       (group) =>
         group.options.length > 1 || (selection[group.def.id] ?? []).length > 0
     )
   const chips = chipsOf(filters, selection)
-  const sortLabel = sorts?.find((option) => option.value === sort)?.label
+  const sortKind = sorts?.find((option) => option.value === sort)?.kind
 
   return (
     <div className="flex items-center gap-0.5">
       {sorts && sort && onSort && (
         <DropdownMenu>
           <DropdownMenuTrigger
-            render={<Button variant="ghost" size="xs" aria-label="Trier" />}
+            render={
+              <Button
+                variant="ghost"
+                size="xs"
+                aria-label={t.inbox.listControls.sort}
+              />
+            }
           >
             <ArrowUpDownIcon data-icon="inline-start" />
-            {sortLabel}
+            {sortKind && t.inbox.sorts[sortKind]}
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-52">
             <DropdownMenuGroup>
-              <DropdownMenuLabel>Trier par</DropdownMenuLabel>
+              <DropdownMenuLabel>
+                {t.inbox.listControls.sortBy}
+              </DropdownMenuLabel>
               <DropdownMenuRadioGroup
                 value={sort}
                 onValueChange={(value) => onSort(value as TSort)}
@@ -120,7 +129,7 @@ export function ListMenus<T, TSort extends string>({
                     key={option.value}
                     value={option.value}
                   >
-                    {option.label}
+                    {t.inbox.sorts[option.kind]}
                   </DropdownMenuRadioItem>
                 ))}
               </DropdownMenuRadioGroup>
@@ -132,7 +141,7 @@ export function ListMenus<T, TSort extends string>({
         <DropdownMenu>
           <DropdownMenuTrigger render={<Button variant="ghost" size="xs" />}>
             <ListFilterIcon data-icon="inline-start" />
-            Filtres
+            {t.inbox.listControls.filters}
             {chips.length > 0 && (
               <Badge className="h-4 min-w-4 px-1 text-[10px] tabular-nums">
                 {chips.length}
@@ -189,7 +198,7 @@ export function ListMenus<T, TSort extends string>({
               <DropdownMenuGroup>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={onClear}>
-                  Effacer les filtres
+                  {t.inbox.listControls.clearFilters}
                 </DropdownMenuItem>
               </DropdownMenuGroup>
             )}
@@ -209,6 +218,7 @@ export function ActiveFilters<T>({
   shown,
   total,
 }: Omit<FilterProps<T>, "items"> & { shown: number; total: number }) {
+  const { t } = useI18n()
   const chips = chipsOf(filters, selection)
   if (chips.length === 0) return null
   return (
@@ -224,7 +234,7 @@ export function ActiveFilters<T>({
             variant="ghost"
             size="icon-xs"
             className="size-4"
-            aria-label={`Retirer le filtre ${chip.label}`}
+            aria-label={t.inbox.listControls.removeFilter(chip.label)}
             onClick={() => onToggle(chip.id, chip.value)}
           >
             <XIcon />
@@ -237,10 +247,10 @@ export function ActiveFilters<T>({
         className="h-5 px-1 text-muted-foreground"
         onClick={onClear}
       >
-        Tout effacer
+        {t.inbox.listControls.clearAll}
       </Button>
       <span className="ml-auto text-xs text-muted-foreground tabular-nums">
-        {shown} sur {total}
+        {t.inbox.listControls.shownOf(shown, total)}
       </span>
     </div>
   )

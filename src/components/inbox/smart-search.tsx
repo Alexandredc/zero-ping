@@ -13,6 +13,7 @@ import { Spinner } from "@/components/ui/spinner"
 import { toast } from "@/components/ui/toast"
 import { postSearch } from "@/functions/inbox"
 import type { SearchCandidate, SearchMatch } from "@/server/search/smart-search"
+import { useI18n } from "@/hooks/use-i18n"
 
 const fold = (text: string) =>
   text
@@ -35,6 +36,7 @@ export function useSmartSearch<T>({
   toCandidate: (item: T) => SearchCandidate
   resetKey: string
 }) {
+  const { t } = useI18n()
   const [text, setText] = useState("")
   const [result, setResult] = useState<{
     query: string
@@ -48,7 +50,7 @@ export function useSmartSearch<T>({
     onSuccess: setResult,
     onError: (error) =>
       toast.add({
-        title: "Recherche IA impossible",
+        title: t.inbox.search.failed,
         description: error.message,
         type: "error",
       }),
@@ -106,9 +108,12 @@ export function SmartSearchBar({
   noun,
 }: {
   search: ReturnType<typeof useSmartSearch<unknown>>
-  /** Plural noun of the items, as in « 3 PR » or « 3 issues ». */
-  noun: string
+  /** What the list holds: « 3 PR » or « 3 issues ». */
+  noun: "PR" | "issues"
 }) {
+  const { t } = useI18n()
+  const copy = t.inbox.search
+  const nouns = noun === "PR" ? copy.pr : copy.issue
   return (
     <div className="flex flex-col gap-1 border-b px-3 py-2">
       <form
@@ -131,27 +136,27 @@ export function SmartSearchBar({
                 search.clear()
               }
             }}
-            placeholder={`Chercher ou décrire ${noun === "PR" ? "une PR" : "une issue"}…`}
-            aria-label={`Chercher des ${noun}`}
+            placeholder={nouns.placeholder}
+            aria-label={nouns.label}
           />
           <InputGroupAddon align="inline-end">
             {search.text && (
               <InputGroupButton
                 size="icon-xs"
                 onClick={search.clear}
-                aria-label="Effacer la recherche"
+                aria-label={copy.clear}
               >
                 <XIcon />
               </InputGroupButton>
             )}
-            <ActionHint content="L'IA lit les titres, descriptions, labels et résumés de la liste pour trouver ce que tu décris (Entrée).">
+            <ActionHint content={copy.aiHint}>
               <InputGroupButton
                 type="submit"
                 variant={search.ai ? "secondary" : "ghost"}
                 disabled={!search.query || search.pending}
               >
                 <SparklesIcon />
-                Recherche IA
+                {copy.ai}
               </InputGroupButton>
             </ActionHint>
           </InputGroupAddon>
@@ -160,21 +165,20 @@ export function SmartSearchBar({
       {search.query && (
         <p className="flex items-center gap-1 text-xs text-muted-foreground">
           {search.pending ? (
-            "Recherche IA en cours…"
+            copy.pending
           ) : search.ai ? (
             search.visible.length > 0 ? (
               <>
                 <SparklesIcon className="size-3" />
-                {search.visible.length} {noun} trouvée
-                {search.visible.length > 1 ? "s" : ""} par la recherche IA
+                {nouns.found(search.visible.length)}
               </>
             ) : (
-              `Aucune ${noun} ne correspond, selon la recherche IA.`
+              nouns.none
             )
           ) : (
             <>
-              {search.visible.length} sur {search.total} par le texte ·{" "}
-              <Kbd>Entrée</Kbd> pour la recherche IA
+              {copy.byText(search.visible.length, search.total)}{" "}
+              <Kbd>{copy.enter}</Kbd> {copy.forAi}
             </>
           )}
         </p>

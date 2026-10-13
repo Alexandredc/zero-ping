@@ -34,19 +34,36 @@ describe("applyFilters", () => {
 
 describe("filterOptions", () => {
   it("counts the items of each value and drops the empty ones", () => {
-    expect(filterOptions(pulls, defs[1])).toEqual([
+    expect(filterOptions(pulls, defs[1], "fr")).toEqual([
       { value: "bug", label: "bug", count: 2 },
       { value: "infra", label: "infra", count: 1 },
     ])
     expect(
-      filterOptions(pulls, {
-        ...defs[0],
-        options: [
-          { value: "zoe", label: "Zoé" },
-          { value: "bob", label: "Bob" },
-        ],
-      })
+      filterOptions(
+        pulls,
+        {
+          ...defs[0],
+          options: [
+            { value: "zoe", label: "Zoé" },
+            { value: "bob", label: "Bob" },
+          ],
+        },
+        "en"
+      )
     ).toEqual([{ value: "bob", label: "Bob", count: 1 }])
+  })
+
+  it("sorts the values in the chosen language, accents next to their letter", () => {
+    const names = [{ name: "Zoé" }, { name: "émile" }, { name: "Ana" }]
+    const def: FilterDef<{ name: string }> = {
+      id: "name",
+      label: "Name",
+      valuesOf: (p) => [p.name],
+    }
+    for (const language of ["fr", "en"] as const)
+      expect(
+        filterOptions(names, def, language).map((option) => option.value)
+      ).toEqual(["Ana", "émile", "Zoé"])
   })
 })
 

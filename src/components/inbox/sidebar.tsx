@@ -11,8 +11,8 @@ import {
   SunIcon,
   TriangleAlertIcon,
 } from "lucide-react"
-import { FOLDER_META, PRIMARY_FOLDERS, SECONDARY_FOLDERS } from "./folders"
-import { PAGE_META } from "./pages"
+import { FOLDER_ICONS, PRIMARY_FOLDERS, SECONDARY_FOLDERS } from "./folders"
+import { PAGE_ICONS } from "./pages"
 import type { Folder } from "@/server/inbox/actions"
 import type { SyncStatus } from "@/server/inbox/loop"
 import { Kbd } from "@/components/ui/kbd"
@@ -49,6 +49,8 @@ import { useNotificationPermission } from "@/hooks/use-notification-permission"
 import { useHotkeys } from "@/hooks/use-hotkeys"
 import { useSidebarCollapsed } from "@/hooks/use-sidebar-collapsed"
 import type { Theme } from "@/lib/theme"
+import { useI18n } from "@/hooks/use-i18n"
+import type { Messages } from "@/lib/i18n/messages"
 
 type SidebarProps = {
   folder?: Folder
@@ -70,8 +72,9 @@ function FolderLink({
   count?: number
   collapsed: boolean
 }) {
-  const meta = FOLDER_META[folder]
-  const Icon = meta.icon
+  const { t } = useI18n()
+  const meta = t.nav.folders[folder]
+  const Icon = FOLDER_ICONS[folder]
   const hasCount = count !== undefined && count > 0
   return (
     <Tooltip>
@@ -166,10 +169,10 @@ function PageLink({
 }
 
 const THEME_ORDER: Theme[] = ["system", "light", "dark"]
-const THEME_META: Record<Theme, { label: string; icon: typeof SunIcon }> = {
-  system: { label: "Système", icon: LaptopIcon },
-  light: { label: "Clair", icon: SunIcon },
-  dark: { label: "Sombre", icon: MoonIcon },
+const THEME_ICONS: Record<Theme, typeof SunIcon> = {
+  system: LaptopIcon,
+  light: SunIcon,
+  dark: MoonIcon,
 }
 
 function SectionTitle({
@@ -240,15 +243,15 @@ function MenuRow({
   )
 }
 
-const DND_DURATIONS = [
-  { label: "Pendant 1 heure", until: () => new Date(Date.now() + 3600_000) },
+const dndDurations = (t: Messages) => [
+  { label: t.inbox.dnd.for1Hour, until: () => new Date(Date.now() + 3600_000) },
   {
-    label: "Pendant 3 heures",
+    label: t.inbox.dnd.for3Hours,
     until: () => new Date(Date.now() + 3 * 3600_000),
   },
-  { label: "Jusqu'à demain matin", until: () => nextMorning() },
+  { label: t.inbox.dnd.untilTomorrowMorning, until: () => nextMorning() },
   {
-    label: "Jusqu'à ce que je le réactive",
+    label: t.inbox.dnd.untilTurnedBackOn,
     until: () => new Date(DND_FOREVER),
   },
 ]
@@ -258,15 +261,16 @@ function DndRow({ collapsed }: { collapsed: boolean }) {
   const { data } = useQuery(quietQuery())
   const save = useSavePreferences()
   const navigate = useNavigate()
+  const { t, language } = useI18n()
   if (!data) return null
   const { muted, reason } = doNotDisturb(data)
   const detail =
     reason === "dnd" && data.dndUntil
       ? isForever(data.dndUntil)
-        ? "activé"
-        : `jusqu'à ${formatWhen(new Date(data.dndUntil))}`
+        ? t.inbox.dnd.on
+        : t.common.until(formatWhen(new Date(data.dndUntil), language))
       : reason === "quiet"
-        ? `heures calmes jusqu'à ${data.quietEnd}`
+        ? t.inbox.dnd.quietUntil(data.quietEnd)
         : undefined
   return (
     <DropdownMenu>
@@ -274,21 +278,17 @@ function DndRow({ collapsed }: { collapsed: boolean }) {
         render={
           <MenuRow
             icon={muted ? BellOffIcon : BellIcon}
-            label="Ne pas déranger"
+            label={t.inbox.dnd.label}
             detail={detail}
-            hint={
-              muted
-                ? `Notifications coupées${detail ? ` (${detail})` : ""}. Ce qui arrive entre-temps ne sera pas notifié.`
-                : "Couper les notifications pour un moment"
-            }
+            hint={muted ? t.inbox.dnd.mutedHint(detail) : t.inbox.dnd.muteHint}
             collapsed={collapsed}
           />
         }
       />
       <DropdownMenuContent side="right" align="end" className="w-60">
         <DropdownMenuGroup>
-          <DropdownMenuLabel>Couper les notifications…</DropdownMenuLabel>
-          {DND_DURATIONS.map((option) => (
+          <DropdownMenuLabel>{t.inbox.dnd.menuLabel}</DropdownMenuLabel>
+          {dndDurations(t).map((option) => (
             <DropdownMenuItem
               key={option.label}
               onClick={() =>
@@ -303,7 +303,7 @@ function DndRow({ collapsed }: { collapsed: boolean }) {
         <DropdownMenuGroup>
           {reason === "dnd" && (
             <DropdownMenuItem onClick={() => save.mutate({ dndUntil: null })}>
-              Réactiver les notifications
+              {t.inbox.dnd.turnBackOn}
             </DropdownMenuItem>
           )}
           <DropdownMenuItem
@@ -314,7 +314,7 @@ function DndRow({ collapsed }: { collapsed: boolean }) {
               })
             }
           >
-            Régler les heures calmes…
+            {t.inbox.dnd.quietHours}
           </DropdownMenuItem>
         </DropdownMenuGroup>
       </DropdownMenuContent>
@@ -325,12 +325,13 @@ function DndRow({ collapsed }: { collapsed: boolean }) {
 /** The logo with the number of items waiting for the viewer in its corner. */
 function LogoWithPings() {
   const { data: count = 0 } = useQuery(pingCountQuery())
+  const { t } = useI18n()
   return (
     <span className="relative shrink-0">
       <img src={LOGO_URL} alt="" className="size-8" />
       {count > 0 && (
         <span
-          aria-label={`${count} élément${count > 1 ? "s" : ""} en attente`}
+          aria-label={t.inbox.sidebar.pings(count)}
           className="absolute -top-1.5 -right-1.5 flex h-4.5 min-w-4.5 items-center justify-center rounded-full bg-rose-600 px-1 font-mono text-[0.65rem] font-bold text-white tabular-nums ring-2 ring-sidebar"
         >
           {formatPings(count)}
@@ -353,6 +354,8 @@ export function Sidebar({
   const { theme, setTheme } = useTheme()
   const { permission, request } = useNotificationPermission()
   const navigate = useNavigate()
+  const { t, language } = useI18n()
+  const copy = t.inbox.sidebar
   const { data: team } = useQuery(teamQuery())
   const { data: issues } = useQuery(issuesQuery())
   // The inbox passes its own counts; the other pages load them here.
@@ -366,10 +369,10 @@ export function Sidebar({
   const nextTheme =
     THEME_ORDER[(THEME_ORDER.indexOf(theme) + 1) % THEME_ORDER.length]
   const syncDetail = running
-    ? "en cours"
+    ? copy.syncRunning
     : sync?.lastSyncAt
-      ? timeAgo(sync.lastSyncAt)
-      : "bientôt"
+      ? timeAgo(sync.lastSyncAt, language)
+      : copy.syncSoon
 
   return (
     <aside
@@ -395,34 +398,34 @@ export function Sidebar({
         )}
       </Link>
 
-      <nav className="flex flex-col gap-0.5" aria-label="Dossiers">
-        <SectionTitle collapsed={collapsed}>Lead</SectionTitle>
+      <nav className="flex flex-col gap-0.5" aria-label={copy.folders}>
+        <SectionTitle collapsed={collapsed}>{copy.sections.lead}</SectionTitle>
         <PageLink
           to="/dashboard"
-          label="Vue d'ensemble"
-          hint="Ta charge du jour, tes prochaines actions, la météo de l'équipe et les tendances"
-          icon={PAGE_META.dashboard.icon}
+          label={t.nav.pages.dashboard}
+          hint={copy.pageHints.dashboard}
+          icon={PAGE_ICONS.dashboard}
           active={page === "dashboard"}
           collapsed={collapsed}
         />
         <PageLink
           to="/team"
-          label="Équipe"
-          hint="PR des repos suivis sans reviewer, bloquées ou trop anciennes"
-          icon={PAGE_META.team.icon}
+          label={t.nav.pages.team}
+          hint={copy.pageHints.team}
+          icon={PAGE_ICONS.team}
           active={page === "team"}
           count={team?.pulls.filter((pull) => pull.problems.length > 0).length}
           collapsed={collapsed}
         />
         <PageLink
           to="/recap"
-          label="Récap du jour"
-          hint="Ce qui t'attend ce matin et le standup de l'équipe"
-          icon={PAGE_META.recap.icon}
+          label={t.nav.pages.recap}
+          hint={copy.pageHints.recap}
+          icon={PAGE_ICONS.recap}
           active={page === "recap"}
           collapsed={collapsed}
         />
-        <SectionTitle collapsed={collapsed}>À traiter</SectionTitle>
+        <SectionTitle collapsed={collapsed}>{copy.sections.todo}</SectionTitle>
         {PRIMARY_FOLDERS.map((f) => (
           <FolderLink
             key={f}
@@ -434,14 +437,14 @@ export function Sidebar({
         ))}
         <PageLink
           to="/issues"
-          label={PAGE_META.issues.label}
-          hint="Les issues qui te sont assignées, tes tâches et celles de l'équipe pour le sprint courant"
-          icon={PAGE_META.issues.icon}
+          label={t.nav.pages.issues}
+          hint={copy.pageHints.issues}
+          icon={PAGE_ICONS.issues}
           active={page === "issues"}
           count={issues?.assigned.length}
           collapsed={collapsed}
         />
-        <SectionTitle collapsed={collapsed}>Classement</SectionTitle>
+        <SectionTitle collapsed={collapsed}>{copy.sections.filed}</SectionTitle>
         {SECONDARY_FOLDERS.map((f) => (
           <FolderLink
             key={f}
@@ -453,7 +456,7 @@ export function Sidebar({
         ))}
       </nav>
 
-      <nav className="mt-auto flex flex-col gap-0.5" aria-label="Application">
+      <nav className="mt-auto flex flex-col gap-0.5" aria-label={copy.app}>
         {sync?.lastError &&
           (collapsed ? (
             <Tooltip>
@@ -475,12 +478,12 @@ export function Sidebar({
               {sync.lastError}
             </p>
           ))}
-        <SectionTitle collapsed={collapsed}>Application</SectionTitle>
+        <SectionTitle collapsed={collapsed}>{copy.sections.app}</SectionTitle>
         {permission === "default" && (
           <MenuRow
             icon={BellIcon}
-            label="Activer les notifications"
-            hint="Autorise le navigateur à te prévenir quand quelque chose t'attend"
+            label={copy.enableNotifications}
+            hint={copy.enableNotificationsHint}
             collapsed={collapsed}
             onClick={() => void request()}
           />
@@ -489,13 +492,9 @@ export function Sidebar({
         {onSync && (
           <MenuRow
             icon={RefreshCwIcon}
-            label="Sync"
+            label={copy.sync}
             detail={syncDetail}
-            hint={
-              running
-                ? "Synchronisation avec GitHub en cours"
-                : `Interroger GitHub maintenant (dernière synchro : ${syncDetail}). Sinon, c'est automatique.`
-            }
+            hint={running ? copy.syncRunningHint : copy.syncHint(syncDetail)}
             collapsed={collapsed}
             spinning={running}
             disabled={running}
@@ -503,29 +502,25 @@ export function Sidebar({
           />
         )}
         <MenuRow
-          icon={THEME_META[theme].icon}
-          label="Thème"
-          detail={THEME_META[theme].label}
-          hint={`Thème ${THEME_META[theme].label.toLowerCase()} · cliquer pour passer en ${THEME_META[nextTheme].label.toLowerCase()}`}
+          icon={THEME_ICONS[theme]}
+          label={copy.theme}
+          detail={copy.themes[theme]}
+          hint={copy.themeHint(copy.themes[theme], copy.themes[nextTheme])}
           collapsed={collapsed}
           onClick={() => setTheme(nextTheme)}
         />
         <MenuRow
-          icon={PAGE_META.settings.icon}
-          label="Réglages"
-          hint="Repos, classement, récap, Slack, agent IA et notifications"
+          icon={PAGE_ICONS.settings}
+          label={t.nav.pages.settings}
+          hint={copy.pageHints.settings}
           collapsed={collapsed}
           onClick={() => void navigate({ to: "/settings" })}
         />
         <MenuRow
           icon={collapsed ? PanelLeftOpenIcon : PanelLeftCloseIcon}
-          label="Replier"
+          label={copy.collapse}
           detail={<Kbd>[</Kbd>}
-          hint={
-            collapsed
-              ? "Déplier la barre latérale ( [ )"
-              : "Replier la barre latérale ( [ )"
-          }
+          hint={collapsed ? copy.expandHint : copy.collapseHint}
           collapsed={collapsed}
           onClick={toggle}
         />

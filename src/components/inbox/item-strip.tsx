@@ -14,14 +14,13 @@ import { SlackIcon } from "@/components/brand-icons"
 import type { Item } from "@/server/db/schema"
 import type { InboxItem } from "@/server/inbox/actions"
 import type { PriorityReason } from "@/server/inbox/priority"
-import {
-  NEEDS_CHECK_HINT,
-  hasNewCommitsSinceReview,
-} from "@/server/inbox/priority"
+import { hasNewCommitsSinceReview } from "@/server/inbox/priority"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Checkbox } from "@/components/ui/checkbox"
 import { cn } from "@/lib/utils"
 import { avatarUrl, pullSize, timeAgo } from "@/lib/format"
+import { useI18n } from "@/hooks/use-i18n"
+import type { Messages } from "@/lib/i18n/messages"
 
 function KindIcon({ item }: { item: Item }) {
   const className = "size-3.5 shrink-0"
@@ -36,11 +35,12 @@ function KindIcon({ item }: { item: Item }) {
   return <MessagesSquareIcon className={className} />
 }
 
-function kindLabel(item: Item): string {
+function kindLabel(item: Item, t: Messages): string {
+  const kinds = t.inbox.strip.kinds
   if (item.kind === "PullRequest")
-    return item.isDraft ? "PR en brouillon" : "Pull request"
-  if (item.kind === "Issue") return "Issue"
-  return item.kind === "Discussion" ? "Discussion" : "Notification GitHub"
+    return item.isDraft ? kinds.draftPull : kinds.pull
+  if (item.kind === "Issue") return kinds.issue
+  return item.kind === "Discussion" ? kinds.discussion : kinds.notification
 }
 
 /**
@@ -89,10 +89,11 @@ export function ScoreBreakdown({
   priority: number
   reasons: PriorityReason[]
 }) {
+  const { t } = useI18n()
   const counted = reasons.filter((reason) => reason.weight !== 0)
   return (
     <>
-      <span className="font-medium">Priorité {priority} sur 100</span>
+      <span className="font-medium">{t.inbox.strip.score(priority)}</span>
       {counted.length > 0 ? (
         <span className="flex flex-col gap-0.5 font-mono">
           {counted.map((reason) => (
@@ -103,19 +104,16 @@ export function ScoreBreakdown({
           ))}
         </span>
       ) : (
-        <span>
-          Aucune règle ne s'applique : rien n'attend d'action de ta part.
-        </span>
+        <span>{t.inbox.strip.noRule}</span>
       )}
-      <span className="opacity-70">
-        Plus le score est haut, plus c'est à traiter tôt.
-      </span>
+      <span className="opacity-70">{t.inbox.strip.scoreHelp}</span>
     </>
   )
 }
 
 /** Size letter with the exact counts in its hint. */
 function SizeChip({ item }: { item: Item }) {
+  const { t } = useI18n()
   if (item.kind !== "PullRequest" || item.additions === null) return null
   const size = pullSize(item.additions, item.deletions)
   return (
@@ -124,17 +122,17 @@ function SizeChip({ item }: { item: Item }) {
       className="flex"
       content={
         <>
-          <span>Taille de la PR : {size}</span>
+          <span>{t.inbox.strip.sizeTitle(size)}</span>
           <span className="font-mono">
             +{item.additions} −{item.deletions ?? 0}
             {item.changedFiles !== null &&
-              ` · ${item.changedFiles} fichier${item.changedFiles > 1 ? "s" : ""}`}
+              ` · ${t.inbox.strip.files(item.changedFiles)}`}
           </span>
         </>
       }
     >
       <span
-        aria-label={`Taille ${size}`}
+        aria-label={t.inbox.strip.size(size)}
         className={cn(
           "inline-flex h-4 w-6 items-center justify-center rounded border px-1 font-mono text-[0.65rem] leading-none font-medium",
           size === "XS" || size === "S"
@@ -166,6 +164,7 @@ export function ItemStrip({
   /** « Toutes les PR » ranks by Jev alone, so its gauge shows Jev's urgency. */
   gauge?: "priority" | "jev"
 }) {
+  const { t, language } = useI18n()
   const [repoOwner, repoName] = item.repoFullName.split("/")
   const reasons = item.priorityReasons
     .filter((reason) => reason.weight !== 0)
@@ -181,7 +180,7 @@ export function ItemStrip({
     >
       <span className="flex w-5 shrink-0 justify-end pt-3.5">
         <Checkbox
-          aria-label={`Sélectionner ${item.title}`}
+          aria-label={t.inbox.strip.select(item.title)}
           checked={checked}
           onCheckedChange={onCheck}
           className={cn(
@@ -205,7 +204,7 @@ export function ItemStrip({
         )}
         <div className="flex min-w-0 flex-1 flex-col gap-1">
           <div className="flex h-5 items-center gap-1.5 text-xs text-muted-foreground">
-            <Hint instant className="flex" content={kindLabel(item)}>
+            <Hint instant className="flex" content={kindLabel(item, t)}>
               <KindIcon item={item} />
             </Hint>
             <span className="truncate font-mono">
@@ -217,10 +216,10 @@ export function ItemStrip({
             </span>
             {item.kind === "PullRequest" && <CiIcon ciState={item.ciState} />}
             {item.unread && (
-              <Hint instant className="flex" content="Non lu sur GitHub">
+              <Hint instant className="flex" content={t.inbox.strip.unreadHint}>
                 <span
                   className="block size-1.5 shrink-0 rounded-full bg-signal"
-                  aria-label="Non lu"
+                  aria-label={t.inbox.strip.unread}
                 />
               </Hint>
             )}
@@ -230,10 +229,10 @@ export function ItemStrip({
                 <Hint
                   instant
                   className="flex"
-                  content="Des commits sont arrivés depuis ta dernière review : le diff peut se limiter à eux."
+                  content={t.inbox.strip.newCommitsHint}
                 >
                   <span
-                    aria-label="Nouveaux commits depuis ta review"
+                    aria-label={t.inbox.strip.newCommits}
                     className="inline-flex h-4 items-center rounded border border-signal/40 px-1 text-signal"
                   >
                     <GitCommitHorizontalIcon className="size-3" />
@@ -244,10 +243,14 @@ export function ItemStrip({
                 <Hint
                   instant
                   className="flex"
-                  content={`${item.slackDiscussions} discussion${item.slackDiscussions > 1 ? "s" : ""} Slack sur cette PR`}
+                  content={t.inbox.strip.slackDiscussionsHint(
+                    item.slackDiscussions
+                  )}
                 >
                   <span
-                    aria-label={`${item.slackDiscussions} discussion${item.slackDiscussions > 1 ? "s" : ""} Slack`}
+                    aria-label={t.inbox.strip.slackDiscussions(
+                      item.slackDiscussions
+                    )}
                     className="inline-flex h-4 items-center gap-1 rounded border border-slack/30 bg-slack-surface px-1 font-mono text-[0.65rem] leading-none font-medium text-foreground"
                   >
                     <SlackIcon className="size-3" aria-hidden />
@@ -260,7 +263,7 @@ export function ItemStrip({
                 <Hint
                   instant
                   className="flex"
-                  content={`Auteur : @${item.author}`}
+                  content={t.inbox.strip.author(item.author)}
                 >
                   <Avatar className="size-5">
                     <AvatarImage
@@ -294,7 +297,7 @@ export function ItemStrip({
           {item.doneAt && item.autoDoneReason && (
             <p className="flex items-center gap-1 text-[0.7rem] text-muted-foreground">
               <ArchiveIcon className="size-3" />
-              Classé automatiquement · {item.autoDoneReason}
+              {t.inbox.strip.autoDone} · {item.autoDoneReason}
             </p>
           )}
           {/* The age closes the row on the right, on one line whatever its length. */}
@@ -309,7 +312,7 @@ export function ItemStrip({
                         <span>{reason.hint}</span>
                         <span className="font-mono opacity-70">
                           {reason.weight > 0 ? "+" : "−"}
-                          {Math.abs(reason.weight)} points
+                          {t.inbox.strip.points(Math.abs(reason.weight))}
                         </span>
                       </>
                     )
@@ -317,22 +320,22 @@ export function ItemStrip({
                   className={cn(reason.hint && "cursor-help")}
                 >
                   {reason.weight < 0 && (
-                    <span aria-label="baisse la priorité">↓ </span>
+                    <span aria-label={t.inbox.strip.lowersPriority}>↓ </span>
                   )}
                   {reason.label}
                 </Hint>
               ))}
               {item.needsCheck && (
                 <Hint
-                  content={NEEDS_CHECK_HINT}
+                  content={t.server.priority.needsCheckHint}
                   className="inline-flex cursor-help items-center gap-0.5 text-heat-foreground"
                 >
-                  <SparklesIcon className="size-3" /> à vérifier
+                  <SparklesIcon className="size-3" /> {t.inbox.strip.needsCheck}
                 </Hint>
               )}
             </p>
             <span className="shrink-0 whitespace-nowrap tabular-nums">
-              {timeAgo(item.updatedAt)}
+              {timeAgo(item.updatedAt, language)}
             </span>
           </div>
         </div>

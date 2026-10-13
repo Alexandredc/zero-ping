@@ -1,19 +1,18 @@
-/** The sort names every list uses, so that one order reads the same everywhere. */
-export const SORT_LABELS = {
-  priority: "Priorité (Jev)",
-  size: "Taille",
-  recent: "Activité récente",
-  oldest: "Sans activité depuis longtemps",
-  waiting: "En attente depuis longtemps",
-} as const
+import type { Messages } from "@/lib/i18n/messages"
 
-export type SortKind = keyof typeof SORT_LABELS
+/** The orders every list shares; their names live in `t.inbox.sorts`, so one order reads the same everywhere. */
+export type SortKind = keyof Messages["inbox"]["sorts"]
 
-/** A list's sort menu: each of its values, named after the order it applies. */
+export type SortOption<TValue extends string> = {
+  value: TValue
+  kind: SortKind
+}
+
+/** A list's sort menu: each of its values, with the order it applies. */
 export function sortOptions<TValue extends string>(
   kinds: Record<TValue, SortKind>
-): { value: TValue; label: string }[] {
+): SortOption<TValue>[] {
   return (Object.entries(kinds) as [TValue, SortKind][]).map(
-    ([value, kind]) => ({ value, label: SORT_LABELS[kind] })
+    ([value, kind]) => ({ value, kind })
   )
 }
