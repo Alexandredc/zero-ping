@@ -31,16 +31,13 @@ import { Spinner } from "@/components/ui/spinner"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { ReviewersMenu } from "@/components/inbox/reviewers-menu"
 import { teamQuery, useTakeReview } from "@/hooks/use-inbox"
+import { useI18n } from "@/hooks/use-i18n"
 import { avatarUrl, pullSize, timeAgo } from "@/lib/format"
 import { cn } from "@/lib/utils"
 import type { TeamProblem, TeamPull } from "@/server/db/schema"
 import { ballHolder, diagnose } from "@/server/team/diagnosis"
 import type { BallHolder } from "@/server/team/diagnosis"
-import {
-  TEAM_PREFIX,
-  TEAM_PROBLEM_LABEL,
-  reviewerLabel,
-} from "@/server/team/labels"
+import { TEAM_PREFIX, reviewerLabel } from "@/server/team/labels"
 
 export const Route = createFileRoute("/team")({
   loader: ({ context }) => context.queryClient.ensureQueryData(teamQuery()),
@@ -48,32 +45,12 @@ export const Route = createFileRoute("/team")({
 })
 
 /** Problems in the order a lead can clear them fastest. */
-const PROBLEMS: { problem: TeamProblem; icon: LucideIcon; hint: string }[] = [
-  {
-    problem: "no-reviewer",
-    icon: UserRoundXIcon,
-    hint: "Ni reviewer désigné, ni review faite : personne ne sait qu'elle attend.",
-  },
-  {
-    problem: "changes",
-    icon: MessageSquareWarningIcon,
-    hint: "Des changements ont été demandés et l'auteur n'a rien poussé depuis plus de 2 jours.",
-  },
-  {
-    problem: "ci",
-    icon: XCircleIcon,
-    hint: "La CI du dernier commit échoue : la PR ne peut pas être mergée en l'état.",
-  },
-  {
-    problem: "conflict",
-    icon: GitMergeIcon,
-    hint: "La branche est en conflit avec la base : il faut rebaser.",
-  },
-  {
-    problem: "stale",
-    icon: HourglassIcon,
-    hint: "Ouverte depuis plus longtemps que le seuil des réglages.",
-  },
+const PROBLEMS: { problem: TeamProblem; icon: LucideIcon }[] = [
+  { problem: "no-reviewer", icon: UserRoundXIcon },
+  { problem: "changes", icon: MessageSquareWarningIcon },
+  { problem: "ci", icon: XCircleIcon },
+  { problem: "conflict", icon: GitMergeIcon },
+  { problem: "stale", icon: HourglassIcon },
 ]
 const PROBLEM_ICON = Object.fromEntries(
   PROBLEMS.map(({ problem, icon }) => [problem, icon])
@@ -104,6 +81,7 @@ const PROBLEM_TONE: Record<TeamProblem, { tag: string; icon: string }> = {
 }
 
 function ProblemTag({ problem }: { problem: TeamProblem }) {
+  const { t } = useI18n()
   const Icon = PROBLEM_ICON[problem]
   return (
     <span
@@ -113,7 +91,7 @@ function ProblemTag({ problem }: { problem: TeamProblem }) {
       )}
     >
       <Icon className="size-3.5" />
-      {TEAM_PROBLEM_LABEL[problem]}
+      {t.team.problems[problem].label}
     </span>
   )
 }
@@ -145,11 +123,12 @@ function Holder({
   holder: BallHolder
   viewerLogin: string
 }) {
+  const { t } = useI18n()
   if (holder.kind === "lead")
     return (
       <span className="flex items-center gap-1.5 text-xs font-medium text-heat-foreground">
         <PersonAvatar login={viewerLogin} size="size-5" />
-        Toi ou un reviewer
+        {t.team.holder.lead}
       </span>
     )
   const logins =
@@ -174,9 +153,12 @@ function Holder({
           ))}
       </span>
       <span className="truncate">
-        {logins.map(reviewerLabel).join(", ") || "l'auteur"}
+        {logins.map((login) => reviewerLabel(login, t)).join(", ") ||
+          t.team.theAuthor}
         <span className="text-muted-foreground">
-          {holder.kind === "author" ? " (auteur)" : " (review)"}
+          {holder.kind === "author"
+            ? t.team.holder.author
+            : t.team.holder.review}
         </span>
       </span>
     </span>
@@ -190,10 +172,11 @@ function TeamRow({
   pull: TeamPull
   viewerLogin: string
 }) {
+  const { t, language } = useI18n()
   const take = useTakeReview()
   const now = new Date()
-  const diagnoses = diagnose(pull, now, viewerLogin)
-  const holder = ballHolder(pull, now, viewerLogin)
+  const diagnoses = diagnose(pull, language, now, viewerLogin)
+  const holder = ballHolder(pull)
   const isReviewer = pull.reviewers.some(
     (reviewer) => reviewer.toLowerCase() === viewerLogin.toLowerCase()
   )
@@ -221,9 +204,13 @@ function TeamRow({
               <span className="opacity-60">#{pull.number}</span>
             </span>
             <CiIcon ciState={pull.ciState} />
-            <span>· par @{pull.author ?? "fantôme"}</span>
-            <span>· ouverte {timeAgo(pull.createdAt, now)}</span>
-            <span>· dernière activité {timeAgo(pull.updatedAt, now)}</span>
+            <span>{t.team.row.by(pull.author ?? t.team.row.ghost)}</span>
+            <span>
+              {t.team.row.opened(timeAgo(pull.createdAt, language, now))}
+            </span>
+            <span>
+              {t.team.row.lastActivity(timeAgo(pull.updatedAt, language, now))}
+            </span>
             <Hint
               instant
               className="flex"
@@ -241,9 +228,7 @@ function TeamRow({
           {healthy ? (
             <p className="flex items-center gap-1.5 text-xs text-diff-add-strong">
               <CircleCheckIcon className="size-3.5" />
-              {pull.isDraft
-                ? "Brouillon : l'auteur ne la considère pas encore prête."
-                : "En bonne voie : reviewer désigné, CI et branche sans souci."}
+              {pull.isDraft ? t.team.row.draft : t.team.row.healthy}
             </p>
           ) : (
             <ul className="flex flex-col gap-2.5 rounded-md border bg-muted/30 p-2.5">
@@ -270,13 +255,13 @@ function TeamRow({
       <div className="flex flex-col gap-2 max-lg:pl-10">
         <div className="flex flex-col gap-1">
           <span className="text-[0.7rem] tracking-wide text-muted-foreground uppercase">
-            La balle est chez
+            {t.team.holder.title}
           </span>
           <Holder holder={holder} viewerLogin={viewerLogin} />
         </div>
         <div className="flex flex-wrap items-center gap-1">
           {!isReviewer && !pull.isDraft && (
-            <Hint content="Te désigne comme reviewer sur GitHub : la PR arrive dans « À reviewer » à la prochaine synchro.">
+            <Hint content={t.team.row.takeHint(t.nav.folders.review.label)}>
               <Button
                 variant={holder.kind === "lead" ? "default" : "outline"}
                 size="xs"
@@ -288,7 +273,7 @@ function TeamRow({
                 ) : (
                   <UserPlusIcon data-icon="inline-start" />
                 )}
-                {take.isSuccess ? "Review prise" : "Prendre la review"}
+                {take.isSuccess ? t.team.row.taken : t.team.row.take}
               </Button>
             </Hint>
           )}
@@ -309,6 +294,7 @@ function TeamRow({
 }
 
 function TeamPage() {
+  const { t } = useI18n()
   const { data, isPending } = useQuery(teamQuery())
   const [filter, setFilter] = useState<Filter>("stuck")
   const pulls = data?.pulls ?? []
@@ -325,22 +311,22 @@ function TeamPage() {
 
   const filterHint =
     filter === "stuck"
-      ? "Les PR qui n'avancent pas, les plus anciennes d'abord."
+      ? t.team.filters.stuckHint
       : filter === "all"
-        ? "Toutes les PR ouvertes de l'équipe, les bloquées d'abord."
-        : PROBLEMS.find(({ problem }) => problem === filter)?.hint
+        ? t.team.filters.allHint
+        : t.team.problems[filter].hint
 
   return (
     <LeadPage
       page="team"
-      description="Les PR ouvertes par l'équipe dans les repos suivis, hors les tiennes et celles des bots. Pour chaque PR bloquée : ce qui coince, ce qu'il faut faire, et qui doit agir."
+      description={t.team.description}
       actions={
         data && (
           <p className="font-heading text-2xl leading-none font-semibold tabular-nums">
             {stuck.length}
             <span className="font-sans text-sm font-normal text-muted-foreground">
               {" "}
-              bloquée{stuck.length > 1 ? "s" : ""} sur {pulls.length}
+              {t.team.stuckOf(stuck.length, pulls.length)}
             </span>
           </p>
         )
@@ -354,11 +340,11 @@ function TeamPage() {
               onValueChange={(value) => {
                 if (value[0]) setFilter(value[0] as Filter)
               }}
-              aria-label="Filtrer les PR"
+              aria-label={t.team.filters.label}
               className="flex-wrap"
             >
               <ToggleGroupItem value="stuck">
-                À débloquer
+                {t.team.filters.stuck}
                 <span className="font-mono text-xs tabular-nums">
                   {stuck.length}
                 </span>
@@ -367,7 +353,7 @@ function TeamPage() {
                 ({ problem, icon: Icon }) => (
                   <ToggleGroupItem key={problem} value={problem}>
                     <Icon className={PROBLEM_TONE[problem].icon} />
-                    {TEAM_PROBLEM_LABEL[problem]}
+                    {t.team.problems[problem].label}
                     <span className="font-mono text-xs tabular-nums">
                       {count(problem)}
                     </span>
@@ -375,7 +361,7 @@ function TeamPage() {
                 )
               )}
               <ToggleGroupItem value="all">
-                Toutes
+                {t.team.filters.all}
                 <span className="font-mono text-xs tabular-nums">
                   {pulls.length}
                 </span>
@@ -398,11 +384,8 @@ function TeamPage() {
             <EmptyMedia variant="icon">
               <UsersIcon />
             </EmptyMedia>
-            <EmptyTitle>Rien de bloqué</EmptyTitle>
-            <EmptyDescription>
-              Toutes les PR de l'équipe ont un reviewer et avancent. La liste se
-              met à jour toutes les 10 minutes.
-            </EmptyDescription>
+            <EmptyTitle>{t.team.empty.title}</EmptyTitle>
+            <EmptyDescription>{t.team.empty.description}</EmptyDescription>
           </EmptyHeader>
         </Empty>
       )}
@@ -415,8 +398,12 @@ function TeamPage() {
       )}
       {data && (
         <p className="text-center text-xs text-muted-foreground">
-          « Ouverte depuis longtemps » : plus de {data.staleDays} jours,
-          réglable dans Réglages &gt; Classement.
+          {t.team.staleFootnote(
+            t.team.problems.stale.label,
+            data.staleDays,
+            t.nav.pages.settings,
+            t.settings.tabs.triage
+          )}
         </p>
       )}
     </LeadPage>

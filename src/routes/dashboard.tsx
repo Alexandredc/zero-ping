@@ -24,12 +24,15 @@ import {
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { dashboardQuery } from "@/hooks/use-inbox"
+import { useI18n } from "@/hooks/use-i18n"
 import { avatarUrl, timeAgo } from "@/lib/format"
+import type { Language } from "@/lib/i18n/core"
+import { messagesFor } from "@/lib/i18n/messages"
 import { cn } from "@/lib/utils"
 import type { Dashboard } from "@/server/dashboard/dashboard"
 import type { Weather } from "@/server/dashboard/weather"
-import { formatMinutes } from "@/server/dashboard/workload"
-import { TEAM_PROBLEM_LABEL, reviewerLabel } from "@/server/team/labels"
+import { actionLabel, formatMinutes } from "@/server/dashboard/workload"
+import { reviewerLabel } from "@/server/team/labels"
 
 export const Route = createFileRoute("/dashboard")({
   loader: ({ context }) =>
@@ -54,6 +57,7 @@ const asActive = (view: string): ActiveView =>
  * one segment per action, so the size of the day reads at a glance.
  */
 function WorkRuler({ workload }: { workload: Dashboard["workload"] }) {
+  const { t, language } = useI18n()
   const total = Math.max(workload.totalMinutes, 1)
   const hours = Math.floor(workload.totalMinutes / 60)
   const ticks = Array.from({ length: hours + 1 }, (_, hour) => hour)
@@ -63,38 +67,42 @@ function WorkRuler({ workload }: { workload: Dashboard["workload"] }) {
   return (
     <div className="flex flex-col gap-1.5">
       <div className="flex h-9 w-full gap-0.5 overflow-hidden rounded-md bg-strip">
-        {workload.actions.map((action, index) => (
-          <Hint
-            key={action.key}
-            instant
-            className="flex min-w-1"
-            style={{ flexGrow: action.minutes, flexBasis: 0 }}
-            content={
-              <>
-                <span className="font-medium">
-                  {index + 1}. {action.label} · {formatMinutes(action.minutes)}
-                </span>
-                <span className="opacity-80">{action.title}</span>
-              </>
-            }
-          >
-            <Link
-              to="/"
-              search={{ folder: asActive(action.view), item: action.key }}
-              aria-label={`${action.label} : ${action.title}`}
-              className={cn(
-                "block h-full w-full transition-opacity hover:opacity-80",
-                VIEW_TONE[asActive(action.view)].bar
-              )}
-            />
-          </Hint>
-        ))}
+        {workload.actions.map((action, index) => {
+          const label = actionLabel(action, t)
+          return (
+            <Hint
+              key={action.key}
+              instant
+              className="flex min-w-1"
+              style={{ flexGrow: action.minutes, flexBasis: 0 }}
+              content={
+                <>
+                  <span className="font-medium">
+                    {index + 1}. {label} ·{" "}
+                    {formatMinutes(action.minutes, language)}
+                  </span>
+                  <span className="opacity-80">{action.title}</span>
+                </>
+              }
+            >
+              <Link
+                to="/"
+                search={{ folder: asActive(action.view), item: action.key }}
+                aria-label={t.dashboard.ruler.actionLabel(label, action.title)}
+                className={cn(
+                  "block h-full w-full transition-opacity hover:opacity-80",
+                  VIEW_TONE[asActive(action.view)].bar
+                )}
+              />
+            </Hint>
+          )
+        })}
         {rest > 0 && (
           <Hint
             instant
             className="flex"
             style={{ flexGrow: rest, flexBasis: 0 }}
-            content={`Le reste de la file · ${formatMinutes(rest)}`}
+            content={t.dashboard.ruler.rest(formatMinutes(rest, language))}
           >
             <span className="block h-full w-full bg-[repeating-linear-gradient(135deg,var(--color-muted-foreground)_0_1px,transparent_1px_6px)] opacity-40" />
           </Hint>
@@ -110,7 +118,9 @@ function WorkRuler({ workload }: { workload: Dashboard["workload"] }) {
               className="absolute -translate-x-1/2 whitespace-nowrap first:translate-x-0"
               style={{ left: `${((hour * 60) / total) * 100}%` }}
             >
-              {hour === 0 ? "maintenant" : `+${hour} h`}
+              {hour === 0
+                ? t.dashboard.ruler.now
+                : t.dashboard.ruler.hour(hour)}
             </span>
           ))}
       </div>
@@ -119,45 +129,46 @@ function WorkRuler({ workload }: { workload: Dashboard["workload"] }) {
 }
 
 function Hero({ data }: { data: Dashboard }) {
+  const { t, language } = useI18n()
   const { workload } = data
-  const legend: { view: ActiveView; label: string }[] = [
-    { view: "review", label: "Reviews" },
-    { view: "awaiting", label: "Réponses" },
-    { view: "mine", label: "Mes PR" },
-  ]
+  const views: ActiveView[] = ["review", "awaiting", "mine"]
   return (
     <Card>
       <CardContent className="flex flex-col gap-5">
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div className="flex flex-col gap-1">
             <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
-              Ta file de travail
+              {t.dashboard.hero.eyebrow}
             </p>
             <h2 className="font-heading text-5xl leading-none font-semibold tracking-tight tabular-nums">
               {workload.totalMinutes === 0
                 ? "Zéro Ping"
-                : formatMinutes(workload.totalMinutes)}
+                : formatMinutes(workload.totalMinutes, language)}
             </h2>
             <p className="text-sm text-muted-foreground">
               {workload.totalMinutes === 0
-                ? "Rien ne t'attend. Profites-en."
-                : "de travail t'attend, estimé d'après la taille des PR et les messages."}
+                ? t.dashboard.hero.empty
+                : t.dashboard.hero.waiting}
             </p>
           </div>
           <dl className="flex gap-5 text-sm">
-            {legend.map(({ view, label }) => (
+            {views.map((view) => (
               <div key={view} className="flex flex-col gap-0.5">
                 <dt className="flex items-center gap-1.5 text-xs text-muted-foreground">
                   <span
                     className={cn("size-2 rounded-full", VIEW_TONE[view].dot)}
                   />
-                  {label}
+                  {t.dashboard.hero.legend[view]}
                 </dt>
                 <dd className="font-mono tabular-nums">
                   <span className="font-medium">{workload.counts[view]}</span>
                   <span className="text-muted-foreground">
                     {" "}
-                    · {formatMinutes(workload.byView[view]).replace("≈ ", "")}
+                    ·{" "}
+                    {formatMinutes(workload.byView[view], language).replace(
+                      "≈ ",
+                      ""
+                    )}
                   </span>
                 </dd>
               </div>
@@ -171,12 +182,13 @@ function Hero({ data }: { data: Dashboard }) {
 }
 
 function NextActions({ data }: { data: Dashboard }) {
+  const { t, language } = useI18n()
   const { actions } = data.workload
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Prochaines actions</CardTitle>
-        <CardDescription>Dans l'ordre de priorité.</CardDescription>
+        <CardTitle>{t.dashboard.next.title}</CardTitle>
+        <CardDescription>{t.dashboard.next.description}</CardDescription>
         <CardAction>
           <Button
             variant="link"
@@ -184,14 +196,14 @@ function NextActions({ data }: { data: Dashboard }) {
             nativeButton={false}
             render={<Link to="/" search={{ folder: "review" }} />}
           >
-            Ouvrir l'inbox
+            {t.dashboard.next.openInbox}
           </Button>
         </CardAction>
       </CardHeader>
       <CardContent>
         {actions.length === 0 ? (
           <p className="text-sm text-muted-foreground">
-            Aucune action en attente de ta part.
+            {t.dashboard.next.empty}
           </p>
         ) : (
           <ol className="flex flex-col">
@@ -212,7 +224,9 @@ function NextActions({ data }: { data: Dashboard }) {
                     )}
                   />
                   <span className="flex min-w-0 flex-1 flex-col">
-                    <span className="text-sm font-medium">{action.label}</span>
+                    <span className="text-sm font-medium">
+                      {actionLabel(action, t)}
+                    </span>
                     <span className="truncate text-xs text-muted-foreground">
                       <span className="font-mono">
                         {action.repoFullName.split("/")[1]}#{action.number}
@@ -221,7 +235,7 @@ function NextActions({ data }: { data: Dashboard }) {
                     </span>
                   </span>
                   <span className="shrink-0 font-mono text-xs text-muted-foreground tabular-nums">
-                    {formatMinutes(action.minutes)}
+                    {formatMinutes(action.minutes, language)}
                   </span>
                   <ArrowRightIcon className="size-3.5 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
                 </Link>
@@ -234,17 +248,10 @@ function NextActions({ data }: { data: Dashboard }) {
   )
 }
 
-const WEATHER: Record<
-  Weather,
-  { icon: LucideIcon; label: string; tone: string }
-> = {
-  sunny: { icon: SunIcon, label: "Fluide", tone: "text-diff-add-strong" },
-  cloudy: { icon: CloudIcon, label: "Chargé", tone: "text-muted-foreground" },
-  stormy: {
-    icon: CloudLightningIcon,
-    label: "Bloqué ou débordé",
-    tone: "text-heat-foreground",
-  },
+const WEATHER: Record<Weather, { icon: LucideIcon; tone: string }> = {
+  sunny: { icon: SunIcon, tone: "text-diff-add-strong" },
+  cloudy: { icon: CloudIcon, tone: "text-muted-foreground" },
+  stormy: { icon: CloudLightningIcon, tone: "text-heat-foreground" },
 }
 
 /** Ten dots: one per review due, filled up to ten. */
@@ -268,14 +275,13 @@ function LoadDots({ count }: { count: number }) {
 }
 
 function TeamWeather({ data }: { data: Dashboard }) {
+  const { t } = useI18n()
   const rows = data.weather
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Météo de l'équipe</CardTitle>
-        <CardDescription>
-          Reviews dues et PR bloquées de chacun, d'après les repos suivis.
-        </CardDescription>
+        <CardTitle>{t.dashboard.weather.title}</CardTitle>
+        <CardDescription>{t.dashboard.weather.description}</CardDescription>
         <CardAction>
           <Button
             variant="link"
@@ -283,27 +289,33 @@ function TeamWeather({ data }: { data: Dashboard }) {
             nativeButton={false}
             render={<Link to="/team" />}
           >
-            {data.team.stuck} PR à débloquer
+            {t.dashboard.weather.toUnblock(data.team.stuck)}
           </Button>
         </CardAction>
       </CardHeader>
       <CardContent className="flex flex-col">
         <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-x-4 border-b pb-1.5 text-[0.7rem] text-muted-foreground">
-          <span>Personne</span>
-          <span>Reviews dues</span>
-          <span className="w-24 text-right">PR bloquées</span>
+          <span>{t.dashboard.weather.person}</span>
+          <span>{t.dashboard.weather.reviewsDue}</span>
+          <span className="w-24 text-right">
+            {t.dashboard.weather.blockedPulls}
+          </span>
         </div>
         {rows.map((row) => {
           const weather = WEATHER[row.weather]
           const Icon = weather.icon
-          const waiting = row.waitingOn.map(reviewerLabel)
+          const waiting = row.waitingOn.map((login) => reviewerLabel(login, t))
           return (
             <div
               key={row.login}
               className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-x-4 border-b py-2 last:border-b-0"
             >
               <span className="flex min-w-0 items-center gap-2">
-                <Hint instant className="flex" content={weather.label}>
+                <Hint
+                  instant
+                  className="flex"
+                  content={t.dashboard.weather.states[row.weather]}
+                >
                   <Icon className={cn("size-4", weather.tone)} />
                 </Hint>
                 <Avatar className="size-6">
@@ -316,12 +328,14 @@ function TeamWeather({ data }: { data: Dashboard }) {
                   <span className="truncate text-sm">
                     @{row.login}
                     {row.isViewer && (
-                      <span className="text-muted-foreground"> (toi)</span>
+                      <span className="text-muted-foreground">
+                        {t.dashboard.weather.you}
+                      </span>
                     )}
                   </span>
                   {waiting.length > 0 && (
                     <span className="truncate text-[0.7rem] text-muted-foreground">
-                      attend {waiting.join(", ")}
+                      {t.dashboard.weather.waitingOn(waiting.join(", "))}
                     </span>
                   )}
                 </span>
@@ -329,7 +343,7 @@ function TeamWeather({ data }: { data: Dashboard }) {
               <Hint
                 instant
                 className="flex items-center gap-2"
-                content={`${row.reviewsDue} review${row.reviewsDue > 1 ? "s" : ""} demandée${row.reviewsDue > 1 ? "s" : ""}`}
+                content={t.dashboard.weather.reviewsRequested(row.reviewsDue)}
               >
                 <LoadDots count={row.reviewsDue} />
                 <span className="w-5 text-right font-mono text-xs tabular-nums">
@@ -346,7 +360,7 @@ function TeamWeather({ data }: { data: Dashboard }) {
                       instant
                       className="flex"
                       content={pull.problems
-                        .map((problem) => TEAM_PROBLEM_LABEL[problem])
+                        .map((problem) => t.team.problems[problem].label)
                         .join(", ")}
                     >
                       <Badge variant="outline" className="font-mono">
@@ -366,13 +380,14 @@ function TeamWeather({ data }: { data: Dashboard }) {
 
 /** Paired bars per day: what arrived against what was handled. */
 function FlowChart({ flow }: { flow: Dashboard["trends"]["flow"] }) {
+  const { t, language } = useI18n()
   const max = Math.max(1, ...flow.flatMap((day) => [day.entered, day.left]))
   return (
     <div className="flex flex-col gap-1">
       <div className="flex h-28 items-end gap-1.5">
         {flow.map((day) => {
           const date = new Date(`${day.date}T12:00:00`)
-          const label = date.toLocaleDateString("fr", {
+          const label = date.toLocaleDateString(language, {
             weekday: "short",
             day: "numeric",
           })
@@ -381,7 +396,7 @@ function FlowChart({ flow }: { flow: Dashboard["trends"]["flow"] }) {
               key={day.date}
               instant
               className="flex h-full flex-1 items-end gap-px"
-              content={`${label} · ${day.entered} arrivé${day.entered > 1 ? "s" : ""}, ${day.left} traité${day.left > 1 ? "s" : ""}`}
+              content={t.dashboard.trends.day(label, day.entered, day.left)}
             >
               <span
                 className="w-1/2 rounded-t-sm bg-muted-foreground/35"
@@ -433,21 +448,28 @@ function Stat({
   )
 }
 
-function formatHours(hours: number): string {
-  if (hours < 1) return `${Math.round(hours * 60)} min`
-  if (hours < 48) return `${Math.round(hours * 10) / 10} h`.replace(".", ",")
-  return `${Math.round(hours / 24)} j`
+function formatHours(hours: number, language: Language): string {
+  const { duration } = messagesFor(language).dashboard
+  if (hours < 1) return duration.minutes(Math.round(hours * 60))
+  if (hours < 48)
+    return duration.hours(
+      hours.toLocaleString(language, { maximumFractionDigits: 1 })
+    )
+  return duration.days(Math.round(hours / 24))
 }
 
 function Trends({ data }: { data: Dashboard }) {
+  const { t, language } = useI18n()
   const { trends } = data
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Tendances</CardTitle>
+        <CardTitle>{t.dashboard.trends.title}</CardTitle>
         <CardDescription>
-          Les 14 derniers jours : ce qui est arrivé dans « À reviewer » et « On
-          t'attend », face à ce que tu as traité.
+          {t.dashboard.trends.description(
+            t.nav.folders.review.label,
+            t.nav.folders.awaiting.label
+          )}
         </CardDescription>
       </CardHeader>
       <CardContent className="grid gap-6 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
@@ -455,14 +477,14 @@ function Trends({ data }: { data: Dashboard }) {
           <div className="flex gap-4 text-xs">
             <span className="flex items-center gap-1.5">
               <span className="size-2 rounded-sm bg-muted-foreground/35" />
-              Arrivés{" "}
+              {t.dashboard.trends.entered}{" "}
               <span className="font-mono tabular-nums">
                 {trends.enteredTotal}
               </span>
             </span>
             <span className="flex items-center gap-1.5">
               <span className="size-2 rounded-sm bg-signal" />
-              Traités{" "}
+              {t.dashboard.trends.left}{" "}
               <span className="font-mono tabular-nums">{trends.leftTotal}</span>
             </span>
           </div>
@@ -470,7 +492,7 @@ function Trends({ data }: { data: Dashboard }) {
           {trends.noisyRepos.length > 0 && (
             <div className="flex flex-col gap-1.5 pt-2">
               <p className="text-xs font-medium text-muted-foreground">
-                Repos les plus bavards
+                {t.dashboard.trends.noisyRepos}
               </p>
               {trends.noisyRepos.map((repo) => (
                 <div
@@ -487,7 +509,7 @@ function Trends({ data }: { data: Dashboard }) {
                     />
                   </span>
                   <span className="text-right font-mono text-muted-foreground tabular-nums">
-                    {Math.round(repo.share * 100)} %
+                    {t.dashboard.trends.share(Math.round(repo.share * 100))}
                   </span>
                 </div>
               ))}
@@ -497,38 +519,38 @@ function Trends({ data }: { data: Dashboard }) {
         <div className="grid content-start gap-3 sm:grid-cols-2">
           <Stat
             icon={TimerIcon}
-            label="Délai de review"
+            label={t.dashboard.trends.reviewDelay}
             value={
               trends.medianReviewHours === null
                 ? "—"
-                : formatHours(trends.medianReviewHours)
+                : formatHours(trends.medianReviewHours, language)
             }
             detail={
               trends.reviewsMeasured > 0
-                ? `médiane sur ${trends.reviewsMeasured} review${trends.reviewsMeasured > 1 ? "s" : ""}, 30 j`
-                : "pas encore de review mesurée"
+                ? t.dashboard.trends.reviewDelayDetail(trends.reviewsMeasured)
+                : t.dashboard.trends.noReviewMeasured
             }
           />
           <Stat
             icon={FlameIcon}
-            label="Série Zéro Ping"
-            value={`${trends.streak} j`}
+            label={t.dashboard.trends.streak}
+            value={t.dashboard.trends.streakValue(trends.streak)}
             detail={
               trends.streakTracked
-                ? "jours d'affilée où l'inbox est tombée à zéro"
-                : "mesurée à partir d'aujourd'hui"
+                ? t.dashboard.trends.streakDetail
+                : t.dashboard.trends.streakFromToday
             }
           />
           <div className="flex flex-col gap-2 rounded-lg border bg-muted/30 p-3 sm:col-span-2">
             <span className="flex items-center justify-between text-xs text-muted-foreground">
-              <span>Hors SLA (plus de {trends.slaHours} h)</span>
+              <span>{t.dashboard.trends.overSla(trends.slaHours)}</span>
               <span className="font-heading text-lg leading-none font-semibold text-foreground tabular-nums">
                 {trends.overSla.length}
               </span>
             </span>
             {trends.overSla.length === 0 ? (
               <span className="text-xs text-muted-foreground">
-                Toutes tes reviews sont dans les temps.
+                {t.dashboard.trends.allOnTime}
               </span>
             ) : (
               <ul className="flex flex-col gap-1">
@@ -543,7 +565,7 @@ function Trends({ data }: { data: Dashboard }) {
                         {item.title}
                       </span>
                       <span className="shrink-0 text-heat-foreground">
-                        {timeAgo(item.requestedAt)}
+                        {timeAgo(item.requestedAt, language)}
                       </span>
                     </Link>
                   </li>
@@ -558,11 +580,12 @@ function Trends({ data }: { data: Dashboard }) {
 }
 
 function DashboardPage() {
+  const { t, language } = useI18n()
   const { data, isPending } = useQuery(dashboardQuery())
   return (
     <LeadPage
       page="dashboard"
-      description={`${todayLabel()} · ta charge, tes prochaines actions, la météo de l'équipe et les tendances.`}
+      description={t.dashboard.description(todayLabel(language))}
     >
       {isPending && (
         <>
@@ -579,8 +602,7 @@ function DashboardPage() {
           </div>
           <Trends data={data} />
           <p className="text-center text-xs text-muted-foreground">
-            Estimations : 5 à 60 min par review selon la taille de la PR (moitié
-            pour une re-review), 5 min par réponse, 2 à 20 min pour tes PR.
+            {t.dashboard.footnote}
           </p>
         </>
       )}

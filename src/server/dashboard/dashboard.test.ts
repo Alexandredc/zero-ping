@@ -8,8 +8,14 @@ import {
   zeroPingStreak,
 } from "./trends"
 import { teamWeather, weatherFor } from "./weather"
-import { formatMinutes, nextAction, summarizeWorkload } from "./workload"
+import {
+  actionLabel,
+  formatMinutes,
+  nextAction,
+  summarizeWorkload,
+} from "./workload"
 import type { Item } from "@/server/db/schema"
+import { messagesFor } from "@/lib/i18n/messages"
 
 const base = {
   view: "review",
@@ -28,11 +34,7 @@ const base = {
 
 describe("nextAction", () => {
   it("sizes a review by the PR's changed lines", () => {
-    expect(nextAction(base)).toEqual({
-      kind: "review",
-      label: "Reviewer",
-      minutes: 10,
-    })
+    expect(nextAction(base)).toEqual({ kind: "review", minutes: 10 })
   })
 
   it("halves a re-review and names pushed fixes", () => {
@@ -48,8 +50,8 @@ describe("nextAction", () => {
 
   it("covers replies and the viewer's own PRs", () => {
     expect(
-      nextAction({ ...base, view: "awaiting", awaitingFrom: "dev" })?.label
-    ).toBe("Répondre à @dev")
+      nextAction({ ...base, view: "awaiting", awaitingFrom: "dev" })
+    ).toEqual({ kind: "reply", from: "dev", minutes: 5 })
     expect(
       nextAction({ ...base, view: "mine", ciState: "FAILURE" })?.kind
     ).toBe("ci")
@@ -66,6 +68,22 @@ describe("nextAction", () => {
     ).toBe("reply")
     // Waiting on reviewers: nothing to do.
     expect(nextAction({ ...base, view: "mine" })).toBeNull()
+  })
+})
+
+describe("actionLabel", () => {
+  it("names the action in the chosen language", () => {
+    const fr = messagesFor("fr")
+    const en = messagesFor("en")
+    expect(actionLabel({ kind: "review" }, fr)).toBe("Reviewer")
+    expect(actionLabel({ kind: "reply", from: "dev" }, fr)).toBe(
+      "Répondre à @dev"
+    )
+    expect(actionLabel({ kind: "reply", from: null }, en)).toBe("Reply")
+    expect(actionLabel({ kind: "reply", from: "dev" }, en)).toBe(
+      "Reply to @dev"
+    )
+    expect(actionLabel({ kind: "fixes" }, en)).toBe("Check the fixes")
   })
 })
 
@@ -88,10 +106,16 @@ describe("summarizeWorkload", () => {
 
 describe("formatMinutes", () => {
   it("rounds to five minutes", () => {
-    expect(formatMinutes(0)).toBe("0 min")
-    expect(formatMinutes(43)).toBe("≈ 45 min")
-    expect(formatMinutes(130)).toBe("≈ 2 h 10")
-    expect(formatMinutes(120)).toBe("≈ 2 h")
+    expect(formatMinutes(0, "fr")).toBe("0 min")
+    expect(formatMinutes(43, "fr")).toBe("≈ 45 min")
+    expect(formatMinutes(130, "fr")).toBe("≈ 2 h 10")
+    expect(formatMinutes(120, "fr")).toBe("≈ 2 h")
+  })
+
+  it("spells the minutes out in English", () => {
+    expect(formatMinutes(43, "en")).toBe("≈ 45 min")
+    expect(formatMinutes(130, "en")).toBe("≈ 2 h 10 min")
+    expect(formatMinutes(120, "en")).toBe("≈ 2 h")
   })
 })
 

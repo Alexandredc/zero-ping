@@ -1,5 +1,7 @@
 import type { TeamProblem, TeamPull } from "@/server/db/schema"
-import { timeAgo } from "@/lib/format"
+import { elapsed } from "@/lib/format"
+import type { Language } from "@/lib/i18n/core"
+import { messagesFor } from "@/lib/i18n/messages"
 import { reviewerLabel } from "./labels"
 
 /** Who has to move for the PR to go forward. */
@@ -22,67 +24,80 @@ type Input = Pick<
   "author" | "createdAt" | "updatedAt" | "reviewers" | "problems"
 >
 
-/** Drops the "il y a" so that durations read in a sentence: "depuis 3 j". */
-const since = (date: Date, now: Date) =>
-  timeAgo(date, now).replace(/^il y a /, "")
+function holderFor(problem: TeamProblem, pull: Input): BallHolder {
+  switch (problem) {
+    case "no-reviewer":
+      return { kind: "lead" }
+    case "changes":
+    case "ci":
+    case "conflict":
+      return { kind: "author", login: pull.author }
+    case "stale":
+      return pull.reviewers.length > 0
+        ? { kind: "reviewers", reviewers: pull.reviewers }
+        : { kind: "author", login: pull.author }
+  }
+}
 
 export function diagnose(
   pull: Input,
+  language: Language,
   now: Date = new Date(),
   viewerLogin?: string
 ): Diagnosis[] {
+  const t = messagesFor(language)
+  const { diagnosis } = t.team
   const isViewer = (login: string) =>
     login.toLowerCase() === viewerLogin?.toLowerCase()
-  const author = pull.author ? `@${pull.author}` : "l'auteur"
-  const toAuthor: BallHolder = { kind: "author", login: pull.author }
+  const author = pull.author ? `@${pull.author}` : t.team.theAuthor
   return pull.problems.map((problem): Diagnosis => {
+    const holder = holderFor(problem, pull)
     switch (problem) {
       case "no-reviewer":
-        return {
-          problem,
-          reason: "Personne n'est désigné pour la reviewer.",
-          nextStep: "Prends la review ou assigne quelqu'un avec « Reviewers ».",
-          holder: { kind: "lead" },
-        }
+        return { problem, holder, ...diagnosis.noReviewer }
       case "changes":
         return {
           problem,
-          reason: `Des changements ont été demandés et rien n'a été poussé depuis ${since(pull.updatedAt, now)}.`,
-          nextStep: `Relance ${author} : il lui reste des retours à traiter.`,
-          holder: toAuthor,
+          holder,
+          reason: diagnosis.changes.reason(
+            elapsed(pull.updatedAt, language, now)
+          ),
+          nextStep: diagnosis.changes.nextStep(author),
         }
       case "ci":
         return {
           problem,
-          reason: "La CI du dernier commit échoue.",
-          nextStep: `${author} doit la corriger avant toute review.`,
-          holder: toAuthor,
+          holder,
+          reason: diagnosis.ci.reason,
+          nextStep: diagnosis.ci.nextStep(author),
         }
       case "conflict":
         return {
           problem,
-          reason: "La branche est en conflit avec la base.",
-          nextStep: `${author} doit la rebaser ou résoudre les conflits.`,
-          holder: toAuthor,
+          holder,
+          reason: diagnosis.conflict.reason,
+          nextStep: diagnosis.conflict.nextStep(author),
         }
       case "stale": {
-        const age = since(pull.createdAt, now)
+        const age = elapsed(pull.createdAt, language, now)
         const others = pull.reviewers.filter((r) => !isViewer(r))
         if (pull.reviewers.length > 0)
           return {
             problem,
-            reason: `Ouverte depuis ${age}, toujours en attente de review.`,
+            holder,
+            reason: diagnosis.stale.waitingReason(age),
             nextStep:
               others.length < pull.reviewers.length
-                ? "Ta review est attendue : c'est à toi de jouer."
-                : `Relance ${others.map(reviewerLabel).join(", ")}.`,
-            holder: { kind: "reviewers", reviewers: pull.reviewers },
+                ? diagnosis.stale.yourTurn
+                : diagnosis.stale.nudge(
+                    others.map((r) => reviewerLabel(r, t)).join(", ")
+                  ),
           }
         return {
           problem,
-          reason: `Ouverte depuis ${age}.`,
-          nextStep: `Demande à ${author} si elle doit encore avancer ou être fermée.`,
-          holder: toAuthor,
+          holder,
+          reason: diagnosis.stale.reason(age),
+          nextStep: diagnosis.stale.askAuthor(author),
         }
       }
     }
@@ -90,13 +105,9 @@ export function diagnose(
 }
 
 /** The PR's most blocking problem decides who holds the ball. */
-export function ballHolder(
-  pull: Input,
-  now: Date = new Date(),
-  viewerLogin?: string
-): BallHolder {
-  const first = diagnose(pull, now, viewerLogin).at(0)
-  if (first) return first.holder
+export function ballHolder(pull: Input): BallHolder {
+  const first = pull.problems.at(0)
+  if (first) return holderFor(first, pull)
   return pull.reviewers.length > 0
     ? { kind: "reviewers", reviewers: pull.reviewers }
     : { kind: "author", login: pull.author }
