@@ -4,6 +4,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite dev --port 3000",
+    "demo": "DEMO=1 vite dev --port 3100",
     "generate-routes": "tsr generate",
     "build": "vite build",
     "start": "srvx serve --prod --entry ./dist/server/server.js --static ../client --host 127.0.0.1",
@@ -13,7 +14,8 @@
     "check": "prettier --check \"**/*.{ts,tsx,js,jsx}\"",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "db:generate": "drizzle-kit generate"
+    "db:generate": "drizzle-kit generate",
+    "screenshots": "scripts/screenshots.sh"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^4.0.78",

@@ -2,6 +2,7 @@ import "@/server/env"
 import { anthropic } from "@ai-sdk/anthropic"
 import { typeSafeAi } from "@ai-sdk/typesafe-ai"
 import type { Experimental_DecisionModel } from "ai"
+import { isDemo } from "@/server/demo/mode"
 
 /**
  * Decision model used for prioritisation. Jev is the default; AI_DECISION_MODEL
@@ -9,6 +10,8 @@ import type { Experimental_DecisionModel } from "ai"
  * matching API key is configured, in which case only deterministic rules apply.
  */
 export function getDecisionModel(): Experimental_DecisionModel | null {
+  // The demo shows stored KPIs and never asks Jev.
+  if (isDemo()) return null
   const [provider, ...rest] = (
     process.env.AI_DECISION_MODEL ?? "typesafe:jev-latest"
   ).split(":")

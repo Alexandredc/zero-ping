@@ -7,6 +7,7 @@ import type { PgliteDatabase } from "drizzle-orm/pglite"
 import { migrate } from "drizzle-orm/pglite/migrator"
 import { acquireLock } from "./lock"
 import * as schema from "./schema"
+import { DEMO_DATA_DIR, isDemo } from "@/server/demo/mode"
 
 export type Database = PgliteDatabase & { $client: PGlite }
 
@@ -41,7 +42,8 @@ const globalForDb = globalThis as unknown as {
  */
 export function getDb(): Promise<Database> {
   globalForDb.__githubInboxDb ??= createDatabase(
-    process.env.DATA_DIR ?? path.resolve(process.cwd(), ".data/pglite")
+    process.env.DATA_DIR ??
+      path.resolve(process.cwd(), isDemo() ? DEMO_DATA_DIR : ".data/pglite")
   )
     .then((db) => {
       closeOnExit(db)

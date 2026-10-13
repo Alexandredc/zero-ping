@@ -54,8 +54,10 @@ import {
   setRepoTracked,
   snooze,
   submitReview,
-} from "@/server/inbox/actions"
-import { ensureSyncLoop, getSyncStatus, syncNow } from "@/server/inbox/loop"
+  ensureSyncLoop,
+  getSyncStatus,
+  syncNow,
+} from "@/server/inbox/api"
 import { preferencesPatchSchema } from "@/server/preferences"
 import { getLanguage } from "@/server/i18n"
 

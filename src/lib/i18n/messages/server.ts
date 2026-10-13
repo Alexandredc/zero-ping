@@ -3,6 +3,7 @@ import { defineMessages } from "../core"
 export const server = defineMessages({
   fr: {
     errors: {
+      demoOffline: "Mode démo : rien n'est envoyé à GitHub, à Slack ni à l'IA.",
       itemNotFound: (key: string) => `Élément introuvable : ${key}`,
       itemUnreadable: (key: string) => `Élément illisible : ${key}`,
       cannotReply: "Impossible de répondre à cet élément.",
@@ -24,6 +25,10 @@ export const server = defineMessages({
         "Aucun job GitHub Actions à relancer : la CI en échec est externe.",
       dbLocked: (pid: number) =>
         `La base locale est déjà ouverte par une autre instance de l'app (PID ${pid}). Arrête-la (inbox stop, ou Ctrl+C dans son terminal) avant d'en lancer une autre.`,
+    },
+    demo: {
+      chatAnswer:
+        "Avec Claude Code ou Codex, la réponse s'appuie sur la conversation GitHub, les fils Slack, le diff et les KPI Jev de l'élément.",
     },
     agent: {
       noJson: "Claude Code n'a renvoyé aucun résultat JSON.",
@@ -151,6 +156,7 @@ export const server = defineMessages({
   },
   en: {
     errors: {
+      demoOffline: "Demo mode: nothing is sent to GitHub, Slack or the AI.",
       itemNotFound: (key: string) => `Item not found: ${key}`,
       itemUnreadable: (key: string) => `Unreadable item: ${key}`,
       cannotReply: "You can't reply to this item.",
@@ -172,6 +178,10 @@ export const server = defineMessages({
         "No GitHub Actions job to re-run: the failing CI is external.",
       dbLocked: (pid: number) =>
         `The local database is already open in another instance of the app (PID ${pid}). Stop it (inbox stop, or Ctrl+C in its terminal) before starting another one.`,
+    },
+    demo: {
+      chatAnswer:
+        "With Claude Code or Codex, the answer draws on the item's GitHub conversation, Slack threads, diff and Jev KPIs.",
     },
     agent: {
       noJson: "Claude Code returned no JSON result.",

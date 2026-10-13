@@ -3,6 +3,7 @@ import { execFile } from "node:child_process"
 import { promisify } from "node:util"
 import { Octokit } from "octokit"
 import type { Viewer } from "@/server/inbox/analyze"
+import { DEMO_VIEWER, DemoOfflineError, isDemo } from "@/server/demo/mode"
 
 const execFileAsync = promisify(execFile)
 
@@ -25,6 +26,7 @@ const globalForGithub = globalThis as unknown as {
 }
 
 export function getOctokit(): Promise<Octokit> {
+  if (isDemo()) return Promise.reject(new DemoOfflineError())
   globalForGithub.__githubInboxOctokit ??= resolveToken().then(
     (auth) => new Octokit({ auth, userAgent: "github-management" })
   )
@@ -32,6 +34,7 @@ export function getOctokit(): Promise<Octokit> {
 }
 
 export function getViewer(): Promise<Viewer> {
+  if (isDemo()) return Promise.resolve(DEMO_VIEWER)
   globalForGithub.__githubInboxViewer ??= (async () => {
     const octokit = await getOctokit()
     const [{ data: user }, teams] = await Promise.all([

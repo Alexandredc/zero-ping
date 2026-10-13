@@ -4,6 +4,7 @@ import {
   ArchiveIcon,
   ArrowLeftIcon,
   BellIcon,
+  LanguagesIcon,
   SparklesIcon,
   SunriseIcon,
 } from "lucide-react"
@@ -38,6 +39,7 @@ const SECTIONS = [
   "slack",
   "agent",
   "notifications",
+  "language",
 ] as const
 type Section = (typeof SECTIONS)[number]
 
@@ -119,11 +121,14 @@ function SettingsPage() {
                 <BellIcon />
                 {t.settings.tabs.notifications}
               </TabsTrigger>
+              <TabsTrigger value="language">
+                <LanguagesIcon />
+                {t.settings.tabs.language}
+              </TabsTrigger>
             </TabsList>
           </div>
           <ScrollArea className="min-h-0 flex-1">
             <div className="mx-auto flex w-full max-w-3xl flex-col gap-4 px-6 py-6">
-              <LanguageSettings />
               <TabsContent value="repos">
                 <ReposSettings />
               </TabsContent>
@@ -165,6 +170,9 @@ function SettingsPage() {
                 ) : (
                   <Skeleton className="h-64" />
                 )}
+              </TabsContent>
+              <TabsContent value="language">
+                <LanguageSettings />
               </TabsContent>
             </div>
           </ScrollArea>

@@ -9,6 +9,7 @@ import { DEFAULT_LANGUAGE } from "@/lib/i18n/core"
 import type { Language } from "@/lib/i18n/core"
 import { messagesFor } from "@/lib/i18n/messages"
 import type { Messages } from "@/lib/i18n/messages"
+import { DemoOfflineError, isDemo } from "@/server/demo/mode"
 
 export type { AgentKind } from "@/lib/agents"
 export { AGENT_LABEL } from "@/lib/agents"
@@ -212,9 +213,10 @@ export async function runAgent(
   task: AgentTask,
   config: AgentConfig = getAgentConfig()
 ): Promise<unknown> {
+  const t = messagesFor(config.language ?? DEFAULT_LANGUAGE)
+  if (isDemo()) throw new DemoOfflineError(t.server.errors.demoOffline)
   const workdir = await mkdtemp(path.join(tmpdir(), "zero-ping-agent-"))
   const timeoutMs = task.timeoutMs ?? DEFAULT_TIMEOUT_MS
-  const t = messagesFor(config.language ?? DEFAULT_LANGUAGE)
   try {
     if (config.kind === "claude") {
       const stdout = await run(

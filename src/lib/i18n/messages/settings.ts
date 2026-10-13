@@ -13,6 +13,7 @@ export const settings = defineMessages({
       slack: "Slack",
       agent: "Agent IA",
       notifications: "Notifications",
+      language: "Langue",
     },
     language: {
       title: "Langue",
@@ -278,6 +279,7 @@ export const settings = defineMessages({
       slack: "Slack",
       agent: "AI agent",
       notifications: "Notifications",
+      language: "Language",
     },
     language: {
       title: "Language",

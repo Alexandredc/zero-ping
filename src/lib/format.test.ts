@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { elapsed, formatWhen, pullSize, timeAgo } from "./format"
+import { demoAvatar, elapsed, formatWhen, pullSize, timeAgo } from "./format"
 
 describe("pullSize", () => {
   it("buckets changed lines", () => {
@@ -61,5 +61,17 @@ describe("formatWhen", () => {
     const later = new Date("2026-10-20T09:00:00")
     expect(plain(formatWhen(later, "fr", now))).toBe("mar. 20 oct. 09:00")
     expect(plain(formatWhen(later, "en", now))).toMatch(/^Tue, Oct 20 09:00/)
+  })
+})
+
+describe("demoAvatar", () => {
+  it("draws initials locally, the same color for the same login", () => {
+    const avatar = demoAvatar("jane-doe")
+    expect(avatar.startsWith("data:image/svg+xml,")).toBe(true)
+    expect(decodeURIComponent(avatar)).toContain(">JD</text>")
+    expect(demoAvatar("jane-doe")).toBe(avatar)
+    expect(decodeURIComponent(demoAvatar("renovate[bot]"))).toContain(
+      ">R</text>"
+    )
   })
 })
