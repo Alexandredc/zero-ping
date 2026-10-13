@@ -46,16 +46,27 @@ describe("publishBlocker", () => {
   }
 
   it("allows a fresh standup with a thread", () => {
-    expect(publishBlocker(ready)).toBeNull()
+    expect(publishBlocker(ready, "team")).toBeNull()
   })
 
   it("refuses without a thread, twice, or when the thread has one", () => {
-    expect(publishBlocker({ ...ready, threadTs: null })).toMatch(/reminder/)
-    expect(publishBlocker({ ...ready, postedAt: "now" })).toMatch(/déjà publié/)
-    expect(publishBlocker({ ...ready, alreadyPosted: true })).toMatch(/déjà/)
-    expect(publishBlocker({ ...ready, slackMessage: null })).toMatch(/relance/)
+    expect(publishBlocker({ ...ready, threadTs: null }, "team")).toMatch(
+      /reminder/
+    )
+    expect(publishBlocker({ ...ready, postedAt: "now" }, "team")).toMatch(
+      /déjà publié/
+    )
+    expect(publishBlocker({ ...ready, alreadyPosted: true }, "team")).toMatch(
+      /point d'équipe/
+    )
+    expect(publishBlocker({ ...ready, alreadyPosted: true }, "me")).toMatch(
+      /Ton standup est déjà/
+    )
+    expect(publishBlocker({ ...ready, slackMessage: null }, "team")).toMatch(
+      /relance/
+    )
     expect(
-      publishBlocker({ ...ready, message: null, slackMessage: null })
+      publishBlocker({ ...ready, message: null, slackMessage: null }, "team")
     ).toMatch(/Aucun/)
   })
 })

@@ -1,10 +1,18 @@
 import { useQuery } from "@tanstack/react-query"
 import { useState } from "react"
-import { RefreshCwIcon, SparklesIcon } from "lucide-react"
-import { Hint } from "./hint"
+import { ChevronRightIcon, RefreshCwIcon, SparklesIcon } from "lucide-react"
+import { ActionHint, Hint } from "./hint"
+import { AskClaude } from "./ask-claude"
 import { Markdown } from "./markdown"
 import type { SummaryLength } from "@/server/db/schema"
-import { summaryQuery, useSummarize } from "@/hooks/use-inbox"
+import {
+  summaryQuery,
+  summaryReadQuery,
+  useSummarize,
+  useSummaryRead,
+} from "@/hooks/use-inbox"
+import { Checkbox } from "@/components/ui/checkbox"
+import { cn } from "@/lib/utils"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -60,22 +68,28 @@ function LengthPicker({
       variant="outline"
       size="sm"
       aria-label="Longueur du résumé"
+      className="bg-background"
     >
       {(Object.keys(LENGTH_LABEL) as SummaryLength[]).map((length) => (
-        <Hint
+        // ActionHint renders the item itself, so the group keeps its own children.
+        <ActionHint
           key={length}
+          side="top"
           content={`${LENGTH_HINT[length]}${ready[length] ? " · déjà généré" : ""}`}
         >
-          <ToggleGroupItem value={length}>
+          <ToggleGroupItem
+            value={length}
+            className="aria-pressed:bg-primary aria-pressed:text-primary-foreground aria-pressed:hover:bg-primary/90"
+          >
             {LENGTH_LABEL[length]}
             {ready[length] && (
               <span
-                className="size-1.5 rounded-full bg-primary"
+                className="size-1.5 rounded-full bg-current opacity-70"
                 aria-label="déjà généré"
               />
             )}
           </ToggleGroupItem>
-        </Hint>
+        </ActionHint>
       ))}
     </ToggleGroup>
   )
@@ -89,8 +103,12 @@ export function SummaryCard({
   kind: "PR" | "issue"
 }) {
   const { data, isPending } = useQuery(summaryQuery(itemKey))
+  const { data: readState } = useQuery(summaryReadQuery(itemKey))
   const summarize = useSummarize(itemKey)
+  const markRead = useSummaryRead(itemKey)
   const [chosen, setChosen] = useState<SummaryLength | null>(null)
+  // Null until the viewer folds or unfolds it: a read summary starts folded.
+  const [openChoice, setOpenChoice] = useState<boolean | null>(null)
 
   if (isPending || !data) return <Skeleton className="h-10 w-full" />
 
@@ -105,20 +123,30 @@ export function SummaryCard({
     detailed: data.summaries.detailed !== null,
   }
   const hasAny = ready.short || ready.standard || ready.detailed
+  // A summary regenerated after it was read is new again.
+  const isRead = Boolean(
+    readState?.readAt &&
+    summary &&
+    new Date(readState.readAt) >= new Date(summary.createdAt)
+  )
+  const open = openChoice ?? !isRead
 
   if (!hasAny && !generating) {
     return (
-      <div className="flex flex-wrap items-center gap-3 rounded-lg border border-dashed px-3 py-2">
-        <SparklesIcon className="size-4 text-primary" />
-        <p className="min-w-48 flex-1 text-sm text-muted-foreground">
-          Pas le temps de tout lire ? Claude résume la {kind}, ses fils Slack et
-          ce qu'on attend de toi.
-        </p>
-        <LengthPicker value={length} onChange={setChosen} ready={ready} />
-        <Button size="sm" onClick={() => summarize.mutate(length)}>
-          Résumer avec Claude
-        </Button>
-      </div>
+      <section className="flex flex-col gap-3 rounded-lg border border-dashed px-3 py-2">
+        <div className="flex flex-wrap items-center gap-3">
+          <SparklesIcon className="size-4 text-primary" />
+          <p className="min-w-48 flex-1 text-sm text-muted-foreground">
+            Pas le temps de tout lire ? Claude résume la {kind}, ses fils Slack
+            et ce qu'on attend de toi.
+          </p>
+          <LengthPicker value={length} onChange={setChosen} ready={ready} />
+          <Button size="sm" onClick={() => summarize.mutate(length)}>
+            Résumer avec Claude
+          </Button>
+        </div>
+        <AskClaude itemKey={itemKey} kind={kind} />
+      </section>
     )
   }
 
@@ -128,8 +156,21 @@ export function SummaryCard({
       className="flex flex-col gap-3 rounded-lg border border-primary/20 bg-accent/40 p-4"
     >
       <header className="flex flex-wrap items-center gap-2">
-        <SparklesIcon className="size-4 text-primary" />
-        <h3 className="text-sm font-semibold">Résumé IA</h3>
+        <button
+          type="button"
+          aria-expanded={open}
+          onClick={() => setOpenChoice(!open)}
+          className="flex items-center gap-2 rounded outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          <ChevronRightIcon
+            className={cn(
+              "size-3.5 text-muted-foreground transition-transform",
+              open && "rotate-90"
+            )}
+          />
+          <SparklesIcon className="size-4 text-primary" />
+          <h3 className="text-sm font-semibold">Résumé IA</h3>
+        </button>
         <LengthPicker value={length} onChange={setChosen} ready={ready} />
         {summary && !generating && (
           <span className="text-xs text-muted-foreground">
@@ -164,61 +205,79 @@ export function SummaryCard({
               : "Régénérer"}
           </Button>
         )}
+        {summary && (
+          <Hint content="Replie le résumé ; il se rouvre s'il est régénéré.">
+            <label className="flex cursor-pointer items-center gap-1.5 rounded border bg-background px-1.5 py-0.5 text-xs">
+              <Checkbox
+                checked={isRead}
+                onCheckedChange={(checked) => {
+                  markRead.mutate(checked)
+                  setOpenChoice(!checked)
+                }}
+              />
+              Lu
+            </label>
+          </Hint>
+        )}
       </header>
-
-      {!summary && !generating && (
-        <div className="flex items-center gap-3">
-          <p className="flex-1 text-sm text-muted-foreground">
-            Pas encore de résumé {LENGTH_LABEL[length].toLowerCase()} pour cette{" "}
-            {kind}.
-          </p>
-          <Button size="sm" onClick={() => summarize.mutate(length)}>
-            Générer ({LENGTH_DURATION[length]})
-          </Button>
-        </div>
-      )}
-
-      {generating && !summary && (
-        <div className="flex flex-col gap-2">
-          <p className="text-xs text-muted-foreground">
-            Claude lit la conversation… ({LENGTH_DURATION[length]})
-          </p>
-          <Skeleton className="h-4 w-full" />
-          <Skeleton className="h-4 w-2/3" />
-        </div>
-      )}
-
-      {summary && (
-        <div
-          className={
-            generating
-              ? "flex flex-col gap-3 opacity-50"
-              : "flex flex-col gap-3"
-          }
-        >
-          <div className="font-medium">
-            <Markdown>{summary.content.tldr}</Markdown>
-          </div>
-          {summary.content.expectedFromMe && (
-            <div className="rounded-md border border-heat/30 bg-background px-3 py-2">
-              <h4 className="text-xs font-medium text-heat-foreground">
-                Ce qu'on attend de toi
-              </h4>
-              <Markdown>{summary.content.expectedFromMe}</Markdown>
+      {open && (
+        <>
+          {!summary && !generating && (
+            <div className="flex items-center gap-3">
+              <p className="flex-1 text-sm text-muted-foreground">
+                Pas encore de résumé {LENGTH_LABEL[length].toLowerCase()} pour
+                cette {kind}.
+              </p>
+              <Button size="sm" onClick={() => summarize.mutate(length)}>
+                Générer ({LENGTH_DURATION[length]})
+              </Button>
             </div>
           )}
-          <div className="flex flex-col gap-1">
-            <h4 className="text-xs font-medium text-muted-foreground">
-              Où on en est
-            </h4>
-            <Markdown>{summary.content.status}</Markdown>
-          </div>
-          <List
-            title="Questions ouvertes"
-            items={summary.content.openQuestions}
-          />
-          <List title="Points de vigilance" items={summary.content.risks} />
-        </div>
+
+          {generating && !summary && (
+            <div className="flex flex-col gap-2">
+              <p className="text-xs text-muted-foreground">
+                Claude lit la conversation… ({LENGTH_DURATION[length]})
+              </p>
+              <Skeleton className="h-4 w-full" />
+              <Skeleton className="h-4 w-2/3" />
+            </div>
+          )}
+
+          {summary && (
+            <div
+              className={
+                generating
+                  ? "flex flex-col gap-3 opacity-50"
+                  : "flex flex-col gap-3"
+              }
+            >
+              <div className="font-medium">
+                <Markdown>{summary.content.tldr}</Markdown>
+              </div>
+              {summary.content.expectedFromMe && (
+                <div className="rounded-md border border-heat/30 bg-background px-3 py-2">
+                  <h4 className="text-xs font-medium text-heat-foreground">
+                    Ce qu'on attend de toi
+                  </h4>
+                  <Markdown>{summary.content.expectedFromMe}</Markdown>
+                </div>
+              )}
+              <div className="flex flex-col gap-1">
+                <h4 className="text-xs font-medium text-muted-foreground">
+                  Où on en est
+                </h4>
+                <Markdown>{summary.content.status}</Markdown>
+              </div>
+              <List
+                title="Questions ouvertes"
+                items={summary.content.openQuestions}
+              />
+              <List title="Points de vigilance" items={summary.content.risks} />
+            </div>
+          )}
+          <AskClaude itemKey={itemKey} kind={kind} />
+        </>
       )}
     </section>
   )

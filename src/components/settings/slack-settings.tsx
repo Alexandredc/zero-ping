@@ -33,10 +33,27 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover"
+import { Input } from "@/components/ui/input"
 import { Switch } from "@/components/ui/switch"
 import { useSavePreferences } from "@/hooks/use-inbox"
 
 type Settings = Awaited<ReturnType<typeof getSettings>>
+
+type Channel = Settings["slackChannels"][number]
+
+function isExcluded(channel: Channel, excluded: Set<string>) {
+  return (
+    excluded.has(channel.id) || channel.names.some((name) => excluded.has(name))
+  )
+}
+
+/** An excluded entry as the page shows it: a known channel's usual name, else the entry. */
+function exclusionLabel(entry: string, channels: Channel[]) {
+  const channel = channels.find(
+    (c) => c.id === entry || c.names.includes(entry)
+  )
+  return channel ? channel.name : entry
+}
 
 function AddChannel({
   settings,
@@ -49,7 +66,7 @@ function AddChannel({
   const [query, setQuery] = useState("")
   const excluded = new Set(settings.preferences.slackExcludedChannels)
   const suggestions = settings.slackChannels.filter(
-    (channel) => !excluded.has(channel.name)
+    (channel) => !isExcluded(channel, excluded)
   )
   const typed = query.trim().replace(/^#/, "").toLowerCase()
   const add = (channel: string) => {
@@ -91,9 +108,11 @@ function AddChannel({
               <CommandGroup heading="Canaux vus dans les discussions">
                 {suggestions.map((channel) => (
                   <CommandItem
-                    key={channel.name}
-                    value={channel.name}
-                    onSelect={() => add(channel.name)}
+                    key={channel.id}
+                    value={channel.id}
+                    keywords={channel.names}
+                    // The id stays the same whatever name the agent gives the channel next.
+                    onSelect={() => add(channel.id)}
                   >
                     #{channel.name}
                     <span className="ml-auto font-mono text-xs text-muted-foreground">
@@ -158,6 +177,52 @@ export function SlackSettings({ settings }: { settings: Settings }) {
             />
           </Field>
           <FieldSeparator />
+          <Field orientation="horizontal">
+            <FieldContent>
+              <FieldLabel htmlFor="review-notice">
+                Prévenir l'auteur après une review
+              </FieldLabel>
+              <FieldDescription>
+                Quand tu approuves ou demandes des changements depuis l'app, une
+                fenêtre propose un message Slack qui mentionne l'auteur. Il ne
+                part qu'après ta confirmation, dans le fil de la PR s'il existe,
+                sinon dans le canal ci-dessous.
+              </FieldDescription>
+            </FieldContent>
+            <Switch
+              id="review-notice"
+              checked={preferences.reviewNoticeEnabled}
+              onCheckedChange={(checked) =>
+                save.mutate({ reviewNoticeEnabled: checked })
+              }
+            />
+          </Field>
+          <Field
+            orientation="horizontal"
+            data-disabled={!preferences.reviewNoticeEnabled || undefined}
+          >
+            <FieldContent>
+              <FieldLabel htmlFor="review-notice-channel">
+                Canal des reviews
+              </FieldLabel>
+              <FieldDescription>
+                Sans le #, par exemple pull-requests.
+              </FieldDescription>
+            </FieldContent>
+            <Input
+              id="review-notice-channel"
+              key={preferences.reviewNoticeChannel}
+              defaultValue={preferences.reviewNoticeChannel}
+              disabled={!preferences.reviewNoticeEnabled}
+              className="w-48"
+              onBlur={(event) => {
+                const channel = event.target.value.trim().replace(/^#/, "")
+                if (channel && channel !== preferences.reviewNoticeChannel)
+                  save.mutate({ reviewNoticeChannel: channel })
+              }}
+            />
+          </Field>
+          <FieldSeparator />
           <Field>
             <FieldLabel>Canaux exclus</FieldLabel>
             <FieldDescription>
@@ -171,11 +236,11 @@ export function SlackSettings({ settings }: { settings: Settings }) {
                   variant="secondary"
                   className="h-7 gap-1 pr-1 text-sm"
                 >
-                  #{channel}
+                  #{exclusionLabel(channel, settings.slackChannels)}
                   <Button
                     variant="ghost"
                     size="icon-xs"
-                    aria-label={`Ne plus exclure #${channel}`}
+                    aria-label={`Ne plus exclure #${exclusionLabel(channel, settings.slackChannels)}`}
                     onClick={() =>
                       save.mutate({
                         slackExcludedChannels: excluded.filter(

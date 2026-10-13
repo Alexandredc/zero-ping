@@ -207,3 +207,60 @@ export const dailyStats = snakeCase.table("daily_stats", {
   minPings: integer().notNull(),
   maxPings: integer().notNull(),
 })
+
+/**
+ * Jev's urgency for PRs and issues outside the inbox (team PRs, sprint
+ * tickets), keyed by `owner/repo#number`. The hash avoids re-asking Jev
+ * while the subject has not changed.
+ */
+export const aiScores = snakeCase.table("ai_scores", {
+  key: text().primaryKey(),
+  hash: text().notNull(),
+  urgency: real().notNull(),
+  confidence: real(),
+  scoredAt: timestamp({ withTimezone: true }).notNull(),
+})
+
+/** Slack threads the viewer marked read, up to the latest message they saw. */
+export const slackReads = snakeCase.table("slack_reads", {
+  permalink: text().primaryKey(),
+  /** `postedAt` of the newest message when it was marked read. */
+  readThrough: text().notNull(),
+  readAt: timestamp({ withTimezone: true }).notNull(),
+})
+
+export type ChatMessage = {
+  role: "user" | "assistant"
+  content: string
+  at: string
+}
+
+/** Questions the viewer asked Claude about an item, with the answers. */
+export const itemChats = snakeCase.table("item_chats", {
+  itemKey: text().primaryKey(),
+  messages: jsonb().$type<ChatMessage[]>().notNull().default([]),
+  updatedAt: timestamp({ withTimezone: true }).notNull(),
+})
+
+/** Jev's KPIs of a PR, kept while the PR's state hashes the same. */
+export const pullInsights = snakeCase.table("pull_insights", {
+  itemKey: text().primaryKey(),
+  hash: text().notNull(),
+  insights: jsonb().$type<PullInsight[]>().notNull(),
+  createdAt: timestamp({ withTimezone: true }).notNull(),
+})
+
+export type PullInsight = {
+  id: string
+  /** Index of the answered level, or 1/0 for a yes/no question. */
+  level: number
+  /** P(yes) for a yes/no question, the fractional level otherwise. */
+  value: number
+  confidence: number | null
+}
+
+/** When the viewer marked an item's AI summary read. */
+export const summaryReads = snakeCase.table("summary_reads", {
+  itemKey: text().primaryKey(),
+  readAt: timestamp({ withTimezone: true }).notNull(),
+})

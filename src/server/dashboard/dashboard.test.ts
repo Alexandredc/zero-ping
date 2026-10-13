@@ -21,6 +21,7 @@ const base = {
   reviewedState: null,
   reviewRequest: "direct",
   awaitingFrom: null,
+  awaitingMe: false,
   ciState: "SUCCESS",
   reviewDecision: null,
 } as const
@@ -55,6 +56,14 @@ describe("nextAction", () => {
     expect(
       nextAction({ ...base, view: "mine", reviewDecision: "APPROVED" })?.kind
     ).toBe("merge")
+    expect(
+      nextAction({
+        ...base,
+        view: "mine",
+        awaitingMe: true,
+        awaitingFrom: "dev",
+      })?.kind
+    ).toBe("reply")
     // Waiting on reviewers: nothing to do.
     expect(nextAction({ ...base, view: "mine" })).toBeNull()
   })

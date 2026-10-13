@@ -1,0 +1,68 @@
+import { describe, expect, it } from "vitest"
+import { reviewerChanges, splitReviewers, toReviewerOptions } from "./reviewers"
+import type { RawReviewerOptions } from "./reviewers"
+
+const raw: RawReviewerOptions = {
+  pullRequest: {
+    author: { login: "robin" },
+    suggestedReviewers: [{ reviewer: { login: "Zoe", name: "Zoé" } }],
+    reviewRequests: {
+      nodes: [
+        { requestedReviewer: { login: "lead", name: "Lead" } },
+        { requestedReviewer: { slug: "backend" } },
+      ],
+    },
+    latestOpinionatedReviews: {
+      nodes: [{ author: { login: "alice" }, state: "APPROVED" }],
+    },
+  },
+  assignableUsers: {
+    nodes: [
+      { login: "robin", name: null },
+      { login: "bob", name: "" },
+      { login: "alice", name: "Alice" },
+      { login: "zoe", name: "Zoé" },
+    ],
+  },
+}
+
+describe("toReviewerOptions", () => {
+  it("ranks suggestions, then past reviewers, and never offers the author", () => {
+    const options = toReviewerOptions(
+      raw,
+      [{ slug: "front", name: "Front" }],
+      "Lead"
+    )
+    expect(options.requested).toEqual(["lead", "team:backend"])
+    expect(options.candidates.map((c) => c.id)).toEqual([
+      "Zoe",
+      "alice",
+      "bob",
+      "lead",
+      "team:backend",
+      "team:front",
+    ])
+    expect(options.candidates[0].suggested).toBe(true)
+    expect(options.candidates[1].reviewState).toBe("APPROVED")
+    expect(options.candidates[2].name).toBeNull()
+    expect(options.candidates[3].label).toBe("@lead (toi)")
+  })
+})
+
+describe("reviewerChanges", () => {
+  it("adds and withdraws only what differs, ignoring case", () => {
+    expect(reviewerChanges(["Lead", "team:backend"], ["lead", "bob"])).toEqual({
+      add: ["bob"],
+      remove: ["team:backend"],
+    })
+  })
+})
+
+describe("splitReviewers", () => {
+  it("separates logins from team slugs", () => {
+    expect(splitReviewers(["bob", "team:backend"])).toEqual({
+      reviewers: ["bob"],
+      team_reviewers: ["backend"],
+    })
+  })
+})

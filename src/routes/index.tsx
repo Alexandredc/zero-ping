@@ -4,6 +4,8 @@ import { useEffect, useRef, useState } from "react"
 import { CheckIcon, ClockIcon, InboxIcon, XIcon } from "lucide-react"
 import { z } from "zod"
 import { DetailPanel } from "@/components/inbox/detail-panel"
+import { ReviewDialog } from "@/components/inbox/review-dialog"
+import type { PendingReview } from "@/components/inbox/review-dialog"
 import { FOLDER_META } from "@/components/inbox/folders"
 import { ItemStrip } from "@/components/inbox/item-strip"
 import { Sidebar } from "@/components/inbox/sidebar"
@@ -40,6 +42,8 @@ const searchSchema = z.object({
   repo: z.string().optional(),
   item: z.string().optional(),
   sort: z.enum(["priority", "size"]).default("priority"),
+  /** « Mes PR » only: the viewer's PRs, or every open PR of the tracked repos. */
+  scope: z.enum(["mine", "all"]).default("mine"),
 })
 
 export const Route = createFileRoute("/")({
@@ -48,10 +52,11 @@ export const Route = createFileRoute("/")({
     folder: search.folder,
     repo: search.repo,
     sort: search.sort,
+    scope: search.scope,
   }),
   loader: ({ context, deps }) =>
     context.queryClient.ensureQueryData(
-      inboxQuery(deps.folder, deps.repo, deps.sort)
+      inboxQuery(deps.folder, deps.repo, deps.sort, deps.scope)
     ),
   component: InboxPage,
 })
@@ -69,20 +74,28 @@ const EMPTY_COPY = {
 function InboxPage() {
   const search = Route.useSearch()
   const navigate = useNavigate({ from: "/" })
+  const allPulls = search.folder === "mine" && search.scope === "all"
   const { data, isPending } = useQuery(
-    inboxQuery(search.folder, search.repo, search.sort)
+    inboxQuery(search.folder, search.repo, search.sort, search.scope)
   )
   const actions = useInboxActions()
   const composerRef = useRef<HTMLTextAreaElement>(null)
   const listRef = useRef<HTMLDivElement>(null)
   const [checked, setChecked] = useState<Set<string>>(new Set())
+  // Kept by the page: an approved PR leaves its folder and closes the panel.
+  const [pendingReview, setPendingReview] = useState<PendingReview | null>(null)
 
   const items = data?.items ?? []
   // Items that left the folder (done, synced away) drop out of the selection.
-  const selection = items.filter((item) => checked.has(item.key))
+  const selection = items.filter(
+    (item) => item.inInbox && checked.has(item.key)
+  )
   const selecting = selection.length > 0
 
-  useEffect(() => setChecked(new Set()), [search.folder, search.repo])
+  useEffect(
+    () => setChecked(new Set()),
+    [search.folder, search.repo, search.scope]
+  )
 
   const toggleChecked = (key: string) =>
     setChecked((current) => {
@@ -134,7 +147,7 @@ function InboxPage() {
     x: () => selected && toggleChecked(selected.key),
     e: () => {
       if (selecting) return bulkDone()
-      if (!selected) return
+      if (!selected?.inInbox) return
       // Moves to the next item so triage keeps flowing.
       const next = items.at(selectedIndex + 1) ?? items.at(selectedIndex - 1)
       actions.done.mutate({
@@ -172,7 +185,8 @@ function InboxPage() {
       <main className="flex w-[26rem] shrink-0 flex-col border-r bg-card/40 max-lg:flex-1">
         <header className="flex items-baseline justify-between gap-2 border-b px-4 py-3">
           <div>
-            <h1 className="flex items-baseline gap-2 font-heading text-lg font-semibold tracking-tight">
+            <h1 className="flex items-center gap-2 font-heading text-lg font-semibold tracking-tight">
+              <meta.icon className="size-5 shrink-0 text-muted-foreground" />
               {meta.label}
               {search.folder === "other" && data && (
                 <span className="font-mono text-sm font-normal text-muted-foreground tabular-nums">
@@ -180,7 +194,29 @@ function InboxPage() {
                 </span>
               )}
             </h1>
-            <p className="text-xs text-muted-foreground">{meta.hint}</p>
+            <p className="text-xs text-muted-foreground">
+              {allPulls
+                ? "Toutes les PR ouvertes des repos suivis, classées par l'urgence qu'estime Jev."
+                : meta.hint}
+            </p>
+            {search.folder === "mine" && (
+              <ToggleGroup
+                size="sm"
+                value={[search.scope]}
+                onValueChange={(value) => {
+                  const scope = value[0] as "mine" | "all" | undefined
+                  if (scope)
+                    void navigate({
+                      search: (prev) => ({ ...prev, scope, item: undefined }),
+                    })
+                }}
+                aria-label="Choisir les PR"
+                className="mt-2"
+              >
+                <ToggleGroupItem value="mine">Mes PR</ToggleGroupItem>
+                <ToggleGroupItem value="all">Toutes les PR</ToggleGroupItem>
+              </ToggleGroup>
+            )}
           </div>
           {canSort && (
             <ToggleGroup
@@ -193,7 +229,9 @@ function InboxPage() {
               }}
               aria-label="Trier la liste"
             >
-              <ToggleGroupItem value="priority">Priorité</ToggleGroupItem>
+              <ToggleGroupItem value="priority">
+                {allPulls ? "Priorité Jev" : "Priorité"}
+              </ToggleGroupItem>
               <ToggleGroupItem value="size">Taille</ToggleGroupItem>
             </ToggleGroup>
           )}
@@ -306,6 +344,7 @@ function InboxPage() {
                   checked={checked.has(item.key)}
                   onCheck={() => toggleChecked(item.key)}
                   onSelect={() => void select(item.key)}
+                  gauge={allPulls ? "jev" : "priority"}
                 />
               </div>
             ))}
@@ -316,7 +355,9 @@ function InboxPage() {
         <DetailPanel
           key={selected.key}
           item={selected}
+          inInbox={selected.inInbox}
           composerRef={composerRef}
+          onReview={setPendingReview}
           onClose={() => void select(undefined)}
         />
       ) : (
@@ -326,6 +367,13 @@ function InboxPage() {
             plus prioritaire.
           </p>
         </div>
+      )}
+      {pendingReview && (
+        <ReviewDialog
+          key={`${pendingReview.key}:${pendingReview.event}`}
+          review={pendingReview}
+          onClose={() => setPendingReview(null)}
+        />
       )}
     </div>
   )

@@ -4,6 +4,8 @@ import { teamPulls } from "@/server/db/schema"
 import type { TeamProblem } from "@/server/db/schema"
 import { isBot } from "@/server/inbox/auto-done"
 import { TEAM_PREFIX } from "./labels"
+import { scoreInBackground } from "@/server/ai/scores"
+import type { ScoreSubject } from "@/server/ai/scores"
 
 export type RawTeamPull = {
   number: number
@@ -23,6 +25,9 @@ export type RawTeamPull = {
     }[]
   }
   reviews: { totalCount: number }
+  body: string
+  labels: { nodes: { name: string }[] }
+  comments: { nodes: { author: { login: string } | null; body: string }[] }
   commits: {
     nodes: { commit: { statusCheckRollup: { state: string } | null } }[]
   }
@@ -33,6 +38,9 @@ const PULL_FIELDS = `
   author { login }
   reviewRequests(first: 10) { nodes { requestedReviewer { ... on User { login } ... on Team { slug } } } }
   reviews(first: 1) { totalCount }
+  body
+  labels(first: 10) { nodes { name } }
+  comments(last: 3) { nodes { author { login } body } }
   commits(last: 1) { nodes { commit { statusCheckRollup { state } } } }
 `
 
@@ -64,6 +72,26 @@ export function teamProblems(
   if (now.getTime() - new Date(pull.createdAt).getTime() > staleDays * DAY_MS)
     problems.push("stale")
   return problems
+}
+
+export function toScoreSubject(repo: string, pull: RawTeamPull): ScoreSubject {
+  return {
+    key: `${repo}#${pull.number}`,
+    kind: "PullRequest",
+    title: pull.title,
+    url: pull.url,
+    body: pull.body,
+    author: pull.author?.login ?? null,
+    labels: pull.labels.nodes.map((label) => label.name),
+    isDraft: pull.isDraft,
+    additions: pull.additions,
+    deletions: pull.deletions,
+    ciState: pull.commits.nodes[0]?.commit.statusCheckRollup?.state ?? null,
+    comments: pull.comments.nodes.map((comment) => ({
+      author: comment.author?.login ?? null,
+      body: comment.body,
+    })),
+  }
 }
 
 async function fetchRepoPulls(
@@ -143,6 +171,17 @@ export async function syncTeamPulls(
       problems: teamProblems(pull, now, options.staleDays),
       syncedAt: now,
     }))
+
+  // Jev ranks « Toutes les PR »; the snapshot does not wait for it.
+  scoreInBackground(
+    db,
+    fetched
+      .filter(({ repo, pull }) =>
+        rows.some((row) => row.key === `${repo}#${pull.number}`)
+      )
+      .map(({ repo, pull }) => toScoreSubject(repo, pull)),
+    options.viewerLogin
+  )
 
   await db.transaction(async (tx) => {
     // Repos no longer tracked keep nothing; tracked ones get a fresh snapshot.

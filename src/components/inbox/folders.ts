@@ -20,12 +20,12 @@ export const FOLDER_META: Record<
   },
   awaiting: {
     label: "On t'attend",
-    hint: "Mentions et fils où tu n'as pas encore répondu",
+    hint: "Mentions et fils où tu n'as pas encore répondu (ceux de tes PR restent dans « Mes PR »)",
     icon: MessageCircleQuestionIcon,
   },
   mine: {
     label: "Mes PR",
-    hint: "Tes PR ouvertes : retours, CI, prêtes à merger",
+    hint: "Toutes tes PR ouvertes, brouillons compris : réponses, retours, CI, prêtes à merger",
     icon: RocketIcon,
   },
   other: {

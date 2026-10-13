@@ -7,14 +7,11 @@ import {
   PanelLeftCloseIcon,
   PanelLeftOpenIcon,
   RefreshCwIcon,
-  SettingsIcon,
   SunIcon,
   TriangleAlertIcon,
-  UsersIcon,
-  SunriseIcon,
-  GaugeIcon,
 } from "lucide-react"
 import { FOLDER_META, PRIMARY_FOLDERS, SECONDARY_FOLDERS } from "./folders"
+import { PAGE_META } from "./pages"
 import type { Folder } from "@/server/inbox/actions"
 import type { SyncStatus } from "@/server/inbox/loop"
 import { Kbd } from "@/components/ui/kbd"
@@ -29,7 +26,12 @@ import { cn } from "@/lib/utils"
 import { timeAgo } from "@/lib/format"
 import { useTheme } from "@/lib/theme"
 import { LOGO_URL, formatPings } from "@/lib/pings"
-import { pingCountQuery, teamQuery } from "@/hooks/use-inbox"
+import {
+  folderCountsQuery,
+  issuesQuery,
+  pingCountQuery,
+  teamQuery,
+} from "@/hooks/use-inbox"
 import { useNotificationPermission } from "@/hooks/use-notification-permission"
 import { useHotkeys } from "@/hooks/use-hotkeys"
 import { useSidebarCollapsed } from "@/hooks/use-sidebar-collapsed"
@@ -37,7 +39,7 @@ import type { Theme } from "@/lib/theme"
 
 type SidebarProps = {
   folder?: Folder
-  page?: "dashboard" | "team" | "recap"
+  page?: "dashboard" | "team" | "recap" | "issues"
   counts?: Record<Folder, number>
   sync?: SyncStatus
   onSync?: () => void
@@ -106,7 +108,7 @@ function PageLink({
   count,
   collapsed,
 }: {
-  to: "/dashboard" | "/team" | "/recap"
+  to: "/dashboard" | "/team" | "/recap" | "/issues"
   label: string
   hint: string
   icon: React.ComponentType<{ className?: string }>
@@ -257,6 +259,13 @@ export function Sidebar({
   const { permission, request } = useNotificationPermission()
   const navigate = useNavigate()
   const { data: team } = useQuery(teamQuery())
+  const { data: issues } = useQuery(issuesQuery())
+  // The inbox passes its own counts; the other pages load them here.
+  const { data: ownCounts } = useQuery({
+    ...folderCountsQuery(),
+    enabled: !counts,
+  })
+  const folderCounts = counts ?? ownCounts
   useHotkeys({ "[": toggle })
 
   const nextTheme =
@@ -292,32 +301,12 @@ export function Sidebar({
       </Link>
 
       <nav className="flex flex-col gap-0.5" aria-label="Dossiers">
-        <SectionTitle collapsed={collapsed}>À traiter</SectionTitle>
-        {PRIMARY_FOLDERS.map((f) => (
-          <FolderLink
-            key={f}
-            folder={f}
-            active={f === folder}
-            count={counts?.[f]}
-            collapsed={collapsed}
-          />
-        ))}
-        <SectionTitle collapsed={collapsed}>Classement</SectionTitle>
-        {SECONDARY_FOLDERS.map((f) => (
-          <FolderLink
-            key={f}
-            folder={f}
-            active={f === folder}
-            count={f === "snoozed" ? counts?.[f] : undefined}
-            collapsed={collapsed}
-          />
-        ))}
         <SectionTitle collapsed={collapsed}>Lead</SectionTitle>
         <PageLink
           to="/dashboard"
           label="Vue d'ensemble"
           hint="Ta charge du jour, tes prochaines actions, la météo de l'équipe et les tendances"
-          icon={GaugeIcon}
+          icon={PAGE_META.dashboard.icon}
           active={page === "dashboard"}
           collapsed={collapsed}
         />
@@ -325,19 +314,48 @@ export function Sidebar({
           to="/team"
           label="Équipe"
           hint="PR des repos suivis sans reviewer, bloquées ou trop anciennes"
-          icon={UsersIcon}
+          icon={PAGE_META.team.icon}
           active={page === "team"}
-          count={team?.pulls.length}
+          count={team?.pulls.filter((pull) => pull.problems.length > 0).length}
           collapsed={collapsed}
         />
         <PageLink
           to="/recap"
           label="Récap du jour"
           hint="Ce qui t'attend ce matin et le standup de l'équipe"
-          icon={SunriseIcon}
+          icon={PAGE_META.recap.icon}
           active={page === "recap"}
           collapsed={collapsed}
         />
+        <SectionTitle collapsed={collapsed}>À traiter</SectionTitle>
+        {PRIMARY_FOLDERS.map((f) => (
+          <FolderLink
+            key={f}
+            folder={f}
+            active={f === folder}
+            count={folderCounts?.[f]}
+            collapsed={collapsed}
+          />
+        ))}
+        <PageLink
+          to="/issues"
+          label={PAGE_META.issues.label}
+          hint="Les issues qui te sont assignées, tes tâches et celles de l'équipe pour le sprint courant"
+          icon={PAGE_META.issues.icon}
+          active={page === "issues"}
+          count={issues?.assigned.length}
+          collapsed={collapsed}
+        />
+        <SectionTitle collapsed={collapsed}>Classement</SectionTitle>
+        {SECONDARY_FOLDERS.map((f) => (
+          <FolderLink
+            key={f}
+            folder={f}
+            active={f === folder}
+            count={f === "snoozed" ? folderCounts?.[f] : undefined}
+            collapsed={collapsed}
+          />
+        ))}
       </nav>
 
       <nav className="mt-auto flex flex-col gap-0.5" aria-label="Application">
@@ -397,7 +415,7 @@ export function Sidebar({
           onClick={() => setTheme(nextTheme)}
         />
         <MenuRow
-          icon={SettingsIcon}
+          icon={PAGE_META.settings.icon}
           label="Réglages"
           hint="Repos, classement, récap, Slack, agent IA et notifications"
           collapsed={collapsed}

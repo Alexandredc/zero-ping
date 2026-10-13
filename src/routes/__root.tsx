@@ -6,6 +6,7 @@ import {
 } from "@tanstack/react-router"
 import { TanStackRouterDevtoolsPanel } from "@tanstack/react-router-devtools"
 import { TanStackDevtools } from "@tanstack/react-devtools"
+import { ErrorPage, NotFoundPage } from "@/components/status-page"
 import { AttentionWatcher } from "@/components/notifications/attention-watcher"
 import { PingIndicators } from "@/components/notifications/ping-indicators"
 import { Toaster } from "@/components/ui/toast"
@@ -31,14 +32,8 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
         { rel: "manifest", href: "/manifest.json" },
       ],
     }),
-    notFoundComponent: () => (
-      <main className="container mx-auto p-4 pt-16">
-        <h1 className="font-heading text-2xl">Page introuvable</h1>
-        <p className="text-muted-foreground">
-          Cette adresse ne correspond à aucune vue.
-        </p>
-      </main>
-    ),
+    notFoundComponent: NotFoundPage,
+    errorComponent: ErrorPage,
     shellComponent: RootDocument,
   }
 )

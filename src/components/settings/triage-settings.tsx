@@ -283,6 +283,14 @@ export function RecapSettings({ settings }: { settings: Settings }) {
             checked={preferences.standupEnabled}
             onChange={(checked) => save.mutate({ standupEnabled: checked })}
           />
+          <FieldSeparator />
+          <SwitchField
+            id="my-standup-enabled"
+            label="Lancer /standup avec le récap"
+            description="Claude Code rédige ton propre standup à partir de tes PR et de tes reviews. Tu le relis dans le récap du jour, puis tu le publies d'un clic dans le même fil."
+            checked={preferences.myStandupEnabled}
+            onChange={(checked) => save.mutate({ myStandupEnabled: checked })}
+          />
         </FieldGroup>
       </CardContent>
     </Card>

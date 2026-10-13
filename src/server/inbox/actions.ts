@@ -18,23 +18,47 @@ import {
   items,
   repos,
   slackLookups,
+  slackReads,
   summaries,
+  itemChats,
+  pullInsights,
+  summaryReads,
   teamPulls,
 } from "@/server/db/schema"
-import type { Item, Summary, SummaryLength, View } from "@/server/db/schema"
+import type {
+  ChatMessage,
+  Item,
+  Summary,
+  SummaryLength,
+  View,
+} from "@/server/db/schema"
 import { getOctokit, getViewer } from "@/server/github/client"
 import { fetchConversation } from "@/server/github/conversation"
 import { fetchPullFiles, setFileViewed } from "@/server/github/pull-files"
 import { fetchMergeInfo, mergePull } from "@/server/github/merge"
 import type { MergeMethod } from "@/server/github/merge"
 import { fetchChecks, rerunFailedJobs } from "@/server/github/checks"
+import {
+  fetchReviewerOptions,
+  reviewerChanges,
+  updateReviewers,
+} from "@/server/github/reviewers"
+import {
+  fetchAssignedIssues,
+  fetchSprint,
+  listSprintProjects,
+  setItemStatus,
+} from "@/server/issues/sprint"
+import type { Sprint, SprintProjectRef, WorkItem } from "@/server/issues/sprint"
 import { buildRecap } from "@/server/recap/recap"
+import { fetchWeekSummary } from "@/server/recap/week"
 import {
   publishBlocker,
   publishStandup,
   readStandup,
   startStandup,
 } from "@/server/recap/standup"
+import type { StandupKind } from "@/server/recap/standup"
 import { localDate } from "@/server/recap/schedule"
 import { syncNow } from "@/server/inbox/loop"
 import { recordActivity, viewTransitions } from "@/server/dashboard/activity"
@@ -51,6 +75,7 @@ import {
 } from "@/server/summary/summarize"
 import {
   getPreferences,
+  channelIdOf,
   normalizeChannel,
   updatePreferences,
   withoutExcludedChannels,
@@ -58,11 +83,40 @@ import {
 import type { preferencesPatchSchema } from "@/server/preferences"
 import { getAgentConfig, runAgent } from "@/server/agents/runner"
 import {
+  buildInsightState,
+  buildIssueInsightState,
+  computeInsights,
+  insightHash,
+} from "@/server/ai/insights"
+import { INSIGHTS, ISSUE_INSIGHTS } from "@/lib/insights"
+import { getDecisionModel } from "@/server/ai/models"
+import {
+  CHAT_JSON_SCHEMA,
+  buildChatInput,
+  buildChatPrompt,
+  formatDiff,
+  parseChatAnswer,
+} from "@/server/summary/chat"
+import { subjectToItem, teamPullToItem } from "@/server/team/as-item"
+import {
+  readScores,
+  scoreInBackground,
+  trustedUrgency,
+} from "@/server/ai/scores"
+import type { Score, ScoreSubject } from "@/server/ai/scores"
+import { URGENCY_LEVELS } from "@/server/inbox/priority"
+import {
   appendReply,
   requestLookup,
   resolveAgentConfig,
   slackEnabled,
+  slackExclusions,
 } from "@/server/slack/lookups"
+import {
+  buildNoticePrompt,
+  draftReviewNotice,
+} from "@/server/slack/review-notice"
+import type { NoticeMention } from "@/server/slack/review-notice"
 import {
   REPLY_JSON_SCHEMA,
   buildReplyPrompt,
@@ -100,7 +154,16 @@ function folderCondition(folder: Folder, now: Date) {
 export type InboxItem = Item & {
   /** Slack threads found for the PR, or null when no search has finished. */
   slackDiscussions: number | null
+  /** False for a teammate's PR shown in « Toutes les PR » without a notification. */
+  inInbox: boolean
+  /** Jev's urgency to rank by, null when unscored or too unsure. */
+  jevUrgency: number | null
 }
+
+const jevUrgencyOf = (item: Item) =>
+  item.aiUrgency === null
+    ? null
+    : trustedUrgency({ urgency: item.aiUrgency, confidence: item.aiConfidence })
 
 export type SortOrder = "priority" | "size"
 
@@ -138,21 +201,158 @@ export async function listInbox(
           : [desc(items.priority), desc(items.updatedAt)])
     )
     .limit(200)
-  const { slackExcludedChannels } = await getPreferences(db)
+  const hiddenChannels = await slackExclusions(
+    db,
+    (await getPreferences(db)).slackExcludedChannels
+  )
   return rows.map((row) => ({
     ...row.item,
     slackDiscussions: row.slack
-      ? withoutExcludedChannels(row.slack, slackExcludedChannels).length
+      ? withoutExcludedChannels(row.slack, hiddenChannels).length
       : null,
+    inInbox: true,
+    jevUrgency: jevUrgencyOf(row.item),
   }))
+}
+
+/**
+ * Every open PR of the tracked repos: the viewer's, and the team's ones. A PR
+ * already in the inbox keeps its item, with its priority and its review state.
+ */
+export async function listAllPulls(
+  repo?: string,
+  sort: SortOrder = "priority"
+): Promise<InboxItem[]> {
+  const db = await getDb()
+  const [team, rows] = await Promise.all([
+    db
+      .select()
+      .from(teamPulls)
+      .where(repo ? eq(teamPulls.repoFullName, repo) : undefined),
+    db
+      .select({ item: items, slack: slackLookups.discussions })
+      .from(items)
+      .innerJoin(repos, eq(repos.fullName, items.repoFullName))
+      .leftJoin(
+        slackLookups,
+        and(
+          eq(slackLookups.itemKey, items.key),
+          eq(slackLookups.status, "done")
+        )
+      )
+      .where(
+        and(
+          eq(repos.tracked, true),
+          eq(items.kind, "PullRequest"),
+          eq(items.state, "OPEN"),
+          repo ? eq(items.repoFullName, repo) : undefined
+        )
+      ),
+  ])
+  const hiddenChannels = await slackExclusions(
+    db,
+    (await getPreferences(db)).slackExcludedChannels
+  )
+  const known = new Map(
+    rows.map((row) => [
+      row.item.key,
+      {
+        ...row.item,
+        slackDiscussions: row.slack
+          ? withoutExcludedChannels(row.slack, hiddenChannels).length
+          : null,
+        inInbox: true,
+        jevUrgency: jevUrgencyOf(row.item),
+      },
+    ])
+  )
+  const teamKeys = new Set(team.map((pull) => pull.key))
+  const scores = await readScores(db, [
+    ...team.map((pull) => pull.key),
+    ...known.keys(),
+  ])
+  // An inbox item that left the active folders keeps no triage: the team score fills in.
+  const withCachedScore = (item: InboxItem): InboxItem => {
+    if (item.jevUrgency !== null) return item
+    const scored = withJevScore(item, scores.get(item.key))
+    return { ...item, ...scored, jevUrgency: jevUrgencyOf(scored) }
+  }
+  const all: InboxItem[] = [
+    ...team.map((pull) => {
+      const item = known.get(pull.key)
+      if (item) return withCachedScore(item)
+      const synthetic = withJevScore(teamPullToItem(pull), scores.get(pull.key))
+      return {
+        ...synthetic,
+        slackDiscussions: null,
+        inInbox: false,
+        jevUrgency: jevUrgencyOf(synthetic),
+      }
+    }),
+    // The team snapshot leaves out the viewer's own PRs.
+    ...[...known.values()]
+      .filter((item) => !teamKeys.has(item.key) && item.view === "mine")
+      .map(withCachedScore),
+  ]
+  const size = (item: Item) =>
+    item.additions === null
+      ? Number.POSITIVE_INFINITY
+      : item.additions + (item.deletions ?? 0)
+  // Jev's urgency first; unscored PRs follow, the most recent first.
+  const urgency = (item: InboxItem) => item.jevUrgency ?? -1
+  return all.sort((a, b) =>
+    sort === "size"
+      ? size(a) - size(b)
+      : urgency(b) - urgency(a) || b.updatedAt.getTime() - a.updatedAt.getTime()
+  )
+}
+
+/** Shows Jev's level on a team PR like on an inbox item, without a priority score. */
+function withJevScore(item: Item, score: Score | undefined): Item {
+  if (!score) return item
+  const urgency = trustedUrgency(score)
+  return {
+    ...item,
+    aiUrgency: score.urgency,
+    aiConfidence: score.confidence,
+    needsCheck: urgency === null,
+    priorityReasons:
+      urgency === null
+        ? []
+        : [
+            {
+              label: `IA : ${URGENCY_LEVELS[Math.round(urgency)].toLowerCase()}`,
+              weight: Math.round(urgency * 10),
+              hint: "Urgence estimée par Jev à partir du titre, de la description, des labels et des derniers commentaires.",
+            },
+          ],
+  }
 }
 
 /** Folders whose items wait for the viewer: the "pings" shown on the logo and tab. */
 export const PING_FOLDERS: Folder[] = ["review", "awaiting"]
 
 export async function countPings(): Promise<number> {
-  const counts = await countFolders()
-  return PING_FOLDERS.reduce((total, folder) => total + counts[folder], 0)
+  const db = await getDb()
+  const [counts, [ownAwaiting]] = await Promise.all([
+    countFolders(),
+    // A reply awaited on the viewer's own PR pings too, though it sits in « Mes PR ».
+    db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(items)
+      .innerJoin(repos, eq(repos.fullName, items.repoFullName))
+      .where(
+        and(
+          eq(repos.tracked, true),
+          folderCondition("mine", new Date()),
+          eq(items.awaitingMe, true)
+        )
+      ),
+  ])
+  return (
+    PING_FOLDERS.reduce((total, folder) => total + counts[folder], 0) +
+    ownAwaiting.count
+  )
 }
 
 export async function countFolders(): Promise<Record<Folder, number>> {
@@ -174,8 +374,13 @@ export async function countFolders(): Promise<Record<Folder, number>> {
 async function getItem(key: string): Promise<Item> {
   const db = await getDb()
   const item = (await db.select().from(items).where(eq(items.key, key))).at(0)
-  if (!item) throw new Error(`Élément introuvable : ${key}`)
-  return item
+  if (item) return item
+  // A teammate's PR opened from « Toutes les PR » or the team view.
+  const pull = (
+    await db.select().from(teamPulls).where(eq(teamPulls.key, key))
+  ).at(0)
+  if (pull) return teamPullToItem(pull)
+  throw new Error(`Élément introuvable : ${key}`)
 }
 
 export async function getConversation(key: string) {
@@ -241,7 +446,27 @@ export async function snooze(keys: string[], until: Date | null) {
     .where(inArray(items.key, keys))
 }
 
+async function isInInbox(key: string): Promise<boolean> {
+  const db = await getDb()
+  const rows = await db
+    .select({ key: items.key })
+    .from(items)
+    .where(eq(items.key, key))
+  return rows.length > 0
+}
+
+/** The conversation of an issue or PR outside the inbox, for « Mes issues ». */
+export async function getWorkConversation(
+  key: string,
+  kind: "Issue" | "PullRequest"
+) {
+  const ref = parseSubjectKey(key)
+  if (!ref) throw new Error(`Élément illisible : ${key}`)
+  return fetchConversation(await getOctokit(), { ...ref, kind })
+}
+
 async function refreshItem(key: string) {
+  if (!(await isInInbox(key))) return
   const [octokit, viewer, item] = await Promise.all([
     getOctokit(),
     getViewer(),
@@ -272,7 +497,8 @@ export async function reply(key: string, body: string, target: ReplyTarget) {
           issue_number: ref.number,
           body,
         })
-  await refreshItem(key)
+  // Issues of « Mes issues » may not be in the inbox.
+  if (await isInInbox(key)) await refreshItem(key)
   return { url: data.html_url }
 }
 
@@ -295,6 +521,97 @@ export async function submitReview(
   })
   await refreshItem(key)
   return { url: data.html_url }
+}
+
+/** The Slack message offered after a review, and where it would go. */
+export async function getReviewNotice(key: string, event: ReviewEvent) {
+  const db = await getDb()
+  const [item, preferences] = await Promise.all([
+    getItem(key),
+    getPreferences(db),
+  ])
+  const channel = normalizeChannel(preferences.reviewNoticeChannel)
+  if (
+    !preferences.reviewNoticeEnabled ||
+    !slackEnabled() ||
+    item.number === null
+  )
+    return { enabled: false as const }
+  const [author, lookup] = await Promise.all([
+    item.author
+      ? getOctokit()
+          .then((octokit) =>
+            octokit.rest.users.getByUsername({ username: item.author! })
+          )
+          .then(({ data }) => ({ login: data.login, name: data.name ?? null }))
+          .catch(() => ({ login: item.author!, name: null }))
+      : null,
+    db
+      .select()
+      .from(slackLookups)
+      .where(eq(slackLookups.itemKey, key))
+      .then((rows) => rows.at(0)),
+  ])
+  // The PR's own thread in the channel, when the Slack search found one.
+  const thread = (lookup?.discussions ?? []).find(
+    (discussion) =>
+      normalizeChannel(discussion.channel) === channel &&
+      discussion.match !== "title"
+  )
+  return {
+    enabled: true as const,
+    channel,
+    threadPermalink: thread?.permalink ?? null,
+    author,
+    message: draftReviewNotice({
+      event,
+      repoFullName: item.repoFullName,
+      number: item.number,
+      title: item.title,
+      url: item.htmlUrl,
+      author: item.author,
+    }),
+  }
+}
+
+/** Posts the review notice as the user, in the PR's thread or the channel. */
+export async function sendReviewNotice(input: {
+  message: string
+  threadPermalink: string | null
+  mentions: NoticeMention[]
+}) {
+  const db = await getDb()
+  const preferences = await getPreferences(db)
+  const thread = input.threadPermalink
+    ? parsePermalink(input.threadPermalink)
+    : null
+  const config = await resolveAgentConfig(db)
+  const tools = [
+    ...slackSendTools(config.kind),
+    ...(config.kind === "claude"
+      ? [
+          "mcp__claude_ai_Slack__slack_search_users",
+          "mcp__claude_ai_Slack__slack_search_channels",
+        ]
+      : []),
+  ]
+  const answer = await runAgent(
+    {
+      prompt: buildNoticePrompt(
+        thread
+          ? { thread }
+          : { channel: normalizeChannel(preferences.reviewNoticeChannel) },
+        input.message,
+        input.mentions,
+        tools
+      ),
+      schema: REPLY_JSON_SCHEMA,
+      allowedTools: tools,
+      timeoutMs: 2 * 60_000,
+    },
+    config
+  )
+  return parseReply(answer)
 }
 
 export async function listRepos() {
@@ -351,8 +668,25 @@ export function listAccessibleRepos() {
   return accessibleRepos.repos
 }
 
-export async function getSlackDiscussions(key: string, force = false) {
-  const [db, item] = await Promise.all([getDb(), getItem(key)])
+export type SlackSubjectInput = {
+  kind: "PullRequest" | "Issue"
+  title: string
+  url: string
+}
+
+/** `subject` describes an issue of « Mes issues », which is not an inbox item. */
+export async function getSlackDiscussions(
+  key: string,
+  force = false,
+  subject?: SlackSubjectInput
+) {
+  const [db, item] = await Promise.all([
+    getDb(),
+    getItem(key).catch((error: unknown) => {
+      if (subject) return subjectToItem({ key, ...subject })
+      throw error
+    }),
+  ])
   if (!slackEnabled())
     return { enabled: false as const, agent: null, lookup: null }
   const [lookup, preferences] = await Promise.all([
@@ -362,14 +696,47 @@ export async function getSlackDiscussions(key: string, force = false) {
   const discussions = lookup?.discussions ?? []
   const visible = withoutExcludedChannels(
     discussions,
-    preferences.slackExcludedChannels
+    await slackExclusions(db, preferences.slackExcludedChannels)
   )
+  const reads =
+    visible.length === 0
+      ? []
+      : await db
+          .select()
+          .from(slackReads)
+          .where(
+            inArray(
+              slackReads.permalink,
+              visible.map((d) => d.permalink)
+            )
+          )
   return {
     enabled: true as const,
     agent: getAgentConfig(process.env, preferences).kind,
     lookup: lookup ? { ...lookup, discussions: visible } : null,
     hiddenCount: discussions.length - visible.length,
+    /** Permalink → `postedAt` of the newest message read. */
+    reads: Object.fromEntries(
+      reads.map((read) => [read.permalink, read.readThrough])
+    ),
   }
+}
+
+/** Marks a Slack thread read up to its newest message, or unread again. */
+export async function setSlackRead(
+  permalink: string,
+  readThrough: string | null
+) {
+  const db = await getDb()
+  if (readThrough === null) {
+    await db.delete(slackReads).where(eq(slackReads.permalink, permalink))
+    return
+  }
+  const row = { permalink, readThrough, readAt: new Date() }
+  await db
+    .insert(slackReads)
+    .values(row)
+    .onConflictDoUpdate({ target: slackReads.permalink, set: row })
 }
 
 export async function replyInSlack(
@@ -407,11 +774,19 @@ export async function getSettings() {
     getViewer().catch(() => null),
   ])
 
-  const channels = new Map<string, number>()
+  // One entry per channel id: the agent names a DM differently from one search to the next.
+  const channels = new Map<
+    string,
+    { names: Map<string, number>; threads: number }
+  >()
   for (const { discussions } of lookups) {
     for (const discussion of discussions) {
       const name = normalizeChannel(discussion.channel)
-      channels.set(name, (channels.get(name) ?? 0) + 1)
+      const id = channelIdOf(discussion.permalink) ?? name
+      const channel = channels.get(id) ?? { names: new Map(), threads: 0 }
+      channel.threads += 1
+      channel.names.set(name, (channel.names.get(name) ?? 0) + 1)
+      channels.set(id, channel)
     }
   }
 
@@ -419,7 +794,13 @@ export async function getSettings() {
   return {
     preferences,
     slackChannels: [...channels]
-      .map(([name, threads]) => ({ name, threads }))
+      .map(([id, channel]) => ({
+        id,
+        // The name the agent used most often for it.
+        name: [...channel.names].sort((a, b) => b[1] - a[1])[0][0],
+        names: [...channel.names.keys()],
+        threads: channel.threads,
+      }))
       .sort((a, b) => b.threads - a.threads),
     env: {
       githubLogin: viewer?.login ?? null,
@@ -478,6 +859,222 @@ export function getSummary(key: string) {
 }
 
 /** Summarises with Claude Code and stores the result; joins a run in progress. */
+/** What Claude reads about an item: its facts, GitHub conversation and Slack threads. */
+async function summaryContext(key: string) {
+  const db = await getDb()
+  const item = await getItem(key)
+  const ref = parseSubjectKey(key)
+  if (!ref || (item.kind !== "PullRequest" && item.kind !== "Issue")) {
+    throw new Error("Seules les PR et les issues peuvent être résumées.")
+  }
+  const [octokit, viewer, preferences, lookup] = await Promise.all([
+    getOctokit(),
+    getViewer(),
+    getPreferences(db),
+    db
+      .select()
+      .from(slackLookups)
+      .where(
+        and(eq(slackLookups.itemKey, key), eq(slackLookups.status, "done"))
+      )
+      .then((rows) => rows.at(0)),
+  ])
+  const conversation = await fetchConversation(octokit, {
+    ...ref,
+    kind: item.kind,
+  })
+  const slack = withoutExcludedChannels(
+    lookup?.discussions ?? [],
+    await slackExclusions(db, preferences.slackExcludedChannels)
+  )
+  const config = getAgentConfig(process.env, {
+    agentCli: "claude",
+    agentModel: preferences.summaryModel ?? DEFAULT_SUMMARY_MODEL,
+  })
+  return {
+    item,
+    ref,
+    octokit,
+    viewer,
+    config,
+    input: buildSummaryInput(item, conversation, slack),
+  }
+}
+
+const insightRuns = new Map<string, Promise<unknown>>()
+/** KPIs younger than this are shown without checking GitHub again. */
+const INSIGHTS_TTL_MS = 20 * 60_000
+
+/**
+ * Jev's KPIs for a PR, recomputed only when the PR changed (conversation,
+ * files, CI) or when asked. `available` is false without a decision model.
+ */
+export async function getPullInsights(
+  key: string,
+  force = false,
+  subject?: SlackSubjectInput
+) {
+  const model = getDecisionModel()
+  if (!model)
+    return { available: false as const, insights: [], createdAt: null }
+  const db = await getDb()
+  // An issue of « Mes issues » may be known only by what the page sends.
+  const item = await getItem(key).catch((error: unknown) => {
+    if (subject) return subjectToItem({ key, ...subject })
+    throw error
+  })
+  const ref = parseSubjectKey(key)
+  if (!ref || (item.kind !== "PullRequest" && item.kind !== "Issue"))
+    throw new Error("Seules les PR et les issues ont des KPI Jev.")
+  const cached = (
+    await db.select().from(pullInsights).where(eq(pullInsights.itemKey, key))
+  ).at(0)
+  // A fresh result is served as is: no GitHub call, nothing for Jev.
+  if (
+    cached &&
+    !force &&
+    Date.now() - cached.createdAt.getTime() < INSIGHTS_TTL_MS
+  )
+    return {
+      available: true as const,
+      insights: cached.insights,
+      createdAt: cached.createdAt,
+    }
+  const octokit = await getOctokit()
+  let state:
+    | ReturnType<typeof buildInsightState>
+    | ReturnType<typeof buildIssueInsightState>
+  if (item.kind === "PullRequest") {
+    const [conversation, files] = await Promise.all([
+      fetchConversation(octokit, { ...ref, kind: "PullRequest" }),
+      fetchPullFiles(octokit, ref),
+    ])
+    if (!conversation) throw new Error("Conversation de la PR introuvable.")
+    state = buildInsightState(conversation, files.files, {
+      ciState: item.ciState,
+      reviewDecision: item.reviewDecision,
+    })
+  } else {
+    const [conversation, viewer] = await Promise.all([
+      fetchConversation(octokit, { ...ref, kind: "Issue" }),
+      getViewer(),
+    ])
+    if (!conversation) throw new Error("Conversation de l'issue introuvable.")
+    state = buildIssueInsightState(conversation, item.labels, viewer.login)
+  }
+  const specs = item.kind === "PullRequest" ? INSIGHTS : ISSUE_INSIGHTS
+  const hash = insightHash(state)
+  // Past the TTL, an unchanged item keeps its KPIs: Jev is only asked again on a change.
+  if (cached && cached.hash === hash && !force) {
+    await db
+      .update(pullInsights)
+      .set({ createdAt: new Date() })
+      .where(eq(pullInsights.itemKey, key))
+    return {
+      available: true as const,
+      insights: cached.insights,
+      createdAt: new Date(),
+    }
+  }
+  // Two panels opening the same PR share one Jev call.
+  const run =
+    insightRuns.get(key) ??
+    computeInsights(model, state, specs).then(async (insights) => {
+      const row = { itemKey: key, hash, insights, createdAt: new Date() }
+      await db
+        .insert(pullInsights)
+        .values(row)
+        .onConflictDoUpdate({ target: pullInsights.itemKey, set: row })
+      return row
+    })
+  insightRuns.set(key, run)
+  try {
+    const row = (await run) as typeof pullInsights.$inferSelect
+    return {
+      available: true as const,
+      insights: row.insights,
+      createdAt: row.createdAt,
+    }
+  } finally {
+    insightRuns.delete(key)
+  }
+}
+
+export async function getSummaryRead(key: string) {
+  const db = await getDb()
+  const row = (
+    await db.select().from(summaryReads).where(eq(summaryReads.itemKey, key))
+  ).at(0)
+  return { readAt: row?.readAt ?? null }
+}
+
+export async function setSummaryRead(key: string, read: boolean) {
+  const db = await getDb()
+  if (!read) {
+    await db.delete(summaryReads).where(eq(summaryReads.itemKey, key))
+    return { readAt: null }
+  }
+  const row = { itemKey: key, readAt: new Date() }
+  await db
+    .insert(summaryReads)
+    .values(row)
+    .onConflictDoUpdate({ target: summaryReads.itemKey, set: row })
+  return { readAt: row.readAt }
+}
+
+export async function getChat(key: string) {
+  const db = await getDb()
+  const row = (
+    await db.select().from(itemChats).where(eq(itemChats.itemKey, key))
+  ).at(0)
+  return { messages: row?.messages ?? [] }
+}
+
+export async function clearChat(key: string) {
+  const db = await getDb()
+  await db.delete(itemChats).where(eq(itemChats.itemKey, key))
+  return { messages: [] }
+}
+
+/** Asks Claude a question about the item, with the earlier exchanges, and keeps both. */
+export async function askAboutItem(key: string, question: string) {
+  const db = await getDb()
+  const [{ item, ref, octokit, viewer, config, input }, { messages }] =
+    await Promise.all([summaryContext(key), getChat(key)])
+  const diff =
+    item.kind === "PullRequest"
+      ? formatDiff((await fetchPullFiles(octokit, ref)).files)
+      : null
+  const answer = await runAgent(
+    {
+      prompt: buildChatPrompt(viewer.login),
+      input: buildChatInput(input, diff, messages, question),
+      schema: CHAT_JSON_SCHEMA,
+      allowedTools: [],
+      timeoutMs: 3 * 60_000,
+    },
+    config
+  )
+  const now = new Date()
+  const next: ChatMessage[] = [
+    ...messages,
+    { role: "user", content: question, at: now.toISOString() },
+    {
+      role: "assistant",
+      content: parseChatAnswer(answer),
+      at: new Date().toISOString(),
+    },
+  ]
+  await db
+    .insert(itemChats)
+    .values({ itemKey: key, messages: next, updatedAt: now })
+    .onConflictDoUpdate({
+      target: itemChats.itemKey,
+      set: { messages: next, updatedAt: now },
+    })
+  return { messages: next }
+}
+
 export async function generateSummary(key: string, length: SummaryLength) {
   const running = summarising.get(runKey(key, length))
   if (running) {
@@ -486,39 +1083,11 @@ export async function generateSummary(key: string, length: SummaryLength) {
   }
   const run = (async () => {
     const db = await getDb()
-    const item = await getItem(key)
-    const ref = parseSubjectKey(key)
-    if (!ref || (item.kind !== "PullRequest" && item.kind !== "Issue")) {
-      throw new Error("Seules les PR et les issues peuvent être résumées.")
-    }
-    const [octokit, viewer, preferences, lookup] = await Promise.all([
-      getOctokit(),
-      getViewer(),
-      getPreferences(db),
-      db
-        .select()
-        .from(slackLookups)
-        .where(
-          and(eq(slackLookups.itemKey, key), eq(slackLookups.status, "done"))
-        )
-        .then((rows) => rows.at(0)),
-    ])
-    const conversation = await fetchConversation(octokit, {
-      ...ref,
-      kind: item.kind,
-    })
-    const slack = withoutExcludedChannels(
-      lookup?.discussions ?? [],
-      preferences.slackExcludedChannels
-    )
-    const config = getAgentConfig(process.env, {
-      agentCli: "claude",
-      agentModel: preferences.summaryModel ?? DEFAULT_SUMMARY_MODEL,
-    })
+    const { item, viewer, input, config } = await summaryContext(key)
     const answer = await runAgent(
       {
         prompt: buildSummaryPrompt(viewer.login, length),
-        input: buildSummaryInput(item, conversation, slack),
+        input,
         schema: SUMMARY_JSON_SCHEMA,
         allowedTools: [],
         timeoutMs: 3 * 60_000,
@@ -610,18 +1179,26 @@ export async function rerunChecks(key: string) {
   return { runs }
 }
 
+/** Every open team PR, the stuck ones first: the page shows the healthy ones on demand. */
 export async function listTeam() {
   const db = await getDb()
-  const rows = await db
-    .select()
-    .from(teamPulls)
-    .where(sql`cardinality(${teamPulls.problems}) > 0`)
-    .orderBy(asc(teamPulls.createdAt))
-  const [[{ total }], viewer] = await Promise.all([
-    db.select({ total: sql<number>`count(*)::int` }).from(teamPulls),
+  const [rows, viewer, preferences] = await Promise.all([
+    db
+      .select()
+      .from(teamPulls)
+      .orderBy(
+        sql`cardinality(${teamPulls.problems}) = 0`,
+        asc(teamPulls.createdAt)
+      ),
     getViewer(),
+    getPreferences(db),
   ])
-  return { pulls: rows, total, viewerLogin: viewer.login }
+  return {
+    pulls: rows,
+    total: rows.length,
+    viewerLogin: viewer.login,
+    staleDays: preferences.teamStaleDays,
+  }
 }
 
 export async function countTeamProblems(): Promise<number> {
@@ -646,30 +1223,205 @@ export async function takeReview(key: string) {
   void syncNow({ forceSearch: true })
 }
 
+export async function getReviewerOptions(key: string) {
+  const [octokit, viewer] = await Promise.all([getOctokit(), getViewer()])
+  return fetchReviewerOptions(octokit, pullRef(key), viewer.login)
+}
+
+/** Leaves exactly `wanted` as requested reviewers, then updates the local copies. */
+export async function setReviewers(key: string, wanted: string[]) {
+  const ref = pullRef(key)
+  const [octokit, viewer] = await Promise.all([getOctokit(), getViewer()])
+  const { requested } = await fetchReviewerOptions(octokit, ref, viewer.login)
+  const changes = reviewerChanges(requested, wanted)
+  await updateReviewers(octokit, ref, changes)
+
+  const db = await getDb()
+  const pull = (
+    await db.select().from(teamPulls).where(eq(teamPulls.key, key))
+  ).at(0)
+  // The team view reads its snapshot: it must not wait for the next team sync.
+  if (pull)
+    await db
+      .update(teamPulls)
+      .set({
+        reviewers: wanted,
+        problems:
+          wanted.length > 0
+            ? pull.problems.filter((problem) => problem !== "no-reviewer")
+            : pull.problems,
+      })
+      .where(eq(teamPulls.key, key))
+  if (await isInInbox(key)) await refreshItem(key)
+  // Requesting oneself brings the PR into « À reviewer ».
+  if (changes.add.some((id) => id.toLowerCase() === viewer.login.toLowerCase()))
+    void syncNow({ forceSearch: true })
+  return changes
+}
+
+const PROJECTS_TTL_MS = 10 * 60 * 1000
+let projectsCache: { at: number; projects: SprintProjectRef[] } | null = null
+
+/** Projects with a sprint, among the owners of the tracked repos and the viewer's own. */
+async function sprintProjects(): Promise<SprintProjectRef[]> {
+  if (projectsCache && Date.now() - projectsCache.at < PROJECTS_TTL_MS)
+    return projectsCache.projects
+  const db = await getDb()
+  const [octokit, viewer, tracked] = await Promise.all([
+    getOctokit(),
+    getViewer(),
+    db.select().from(repos).where(eq(repos.tracked, true)),
+  ])
+  const owners = [
+    ...new Set([
+      ...tracked.map((repo) => repo.fullName.split("/")[0]),
+      viewer.login,
+    ]),
+  ]
+  const projects = await listSprintProjects(octokit, owners)
+  projectsCache = { at: Date.now(), projects }
+  return projects
+}
+
+/** « Mes issues »: the issues assigned to the viewer, and the current sprint of the team. */
+export async function listIssues() {
+  const db = await getDb()
+  const [octokit, viewer, preferences, projects] = await Promise.all([
+    getOctokit(),
+    getViewer(),
+    getPreferences(db),
+    sprintProjects(),
+  ])
+  const project =
+    projects.find(
+      (p) => `${p.owner}/${p.number}` === preferences.sprintProject
+    ) ??
+    projects.at(0) ??
+    null
+  let sprint: Sprint | null = null
+  let sprintError: string | null = null
+  let fieldName: string | undefined
+  let sprintSubjects: ScoreSubject[] = []
+  if (project)
+    try {
+      const { subjects, ...fetched } = await fetchSprint(octokit, project)
+      sprint = fetched
+      sprintSubjects = subjects
+      fieldName = fetched.fieldName ?? undefined
+    } catch (error) {
+      sprintError = error instanceof Error ? error.message : String(error)
+    }
+  const fetched = await fetchAssignedIssues(octokit, project, fieldName)
+  // Jev ranks the lists; tickets it has not scored yet are ranked on the next read.
+  const subjects = [...fetched.subjects, ...sprintSubjects]
+  const scores = await readScores(
+    db,
+    subjects.map((subject) => subject.key)
+  )
+  scoreInBackground(db, subjects, viewer.login)
+  const withUrgency = (item: WorkItem): WorkItem => ({
+    ...item,
+    urgency: trustedUrgency(scores.get(item.key)),
+  })
+  return {
+    viewerLogin: viewer.login,
+    projects,
+    sprint: sprint && { ...sprint, items: sprint.items.map(withUrgency) },
+    sprintError,
+    assigned: fetched.items.map(withUrgency),
+  }
+}
+
+export async function moveWorkItem(input: {
+  projectId: string
+  itemId: string
+  fieldId: string
+  optionId: string
+}) {
+  await setItemStatus(await getOctokit(), input)
+}
+
+const MENTIONS_TTL_MS = 10 * 60 * 1000
+const mentionsCache = new Map<
+  string,
+  { at: number; people: { login: string; name: string | null }[] }
+>()
+
+/** People who can be @mentioned in a repo: those who can be assigned to it. */
+export async function getMentionCandidates(repo: string) {
+  const cached = mentionsCache.get(repo)
+  if (cached && Date.now() - cached.at < MENTIONS_TTL_MS) return cached.people
+  const [owner, name] = repo.split("/")
+  const data = await (
+    await getOctokit()
+  ).graphql<{
+    repository: {
+      assignableUsers: { nodes: { login: string; name: string | null }[] }
+    } | null
+  }>(
+    `query ($owner: String!, $name: String!) {
+      repository(owner: $owner, name: $name) {
+        assignableUsers(first: 100) { nodes { login name } }
+      }
+    }`,
+    { owner, name }
+  )
+  const people = (data.repository?.assignableUsers.nodes ?? []).map((user) => ({
+    login: user.login,
+    name: user.name || null,
+  }))
+  mentionsCache.set(repo, { at: Date.now(), people })
+  return people
+}
+
+/** What the viewer did since Monday, in the repos of the tracked owners. */
+export async function getWeekSummary() {
+  const db = await getDb()
+  const [octokit, viewer, tracked] = await Promise.all([
+    getOctokit(),
+    getViewer(),
+    db.select().from(repos).where(eq(repos.tracked, true)),
+  ])
+  const owners = [
+    ...new Set(tracked.map((repo) => repo.fullName.split("/")[0])),
+  ]
+  return fetchWeekSummary(octokit, viewer.login, owners)
+}
+
 export async function getRecap() {
   const db = await getDb()
-  const [recap, standup, preferences] = await Promise.all([
+  const [recap, team, me, preferences] = await Promise.all([
     buildRecap(db),
-    readStandup(db),
+    readStandup(db, "team"),
+    readStandup(db, "me"),
     getPreferences(db),
   ])
   return {
     ...recap,
-    standup,
-    publishBlocker: publishBlocker(standup),
+    standups: {
+      team: {
+        state: team,
+        publishBlocker: publishBlocker(team, "team"),
+        enabled: preferences.standupEnabled,
+      },
+      me: {
+        state: me,
+        publishBlocker: publishBlocker(me, "me"),
+        enabled: preferences.myStandupEnabled,
+      },
+    },
     recapTime: preferences.recapTime,
-    standupEnabled: preferences.standupEnabled,
   }
 }
 
-export async function postStandup() {
-  return publishStandup(await getDb())
+export async function postStandup(kind: StandupKind) {
+  return publishStandup(await getDb(), kind)
 }
 
-export async function runStandup() {
+export async function runStandup(kind: StandupKind) {
   const db = await getDb()
-  void startStandup(db, localDate(new Date()))
-  return readStandup(db)
+  void startStandup(db, localDate(new Date()), kind)
+  return readStandup(db, kind)
 }
 
 export async function markFileViewed(

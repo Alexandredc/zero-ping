@@ -14,6 +14,12 @@ import {
   runStandup,
   postStandup,
   takeReview,
+  getReviewerOptions,
+  listIssues,
+  getWeekSummary,
+  moveWorkItem,
+  getWorkConversation,
+  setReviewers,
   getConversation,
   getPullFiles,
   generateSummary,
@@ -22,9 +28,20 @@ import {
   getSummary,
   getSlackDiscussions,
   replyInSlack,
+  setSlackRead,
+  getMentionCandidates,
+  askAboutItem,
+  getReviewNotice,
+  sendReviewNotice,
+  getPullInsights,
+  getSummaryRead,
+  setSummaryRead,
+  clearChat,
+  getChat,
   savePreferences,
   listAccessibleRepos,
   listInbox,
+  listAllPulls,
   listRepos,
   markDone,
   markFileViewed,
@@ -51,12 +68,16 @@ export const getInbox = createServerFn({ method: "GET" })
       folder: folderSchema,
       repo: z.string().optional(),
       sort: z.enum(["priority", "size"]).optional(),
+      /** In « Mes PR », every open PR of the tracked repos instead of the viewer's. */
+      scope: z.enum(["mine", "all"]).optional(),
     })
   )
   .handler(async ({ data }) => {
     ensureSyncLoop()
     const [items, counts, team] = await Promise.all([
-      listInbox(data.folder, data.repo, data.sort),
+      data.folder === "mine" && data.scope === "all"
+        ? listAllPulls(data.repo, data.sort)
+        : listInbox(data.folder, data.repo, data.sort),
       countFolders(),
       countTeamProblems(),
     ])
@@ -127,13 +148,25 @@ export const setRepo = createServerFn({ method: "POST" })
     if (data.tracked) void syncNow()
   })
 
+const slackSubject = z.object({
+  key: z.string(),
+  /** For an issue of « Mes issues », which the server may not know. */
+  subject: z
+    .object({
+      kind: z.enum(["PullRequest", "Issue"]),
+      title: z.string(),
+      url: z.string(),
+    })
+    .optional(),
+})
+
 export const getSlack = createServerFn({ method: "GET" })
-  .validator(z.object({ key: z.string() }))
-  .handler(({ data }) => getSlackDiscussions(data.key))
+  .validator(slackSubject)
+  .handler(({ data }) => getSlackDiscussions(data.key, false, data.subject))
 
 export const refreshSlack = createServerFn({ method: "POST" })
-  .validator(z.object({ key: z.string() }))
-  .handler(({ data }) => getSlackDiscussions(data.key, true))
+  .validator(slackSubject)
+  .handler(({ data }) => getSlackDiscussions(data.key, true, data.subject))
 
 export const postSlackReply = createServerFn({ method: "POST" })
   .validator(
@@ -169,6 +202,10 @@ export const summarizeItem = createServerFn({ method: "POST" })
 export const getAttentionEvents = createServerFn({ method: "GET" })
   .validator(z.object({ afterId: z.number().int().nullable() }))
   .handler(({ data }) => getAttention(data.afterId))
+
+export const getFolderCounts = createServerFn({ method: "GET" }).handler(() =>
+  countFolders()
+)
 
 export const getPingCount = createServerFn({ method: "GET" }).handler(() =>
   countPings()
@@ -221,14 +258,110 @@ export const postTakeReview = createServerFn({ method: "POST" })
   .validator(z.object({ key: z.string() }))
   .handler(({ data }) => takeReview(data.key))
 
+export const getItemReviewerOptions = createServerFn({ method: "GET" })
+  .validator(z.object({ key: z.string() }))
+  .handler(({ data }) => getReviewerOptions(data.key))
+
+export const postReviewers = createServerFn({ method: "POST" })
+  .validator(z.object({ key: z.string(), reviewers: z.array(z.string()) }))
+  .handler(({ data }) => setReviewers(data.key, data.reviewers))
+
+export const getWorkItemConversation = createServerFn({ method: "GET" })
+  .validator(
+    z.object({ key: z.string(), kind: z.enum(["Issue", "PullRequest"]) })
+  )
+  .handler(({ data }) => getWorkConversation(data.key, data.kind))
+
+export const postWorkItemStatus = createServerFn({ method: "POST" })
+  .validator(
+    z.object({
+      projectId: z.string(),
+      itemId: z.string(),
+      fieldId: z.string(),
+      optionId: z.string(),
+    })
+  )
+  .handler(({ data }) => moveWorkItem(data))
+
+export const postSlackRead = createServerFn({ method: "POST" })
+  .validator(
+    z.object({ permalink: z.string(), readThrough: z.string().nullable() })
+  )
+  .handler(({ data }) => setSlackRead(data.permalink, data.readThrough))
+
+export const getMentions = createServerFn({ method: "GET" })
+  .validator(z.object({ repo: z.string() }))
+  .handler(({ data }) => getMentionCandidates(data.repo))
+
+export const getItemReviewNotice = createServerFn({ method: "GET" })
+  .validator(
+    z.object({
+      key: z.string(),
+      event: z.enum(["APPROVE", "REQUEST_CHANGES", "COMMENT"]),
+    })
+  )
+  .handler(({ data }) => getReviewNotice(data.key, data.event))
+
+export const postReviewNotice = createServerFn({ method: "POST" })
+  .validator(
+    z.object({
+      message: z.string().trim().min(1).max(4000),
+      threadPermalink: z.string().nullable(),
+      mentions: z.array(
+        z.object({ login: z.string(), name: z.string().nullable() })
+      ),
+    })
+  )
+  .handler(({ data }) => sendReviewNotice(data))
+
+export const getInsights = createServerFn({ method: "GET" })
+  .validator(slackSubject)
+  .handler(({ data }) => getPullInsights(data.key, false, data.subject))
+
+export const refreshInsights = createServerFn({ method: "POST" })
+  .validator(slackSubject)
+  .handler(({ data }) => getPullInsights(data.key, true, data.subject))
+
+export const getSummaryReadState = createServerFn({ method: "GET" })
+  .validator(z.object({ key: z.string() }))
+  .handler(({ data }) => getSummaryRead(data.key))
+
+export const postSummaryRead = createServerFn({ method: "POST" })
+  .validator(z.object({ key: z.string(), read: z.boolean() }))
+  .handler(({ data }) => setSummaryRead(data.key, data.read))
+
+export const getItemChat = createServerFn({ method: "GET" })
+  .validator(z.object({ key: z.string() }))
+  .handler(({ data }) => getChat(data.key))
+
+export const postQuestion = createServerFn({ method: "POST" })
+  .validator(
+    z.object({ key: z.string(), question: z.string().trim().min(1).max(4000) })
+  )
+  .handler(({ data }) => askAboutItem(data.key, data.question))
+
+export const deleteChat = createServerFn({ method: "POST" })
+  .validator(z.object({ key: z.string() }))
+  .handler(({ data }) => clearChat(data.key))
+
+export const getWeek = createServerFn({ method: "GET" }).handler(() =>
+  getWeekSummary()
+)
+
+export const getIssues = createServerFn({ method: "GET" }).handler(() =>
+  listIssues()
+)
+
 export const getDailyRecap = createServerFn({ method: "GET" }).handler(() => {
   ensureSyncLoop()
   return getRecap()
 })
 
-export const postRunStandup = createServerFn({ method: "POST" }).handler(() =>
-  runStandup()
-)
+const standupKind = z.object({ kind: z.enum(["team", "me"]) })
+
+export const postRunStandup = createServerFn({ method: "POST" })
+  .validator(standupKind)
+  .handler(({ data }) => runStandup(data.kind))
 
 export const getDashboardData = createServerFn({ method: "GET" }).handler(
   () => {
@@ -237,6 +370,6 @@ export const getDashboardData = createServerFn({ method: "GET" }).handler(
   }
 )
 
-export const postStandupToSlack = createServerFn({ method: "POST" }).handler(
-  () => postStandup()
-)
+export const postStandupToSlack = createServerFn({ method: "POST" })
+  .validator(standupKind)
+  .handler(({ data }) => postStandup(data.kind))

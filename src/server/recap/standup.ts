@@ -31,11 +31,9 @@ export type StandupState = {
   error: string | null
 }
 
-const KEY = "standup"
-/** The board export alone takes about six minutes. */
-const TIMEOUT_MS = 25 * 60_000
-
-export const STANDUP_COMMAND = "/standup:team"
+/** The team's standup, from the project board, and the viewer's own, from their PRs. */
+export type StandupKind = "team" | "me"
+export const STANDUP_KINDS: StandupKind[] = ["team", "me"]
 
 const EMPTY: StandupState = {
   status: "idle",
@@ -58,7 +56,7 @@ const nullableText = (description: string) => ({
   description,
 })
 
-export const STANDUP_JSON_SCHEMA = {
+export const standupJsonSchema = (kind: StandupKind) => ({
   type: "object",
   additionalProperties: false,
   required: [
@@ -87,34 +85,85 @@ export const STANDUP_JSON_SCHEMA = {
     alreadyPosted: {
       type: "boolean",
       description:
-        "True when a team standup is already in today's reminder thread.",
+        kind === "team"
+          ? "True when a team standup is already in today's reminder thread."
+          : "True when the user already posted their own standup in today's reminder thread.",
     },
     note: nullableText(
       "In French, one sentence for anything the user must know: no reminder today, standup already posted, unknown names. Null otherwise."
     ),
   },
-}
+})
 
-const SYSTEM_PROMPT = [
-  "You run unattended inside Zéro Ping, a local app: nobody can answer questions, so never ask any and follow the command to the end.",
-  "Override for step 5: find today's reminder and read its thread (steps 5.1 and 5.2), but do not create the Slack draft. Zéro Ping shows the standup to the user and posts it in that thread when they click to publish.",
-  "Your final structured answer reports the standup message in both forms, the reminder thread and any note for the user.",
-].join(" ")
+const UNATTENDED =
+  "You run unattended inside Zéro Ping, a local app: nobody can answer questions, so never ask any and follow the command to the end."
+
+const SLACK_READ_TOOLS = [
+  "mcp__claude_ai_Slack__slack_read_channel",
+  "mcp__claude_ai_Slack__slack_read_thread",
+  "mcp__claude_ai_Slack__slack_search_users",
+]
+
+const KIND_CONFIG: Record<
+  StandupKind,
+  {
+    /** Settings row holding the last run. */
+    key: string
+    command: string
+    systemPrompt: string
+    timeoutMs: number
+    readyTitle: string
+    alreadyPosted: string
+  }
+> = {
+  team: {
+    key: "standup",
+    command: "/standup:team",
+    systemPrompt: [
+      UNATTENDED,
+      "Override for step 5: find today's reminder and read its thread (steps 5.1 and 5.2), but do not create the Slack draft. Zéro Ping shows the standup to the user and posts it in that thread when they click to publish.",
+      "Your final structured answer reports the standup message in both forms, the reminder thread and any note for the user.",
+    ].join(" "),
+    // The board export alone takes about six minutes.
+    timeoutMs: 25 * 60_000,
+    readyTitle: "Standup d'équipe prêt",
+    alreadyPosted: "Un point d'équipe est déjà dans le fil d'aujourd'hui.",
+  },
+  me: {
+    key: "standup:me",
+    command: "/standup",
+    systemPrompt: [
+      UNATTENDED,
+      'Override for the Slack draft: do not create it. Instead, find today\'s "Daily standup reminder" message in #tech-team-general (channel C08P7R8BLCA) with slack_read_channel, read its thread with slack_read_thread, and tell whether the user already posted their own standup there. Zéro Ping shows the standup to the user and posts it in that thread when they click to publish.',
+      "Your final structured answer reports the standup message (Markdown for the chat, Slack mrkdwn for Slack), the reminder thread and any note for the user.",
+    ].join(" "),
+    timeoutMs: 10 * 60_000,
+    readyTitle: "Ton standup est prêt",
+    alreadyPosted: "Ton standup est déjà dans le fil d'aujourd'hui.",
+  },
+}
 
 const globalForStandup = globalThis as unknown as {
-  __zeroPingStandup?: Promise<void>
+  __zeroPingStandups?: Partial<Record<StandupKind, Promise<void>>>
 }
+const runs = (globalForStandup.__zeroPingStandups ??= {})
 
-export async function readStandup(db: Database): Promise<StandupState> {
+export async function readStandup(
+  db: Database,
+  kind: StandupKind
+): Promise<StandupState> {
   const row = (
-    await db.select().from(settings).where(eq(settings.key, KEY))
+    await db
+      .select()
+      .from(settings)
+      .where(eq(settings.key, KIND_CONFIG[kind].key))
   ).at(0)
   const state = {
     ...EMPTY,
     ...(row?.value as Partial<StandupState> | undefined),
   }
   // A run cut short by a server restart would otherwise spin forever.
-  if (state.status === "running" && !globalForStandup.__zeroPingStandup)
+  if (state.status === "running" && !runs[kind])
     return {
       ...state,
       status: "error",
@@ -123,10 +172,14 @@ export async function readStandup(db: Database): Promise<StandupState> {
   return state
 }
 
-async function writeStandup(db: Database, state: StandupState) {
+async function writeStandup(
+  db: Database,
+  kind: StandupKind,
+  state: StandupState
+) {
   await db
     .insert(settings)
-    .values({ key: KEY, value: state })
+    .values({ key: KIND_CONFIG[kind].key, value: state })
     .onConflictDoUpdate({ target: settings.key, set: { value: state } })
 }
 
@@ -157,7 +210,10 @@ export function parseStandup(answer: unknown): StandupResult {
 }
 
 /** Why the standup cannot be published, or null when it can. */
-export function publishBlocker(state: StandupState): string | null {
+export function publishBlocker(
+  state: StandupState,
+  kind: StandupKind
+): string | null {
   if (!state.slackMessage)
     return state.message
       ? "Ce standup date d'avant le bouton : relance-le pour préparer sa version Slack."
@@ -165,15 +221,17 @@ export function publishBlocker(state: StandupState): string | null {
   if (!state.channelId || !state.threadTs)
     return "Pas de « Daily standup reminder » aujourd'hui : rien où publier."
   if (state.postedAt) return "Ce standup est déjà publié."
-  if (state.alreadyPosted)
-    return "Un point d'équipe est déjà dans le fil d'aujourd'hui."
+  if (state.alreadyPosted) return KIND_CONFIG[kind].alreadyPosted
   return null
 }
 
 /** Posts the standup in today's reminder thread, as the user. */
-export async function publishStandup(db: Database): Promise<StandupState> {
-  const state = await readStandup(db)
-  const blocker = publishBlocker(state)
+export async function publishStandup(
+  db: Database,
+  kind: StandupKind
+): Promise<StandupState> {
+  const state = await readStandup(db, kind)
+  const blocker = publishBlocker(state, kind)
   if (blocker) throw new Error(blocker)
   const config = getAgentConfig(process.env, { agentCli: "claude" })
   const tools = slackSendTools(config.kind)
@@ -196,16 +254,21 @@ export async function publishStandup(db: Database): Promise<StandupState> {
     postedAt: new Date().toISOString(),
     postedLink: permalink,
   }
-  await writeStandup(db, next)
+  await writeStandup(db, kind, next)
   return next
 }
 
-/** Starts the team standup in the background, or joins the run in progress. */
-export function startStandup(db: Database, date: string): Promise<void> {
-  globalForStandup.__zeroPingStandup ??= (async () => {
+/** Starts a standup in the background, or joins the run in progress. */
+export function startStandup(
+  db: Database,
+  date: string,
+  kind: StandupKind
+): Promise<void> {
+  const config = KIND_CONFIG[kind]
+  runs[kind] ??= (async () => {
     const startedAt = new Date().toISOString()
-    await writeStandup(db, {
-      ...(await readStandup(db)),
+    await writeStandup(db, kind, {
+      ...(await readStandup(db, kind)),
       status: "running",
       date,
       startedAt,
@@ -214,29 +277,22 @@ export function startStandup(db: Database, date: string): Promise<void> {
     })
     try {
       // The command needs the user's default model, gh, jq and the Slack connector.
-      const config = {
+      const agent = {
         ...getAgentConfig(process.env, { agentCli: "claude" }),
         model: undefined,
       }
       const answer = await runAgent(
         {
-          prompt: STANDUP_COMMAND,
-          appendSystemPrompt: SYSTEM_PROMPT,
-          schema: STANDUP_JSON_SCHEMA,
-          allowedTools: [
-            "Bash",
-            "Read",
-            "Write",
-            "mcp__claude_ai_Slack__slack_read_channel",
-            "mcp__claude_ai_Slack__slack_read_thread",
-            "mcp__claude_ai_Slack__slack_search_users",
-          ],
-          timeoutMs: TIMEOUT_MS,
+          prompt: config.command,
+          appendSystemPrompt: config.systemPrompt,
+          schema: standupJsonSchema(kind),
+          allowedTools: ["Bash", "Read", "Write", ...SLACK_READ_TOOLS],
+          timeoutMs: config.timeoutMs,
         },
-        config
+        agent
       )
       const result = parseStandup(answer)
-      await writeStandup(db, {
+      await writeStandup(db, kind, {
         status: "done",
         date,
         startedAt,
@@ -248,24 +304,24 @@ export function startStandup(db: Database, date: string): Promise<void> {
       })
       await recordAttention(db, [
         {
-          itemKey: "standup",
+          itemKey: kind === "team" ? "standup" : "standup:me",
           kind: "recap",
-          title: "Standup prêt",
+          title: config.readyTitle,
           body:
             result.note ??
             "Relis-le dans le récap du jour, puis publie-le dans Slack.",
         },
       ])
     } catch (error) {
-      await writeStandup(db, {
-        ...(await readStandup(db)),
+      await writeStandup(db, kind, {
+        ...(await readStandup(db, kind)),
         status: "error",
         finishedAt: new Date().toISOString(),
         error: error instanceof Error ? error.message : String(error),
       })
     }
   })().finally(() => {
-    globalForStandup.__zeroPingStandup = undefined
+    runs[kind] = undefined
   })
-  return globalForStandup.__zeroPingStandup
+  return runs[kind]
 }

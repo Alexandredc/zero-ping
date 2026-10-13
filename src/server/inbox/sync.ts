@@ -134,8 +134,11 @@ export async function pollNotifications(
   return { changed: collected.length, pollInterval }
 }
 
-/** Review requests whose notification is missing (older, or already read and cleared). */
-export async function searchReviewRequests(
+/**
+ * Subjects that need the viewer but have no notification (older, already
+ * cleared, or never notified like a draft): review requests and their own PRs.
+ */
+export async function searchMissingSubjects(
   db: Database,
   octokit: Octokit,
   force = false
@@ -144,33 +147,55 @@ export async function searchReviewRequests(
   const last = state.lastSearchAt ? new Date(state.lastSearchAt).getTime() : 0
   if (!force && Date.now() - last < SEARCH_INTERVAL_MS) return
 
-  const results = await octokit.paginate(
-    octokit.rest.search.issuesAndPullRequests,
+  const searches = [
     {
       q: "is:open is:pr review-requested:@me archived:false",
-      per_page: 100,
-    }
-  )
-  const found = results.map((result) => {
-    const [owner, repo] = result.repository_url.split("/").slice(-2)
-    return {
-      key: `${owner}/${repo}#${result.number}`,
-      repoFullName: `${owner}/${repo}`,
-      number: result.number,
-      kind: "PullRequest" as const,
-      title: result.title,
-      htmlUrl: result.html_url,
       reason: "review_requested",
-      unread: false,
-      updatedAt: new Date(result.updated_at),
-    }
-  })
+    },
+    { q: "is:open is:pr author:@me archived:false", reason: "author" },
+  ]
+  const found = (
+    await Promise.all(
+      searches.map(async ({ q, reason }) => {
+        const results = await octokit.paginate(
+          octokit.rest.search.issuesAndPullRequests,
+          { q, per_page: 100 }
+        )
+        return results.map((result) => {
+          const [owner, repo] = result.repository_url.split("/").slice(-2)
+          return {
+            key: `${owner}/${repo}#${result.number}`,
+            repoFullName: `${owner}/${repo}`,
+            number: result.number,
+            kind: "PullRequest" as const,
+            title: result.title,
+            htmlUrl: result.html_url,
+            reason,
+            unread: false,
+            updatedAt: new Date(result.updated_at),
+          }
+        })
+      })
+    )
+  ).flat()
   await ensureRepos(
     db,
     found.map((item) => item.repoFullName)
   )
   if (found.length > 0)
-    await db.insert(items).values(found).onConflictDoNothing()
+    await db
+      .insert(items)
+      .values(found)
+      .onConflictDoUpdate({
+        target: items.key,
+        set: {
+          // No notification comes when the viewer re-requests their own
+          // review: the search's date is what gets the item enriched again.
+          updatedAt: sql`greatest(${items.updatedAt}, excluded.updated_at)`,
+          // A review requested after the item was set aside brings it back.
+          doneAt: sql`case when excluded.reason = 'review_requested' and ${items.doneAt} < excluded.updated_at then null else ${items.doneAt} end`,
+        },
+      })
   await writeState(db, {
     ...(await readState(db)),
     lastSearchAt: new Date().toISOString(),

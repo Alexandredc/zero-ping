@@ -16,6 +16,24 @@ import {
   postRunStandup,
   postStandupToSlack,
   postTakeReview,
+  getItemReviewerOptions,
+  getIssues,
+  getWeek,
+  postWorkItemStatus,
+  postSlackRead,
+  getMentions,
+  getFolderCounts,
+  getItemChat,
+  getInsights,
+  getItemReviewNotice,
+  postReviewNotice,
+  refreshInsights,
+  getSummaryReadState,
+  postSummaryRead,
+  postQuestion,
+  deleteChat,
+  getWorkItemConversation,
+  postReviewers,
   getInbox,
   getItemConversation,
   getItemFiles,
@@ -36,6 +54,7 @@ import {
   triggerSync,
 } from "@/functions/inbox"
 import type { Folder, SortOrder } from "@/server/inbox/actions"
+import type { StandupKind } from "@/server/recap/standup"
 import { toast } from "@/components/ui/toast"
 
 /** The UI reads the local database often; GitHub is only polled by the server. */
@@ -44,11 +63,12 @@ const LOCAL_REFRESH_MS = 4000
 export const inboxQuery = (
   folder: Folder,
   repo?: string,
-  sort: SortOrder = "priority"
+  sort: SortOrder = "priority",
+  scope: "mine" | "all" = "mine"
 ) =>
   queryOptions({
-    queryKey: ["inbox", folder, repo ?? null, sort],
-    queryFn: () => getInbox({ data: { folder, repo, sort } }),
+    queryKey: ["inbox", folder, repo ?? null, sort, scope],
+    queryFn: () => getInbox({ data: { folder, repo, sort, scope } }),
     refetchInterval: LOCAL_REFRESH_MS,
     refetchOnWindowFocus: true,
   })
@@ -60,20 +80,55 @@ export const conversationQuery = (key: string) =>
     staleTime: 30_000,
   })
 
-export const slackQuery = (key: string) =>
+export type SlackSubjectInput = {
+  kind: "PullRequest" | "Issue"
+  title: string
+  url: string
+}
+
+export const slackQuery = (key: string, subject?: SlackSubjectInput) =>
   queryOptions({
     queryKey: ["slack", key],
-    queryFn: () => getSlack({ data: { key } }),
+    queryFn: () => getSlack({ data: { key, subject } }),
     // Polls while the agent searches, then relies on the cache.
     refetchInterval: (query) =>
       query.state.data?.lookup?.status === "pending" ? 3000 : false,
   })
 
-export function useRefreshSlack(key: string) {
+export function useRefreshSlack(key: string, subject?: SlackSubjectInput) {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: () => refreshSlack({ data: { key } }),
+    mutationFn: () => refreshSlack({ data: { key, subject } }),
     onSuccess: (data) => queryClient.setQueryData(["slack", key], data),
+  })
+}
+
+/** Marks a Slack thread read (collapsed) or unread, showing the change at once. */
+export function useSlackRead(key: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (input: { permalink: string; readThrough: string | null }) =>
+      postSlackRead({ data: input }),
+    onMutate: (input) => {
+      const queryKey = slackQuery(key).queryKey
+      const previous = queryClient.getQueryData(queryKey)
+      if (previous?.enabled) {
+        const reads = { ...previous.reads }
+        if (input.readThrough === null) delete reads[input.permalink]
+        else reads[input.permalink] = input.readThrough
+        queryClient.setQueryData(queryKey, { ...previous, reads })
+      }
+      return { previous }
+    },
+    onError: (error, _, context) => {
+      if (context?.previous)
+        queryClient.setQueryData(slackQuery(key).queryKey, context.previous)
+      toast.add({
+        title: "Fil non modifié",
+        description: error.message,
+        type: "error",
+      })
+    },
   })
 }
 
@@ -222,6 +277,7 @@ export function useSavePreferences() {
       void queryClient.invalidateQueries({ queryKey: ["settings"] })
       void queryClient.invalidateQueries({ queryKey: ["slack"] })
       void queryClient.invalidateQueries({ queryKey: ["inbox"] })
+      void queryClient.invalidateQueries({ queryKey: ["issues"] })
       toast.add({ title: "Réglage enregistré" })
     },
     onError: (error) =>
@@ -258,6 +314,14 @@ export function useSummarize(key: string) {
 }
 
 /** Items waiting for the viewer, refreshed like the inbox. */
+/** Folder counts for the sidebar on pages that do not load the inbox. */
+export const folderCountsQuery = () =>
+  queryOptions({
+    queryKey: ["inbox", "counts"],
+    queryFn: () => getFolderCounts(),
+    refetchInterval: LOCAL_REFRESH_MS,
+  })
+
 export const pingCountQuery = () =>
   queryOptions({
     queryKey: ["inbox", "pings"],
@@ -407,19 +471,261 @@ export function useTakeReview() {
   })
 }
 
+export const reviewerOptionsQuery = (key: string) =>
+  queryOptions({
+    queryKey: ["reviewer-options", key],
+    queryFn: () => getItemReviewerOptions({ data: { key } }),
+    staleTime: 30_000,
+  })
+
+export function useSetReviewers(key: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (reviewers: string[]) =>
+      postReviewers({ data: { key, reviewers } }),
+    onSuccess: ({ add, remove }) => {
+      void queryClient.invalidateQueries({ queryKey: ["team"] })
+      void queryClient.invalidateQueries({ queryKey: ["inbox"] })
+      void queryClient.invalidateQueries({
+        queryKey: ["reviewer-options", key],
+      })
+      const parts = [
+        add.length > 0 && `${add.length} demandé${add.length > 1 ? "s" : ""}`,
+        remove.length > 0 &&
+          `${remove.length} retiré${remove.length > 1 ? "s" : ""}`,
+      ].filter(Boolean)
+      toast.add({
+        title: "Reviewers mis à jour",
+        description:
+          parts.length > 0 ? `${parts.join(", ")} sur GitHub.` : undefined,
+        type: "success",
+      })
+    },
+    onError: (error) =>
+      toast.add({
+        title: "Impossible de changer les reviewers",
+        description: error.message,
+        type: "error",
+      }),
+  })
+}
+
+export const workConversationQuery = (
+  key: string,
+  kind: "Issue" | "PullRequest"
+) =>
+  queryOptions({
+    queryKey: ["work-conversation", key],
+    queryFn: () => getWorkItemConversation({ data: { key, kind } }),
+    staleTime: 30_000,
+  })
+
+/** Moves an item to another board column, showing the new status before GitHub answers. */
+export function useSetWorkItemStatus() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (input: {
+      projectId: string
+      itemId: string
+      fieldId: string
+      optionId: string
+      status: string
+    }) =>
+      postWorkItemStatus({
+        data: {
+          projectId: input.projectId,
+          itemId: input.itemId,
+          fieldId: input.fieldId,
+          optionId: input.optionId,
+        },
+      }),
+    onMutate: async (input) => {
+      await queryClient.cancelQueries({ queryKey: ["issues"] })
+      const previous = queryClient.getQueryData(issuesQuery().queryKey)
+      if (previous) {
+        const move = <
+          T extends { projectItemId: string | null; status: string | null },
+        >(
+          item: T
+        ) =>
+          item.projectItemId === input.itemId
+            ? { ...item, status: input.status }
+            : item
+        queryClient.setQueryData(issuesQuery().queryKey, {
+          ...previous,
+          assigned: previous.assigned.map(move),
+          sprint: previous.sprint && {
+            ...previous.sprint,
+            items: previous.sprint.items.map(move),
+          },
+        })
+      }
+      return { previous }
+    },
+    onError: (error, _, context) => {
+      if (context?.previous)
+        queryClient.setQueryData(issuesQuery().queryKey, context.previous)
+      toast.add({
+        title: "Statut non modifié",
+        description: error.message,
+        type: "error",
+      })
+    },
+    onSuccess: (_, input) =>
+      toast.add({
+        title: `Déplacée dans « ${input.status} »`,
+        type: "success",
+      }),
+    onSettled: () =>
+      void queryClient.invalidateQueries({ queryKey: ["issues"] }),
+  })
+}
+
+export const mentionsQuery = (repo: string) =>
+  queryOptions({
+    queryKey: ["mentions", repo],
+    queryFn: () => getMentions({ data: { repo } }),
+    staleTime: 10 * 60_000,
+  })
+
+export const reviewNoticeQuery = (
+  key: string,
+  event: "APPROVE" | "REQUEST_CHANGES" | "COMMENT"
+) =>
+  queryOptions({
+    queryKey: ["review-notice", key, event],
+    queryFn: () => getItemReviewNotice({ data: { key, event } }),
+    staleTime: Infinity,
+  })
+
+export function useSendReviewNotice() {
+  return useMutation({
+    mutationFn: (input: Parameters<typeof postReviewNotice>[0]["data"]) =>
+      postReviewNotice({ data: input }),
+    onSuccess: ({ permalink }) =>
+      toast.add({
+        title: "Message posté sur Slack",
+        description: permalink ?? undefined,
+        type: "success",
+      }),
+    onError: (error) =>
+      toast.add({
+        title: "Message Slack non envoyé",
+        description: error.message,
+        type: "error",
+      }),
+  })
+}
+
+export const insightsQuery = (key: string, subject?: SlackSubjectInput) =>
+  queryOptions({
+    queryKey: ["insights", key],
+    queryFn: () => getInsights({ data: { key, subject } }),
+    // The server keeps them 20 min too; ↻ asks again.
+    staleTime: 20 * 60_000,
+  })
+
+export function useRefreshInsights(key: string, subject?: SlackSubjectInput) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: () => refreshInsights({ data: { key, subject } }),
+    onSuccess: (data) =>
+      queryClient.setQueryData(insightsQuery(key).queryKey, data),
+    onError: (error) =>
+      toast.add({
+        title: "KPI Jev indisponibles",
+        description: error.message,
+        type: "error",
+      }),
+  })
+}
+
+export const summaryReadQuery = (key: string) =>
+  queryOptions({
+    queryKey: ["summary-read", key],
+    queryFn: () => getSummaryReadState({ data: { key } }),
+  })
+
+export function useSummaryRead(key: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (read: boolean) => postSummaryRead({ data: { key, read } }),
+    onMutate: (read) =>
+      queryClient.setQueryData(summaryReadQuery(key).queryKey, {
+        readAt: read ? new Date() : null,
+      }),
+    onSettled: () =>
+      void queryClient.invalidateQueries({
+        queryKey: summaryReadQuery(key).queryKey,
+      }),
+  })
+}
+
+export const chatQuery = (key: string) =>
+  queryOptions({
+    queryKey: ["chat", key],
+    queryFn: () => getItemChat({ data: { key } }),
+  })
+
+/** Asks Claude about an item; the question shows at once, the answer when it lands. */
+export function useAskClaude(key: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (question: string) => postQuestion({ data: { key, question } }),
+    onSuccess: (chat) =>
+      queryClient.setQueryData(chatQuery(key).queryKey, chat),
+    onError: (error) =>
+      toast.add({
+        title: "Claude n'a pas répondu",
+        description: error.message,
+        type: "error",
+      }),
+  })
+}
+
+export function useClearChat(key: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: () => deleteChat({ data: { key } }),
+    onSuccess: (chat) =>
+      queryClient.setQueryData(chatQuery(key).queryKey, chat),
+  })
+}
+
+export const weekQuery = () =>
+  queryOptions({
+    queryKey: ["week"],
+    queryFn: () => getWeek(),
+    staleTime: 60_000,
+    refetchInterval: 5 * 60_000,
+  })
+
+export const issuesQuery = () =>
+  queryOptions({
+    queryKey: ["issues"],
+    queryFn: () => getIssues(),
+    staleTime: 60_000,
+    refetchInterval: 3 * 60_000,
+  })
+
 export const recapQuery = () =>
   queryOptions({
     queryKey: ["recap"],
     queryFn: () => getDailyRecap(),
     // Polls faster while the standup runs.
     refetchInterval: (query) =>
-      query.state.data?.standup.status === "running" ? 5000 : 30_000,
+      query.state.data &&
+      Object.values(query.state.data.standups).some(
+        (standup) => standup.state.status === "running"
+      )
+        ? 5000
+        : 30_000,
   })
 
-export function useRunStandup() {
+export function useRunStandup(kind: StandupKind) {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: () => postRunStandup(),
+    mutationFn: () => postRunStandup({ data: { kind } }),
     onSuccess: () =>
       void queryClient.invalidateQueries({ queryKey: ["recap"] }),
     onError: (error) =>
@@ -439,10 +745,10 @@ export const dashboardQuery = () =>
     refetchOnWindowFocus: true,
   })
 
-export function usePublishStandup() {
+export function usePublishStandup(kind: StandupKind) {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: () => postStandupToSlack(),
+    mutationFn: () => postStandupToSlack({ data: { kind } }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["recap"] })
       toast.add({ title: "Standup publié dans Slack", type: "success" })

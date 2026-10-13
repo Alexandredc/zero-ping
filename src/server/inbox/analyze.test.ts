@@ -252,3 +252,35 @@ describe("re-review", () => {
     expect(analysis.view).toBe("review")
   })
 })
+
+describe("the viewer's own subjects", () => {
+  const question = {
+    id: "q",
+    databaseId: 1,
+    author: "dev",
+    body: "@lead can you rebase?",
+    createdAt: "2026-10-05T10:00:00Z",
+    url: "https://github.com/acme/api/pull/1#issuecomment-1",
+  }
+
+  it("keeps an own PR in « Mes PR », with the awaited reply", () => {
+    const analysis = analyze(
+      pr({ author: "lead", comments: [question] }),
+      viewer
+    )
+    expect(analysis.view).toBe("mine")
+    expect(analysis.awaiting?.from).toBe("dev")
+  })
+
+  it("keeps own drafts in « Mes PR »", () => {
+    expect(analyze(pr({ author: "lead", isDraft: true }), viewer).view).toBe(
+      "mine"
+    )
+  })
+
+  it("leaves own issues out of « Mes PR »", () => {
+    expect(analyze(pr({ kind: "Issue", author: "lead" }), viewer).view).toBe(
+      "other"
+    )
+  })
+})

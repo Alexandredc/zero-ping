@@ -34,6 +34,7 @@ type ActionInput = Pick<
   | "reviewedState"
   | "reviewRequest"
   | "awaitingFrom"
+  | "awaitingMe"
   | "ciState"
   | "reviewDecision"
 >
@@ -57,7 +58,8 @@ export function nextAction(item: ActionInput): NextAction | null {
     }
     return { kind: "review", label: "Reviewer", minutes: full }
   }
-  if (item.view === "awaiting")
+  // Someone waiting for an answer comes first, on the viewer's own PRs too.
+  if (item.view === "awaiting" || (item.view === "mine" && item.awaitingMe))
     return {
       kind: "reply",
       label: item.awaitingFrom

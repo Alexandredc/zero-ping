@@ -99,7 +99,10 @@ export async function triage(
   }
 }
 
-function confidenceOf(metadata: unknown, questionId: string): number | null {
+export function confidenceOf(
+  metadata: unknown,
+  questionId: string
+): number | null {
   const confidence = (
     metadata as
       { typesafe?: { confidence?: Record<string, number> } } | undefined

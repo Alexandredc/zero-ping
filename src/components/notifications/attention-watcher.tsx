@@ -13,16 +13,17 @@ const FOLDER_FOR: Record<Exclude<AttentionKind, "recap">, Folder> = {
   ci: "mine",
 }
 
+/** Shows a browser notification; returns it, or null when it could not be created. */
 export function showNotification(
   title: string,
   options: NotificationOptions,
   onClick?: () => void
-) {
+): Notification | null {
   if (
     typeof Notification === "undefined" ||
     Notification.permission !== "granted"
   )
-    return
+    return null
   const notification = new Notification(title, {
     icon: "/logo-192.png?v=bell",
     ...options,
@@ -32,6 +33,7 @@ export function showNotification(
     onClick?.()
     notification.close()
   }
+  return notification
 }
 
 /**

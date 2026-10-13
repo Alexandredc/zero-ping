@@ -4,18 +4,22 @@ import {
   CheckIcon,
   ChevronDownIcon,
   ClockIcon,
-  FileCodeIcon,
   MessageSquareReplyIcon,
   Undo2Icon,
   XIcon,
 } from "lucide-react"
-import { Markdown } from "./markdown"
 import { SlackDiscussions } from "./slack-discussions"
 import { SummaryCard } from "./summary-card"
+import { ItemInsights } from "./item-insights"
+import { GitHubConversation } from "./github-conversation"
+import type { ReplyTarget } from "./github-conversation"
 import { ActionHint } from "./hint"
 import { AiReviewMenu } from "./ai-review-menu"
 import { DiffView } from "./diff-view"
 import { MergeMenu } from "./merge-menu"
+import { MentionTextarea } from "./mention-textarea"
+import { ReviewersMenu } from "./reviewers-menu"
+import type { PendingReview, ReviewEvent } from "./review-dialog"
 import { FailedChecks } from "./failed-checks"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useHotkeys } from "@/hooks/use-hotkeys"
@@ -24,14 +28,8 @@ import { useConversationSources } from "@/hooks/use-conversation-sources"
 import { NEEDS_CHECK_HINT } from "@/server/inbox/priority"
 import type { PriorityReason } from "@/server/inbox/priority"
 import type { Item } from "@/server/db/schema"
-import type {
-  ConversationComment,
-  ConversationEntry,
-} from "@/server/github/conversation"
 import { conversationQuery, useInboxActions } from "@/hooks/use-inbox"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
@@ -44,121 +42,8 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Kbd } from "@/components/ui/kbd"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { Skeleton } from "@/components/ui/skeleton"
 import { Spinner } from "@/components/ui/spinner"
-import { Textarea } from "@/components/ui/textarea"
-import { avatarUrl, formatWhen, nextMorning, timeAgo } from "@/lib/format"
-
-type ReplyTarget =
-  | { type: "conversation" }
-  | {
-      type: "thread"
-      commentDatabaseId: number
-      path: string
-      author: string | null
-    }
-
-const REVIEW_STATE_LABEL: Record<string, string> = {
-  APPROVED: "a approuvé",
-  CHANGES_REQUESTED: "a demandé des changements",
-  COMMENTED: "a commenté",
-  DISMISSED: "review rejetée",
-}
-
-function CommentBlock({
-  comment,
-  note,
-}: {
-  comment: ConversationComment
-  note?: string
-}) {
-  return (
-    <article className="flex gap-3" id={comment.id}>
-      <Avatar className="size-7">
-        <AvatarImage
-          src={comment.authorAvatar ?? avatarUrl(comment.author)}
-          alt=""
-        />
-        <AvatarFallback className="text-[0.6rem]">
-          {(comment.author ?? "?").slice(0, 2).toUpperCase()}
-        </AvatarFallback>
-      </Avatar>
-      <div className="flex min-w-0 flex-1 flex-col gap-1">
-        <header className="flex items-baseline gap-2 text-xs text-muted-foreground">
-          <span className="font-medium text-foreground">
-            {comment.author ?? "fantôme"}
-          </span>
-          {note && <span>{note}</span>}
-          <a
-            href={comment.url}
-            target="_blank"
-            rel="noreferrer"
-            className="ml-auto hover:text-foreground hover:underline"
-          >
-            {timeAgo(comment.createdAt)}
-          </a>
-        </header>
-        {comment.body.trim() && <Markdown>{comment.body}</Markdown>}
-      </div>
-    </article>
-  )
-}
-
-function Entry({
-  entry,
-  onReplyInThread,
-}: {
-  entry: ConversationEntry
-  onReplyInThread: (target: ReplyTarget) => void
-}) {
-  if (entry.type === "comment") return <CommentBlock comment={entry} />
-  if (entry.type === "review") {
-    return (
-      <CommentBlock
-        comment={entry}
-        note={REVIEW_STATE_LABEL[entry.state] ?? entry.state}
-      />
-    )
-  }
-  const first = entry.comments[0]
-  return (
-    <section className="flex flex-col gap-3 rounded-lg border bg-card p-3">
-      <header className="flex items-center gap-2 text-xs text-muted-foreground">
-        <FileCodeIcon className="size-3.5" />
-        <span className="truncate font-mono">
-          {entry.path}
-          {entry.line !== null && `:${entry.line}`}
-        </span>
-        {entry.isResolved && (
-          <Badge variant="secondary" className="ml-auto">
-            Résolu
-          </Badge>
-        )}
-      </header>
-      {entry.comments.map((comment) => (
-        <CommentBlock key={comment.id} comment={comment} />
-      ))}
-      {!entry.isResolved && first.databaseId !== null && (
-        <Button
-          variant="ghost"
-          size="sm"
-          className="self-start"
-          onClick={() =>
-            onReplyInThread({
-              type: "thread",
-              commentDatabaseId: first.databaseId!,
-              path: entry.path,
-              author: entry.comments[entry.comments.length - 1].author,
-            })
-          }
-        >
-          <MessageSquareReplyIcon data-icon="inline-start" />
-          Répondre dans ce fil
-        </Button>
-      )}
-    </section>
-  )
-}
+import { formatWhen, nextMorning } from "@/lib/format"
 
 function PriorityExplanation({
   priority,
@@ -207,12 +92,18 @@ function PriorityExplanation({
 
 export function DetailPanel({
   item,
+  inInbox = true,
   composerRef,
   onClose,
+  onReview,
 }: {
   item: Item
+  /** False for a teammate's PR outside the inbox: nothing to mark done or snooze. */
+  inInbox?: boolean
   composerRef: React.RefObject<HTMLTextAreaElement | null>
   onClose: () => void
+  /** Opens the page's confirmation dialog for an approval or a change request. */
+  onReview: (review: PendingReview) => void
 }) {
   const { data, isPending, error } = useQuery(conversationQuery(item.key))
   const actions = useInboxActions()
@@ -259,11 +150,9 @@ export function DetailPanel({
     )
   }
 
-  const review = (event: "APPROVE" | "REQUEST_CHANGES" | "COMMENT") =>
-    actions.review.mutate(
-      { key: item.key, event, body },
-      { onSuccess: () => setBody("") }
-    )
+  // The page confirms the review, with its Slack message, in a dialog.
+  const review = (event: ReviewEvent) =>
+    onReview({ key: item.key, event, body, onSent: () => setBody("") })
 
   const snoozeOptions = [
     {
@@ -320,79 +209,89 @@ export function DetailPanel({
               <Kbd>o</Kbd>
             </Button>
           </ActionHint>
-          <ActionHint
-            content={
-              isDone
-                ? "Remet l'élément dans son dossier de l'inbox (e)."
-                : "Retire l'élément de l'inbox et le marque « Done » dans tes notifications GitHub (e). Il revient tout seul s'il y a du nouveau."
-            }
-          >
-            <Button
-              variant={isDone ? "outline" : "default"}
-              size="sm"
-              onClick={() =>
-                actions.done.mutate({ keys: [item.key], done: !isDone })
-              }
-              disabled={actions.done.isPending}
-            >
-              {isDone ? (
-                <Undo2Icon data-icon="inline-start" />
-              ) : (
-                <CheckIcon data-icon="inline-start" />
-              )}
-              {isDone ? "Remettre dans l'inbox" : "Marquer comme traité"}
-              <Kbd>e</Kbd>
-            </Button>
-          </ActionHint>
-          <DropdownMenu>
-            <ActionHint content="Cache l'élément jusqu'à l'heure choisie, puis le fait revenir dans son dossier. En attendant, il est rangé dans « En pause ». Rien ne change sur GitHub.">
-              <DropdownMenuTrigger
-                render={<Button variant="outline" size="sm" />}
+          {inInbox && (
+            <>
+              <ActionHint
+                content={
+                  isDone
+                    ? "Remet l'élément dans son dossier de l'inbox (e)."
+                    : "Retire l'élément de l'inbox et le marque « Done » dans tes notifications GitHub (e). Il revient tout seul s'il y a du nouveau."
+                }
               >
-                <ClockIcon data-icon="inline-start" />
-                {item.snoozedUntil && item.snoozedUntil > new Date()
-                  ? `En pause jusqu'à ${formatWhen(item.snoozedUntil)}`
-                  : "Mettre en pause"}
-              </DropdownMenuTrigger>
-            </ActionHint>
-            <DropdownMenuContent align="start" className="w-64">
-              <DropdownMenuGroup>
-                <DropdownMenuLabel>
-                  Faire revenir cet élément…
-                </DropdownMenuLabel>
-                {snoozeOptions.map((option) => (
-                  <DropdownMenuItem
-                    key={option.label}
-                    onClick={() =>
-                      actions.snooze.mutate({
-                        keys: [item.key],
-                        until: option.until(),
-                      })
-                    }
+                <Button
+                  variant={isDone ? "outline" : "default"}
+                  size="sm"
+                  onClick={() =>
+                    actions.done.mutate({ keys: [item.key], done: !isDone })
+                  }
+                  disabled={actions.done.isPending}
+                >
+                  {isDone ? (
+                    <Undo2Icon data-icon="inline-start" />
+                  ) : (
+                    <CheckIcon data-icon="inline-start" />
+                  )}
+                  {isDone ? "Remettre dans l'inbox" : "Marquer comme traité"}
+                  <Kbd>e</Kbd>
+                </Button>
+              </ActionHint>
+              <DropdownMenu>
+                <ActionHint content="Cache l'élément jusqu'à l'heure choisie, puis le fait revenir dans son dossier. En attendant, il est rangé dans « En pause ». Rien ne change sur GitHub.">
+                  <DropdownMenuTrigger
+                    render={<Button variant="outline" size="sm" />}
                   >
-                    {option.label}
-                    <span className="ml-auto text-xs text-muted-foreground">
-                      {formatWhen(option.until())}
-                    </span>
-                  </DropdownMenuItem>
-                ))}
-                {item.snoozedUntil && (
-                  <DropdownMenuItem
-                    onClick={() =>
-                      actions.snooze.mutate({ keys: [item.key], until: null })
-                    }
-                  >
-                    Reprendre maintenant
-                  </DropdownMenuItem>
-                )}
-              </DropdownMenuGroup>
-            </DropdownMenuContent>
-          </DropdownMenu>
+                    <ClockIcon data-icon="inline-start" />
+                    {item.snoozedUntil && item.snoozedUntil > new Date()
+                      ? `En pause jusqu'à ${formatWhen(item.snoozedUntil)}`
+                      : "Mettre en pause"}
+                  </DropdownMenuTrigger>
+                </ActionHint>
+                <DropdownMenuContent align="start" className="w-64">
+                  <DropdownMenuGroup>
+                    <DropdownMenuLabel>
+                      Faire revenir cet élément…
+                    </DropdownMenuLabel>
+                    {snoozeOptions.map((option) => (
+                      <DropdownMenuItem
+                        key={option.label}
+                        onClick={() =>
+                          actions.snooze.mutate({
+                            keys: [item.key],
+                            until: option.until(),
+                          })
+                        }
+                      >
+                        {option.label}
+                        <span className="ml-auto text-xs text-muted-foreground">
+                          {formatWhen(option.until())}
+                        </span>
+                      </DropdownMenuItem>
+                    ))}
+                    {item.snoozedUntil && (
+                      <DropdownMenuItem
+                        onClick={() =>
+                          actions.snooze.mutate({
+                            keys: [item.key],
+                            until: null,
+                          })
+                        }
+                      >
+                        Reprendre maintenant
+                      </DropdownMenuItem>
+                    )}
+                  </DropdownMenuGroup>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </>
+          )}
           {isPull && item.state === "OPEN" && item.view === "mine" && (
             <MergeMenu
               itemKey={item.key}
               approved={item.reviewDecision === "APPROVED"}
             />
+          )}
+          {isPull && item.state === "OPEN" && (
+            <ReviewersMenu itemKey={item.key} />
           )}
           {isPull && item.state === "OPEN" && (
             <AiReviewMenu itemKey={item.key} />
@@ -479,6 +378,12 @@ export function DetailPanel({
         ) : (
           <div className="flex flex-col gap-5 px-5 py-4">
             {canReply && (
+              <ItemInsights
+                itemKey={item.key}
+                kind={item.kind === "PullRequest" ? "PR" : "issue"}
+              />
+            )}
+            {canReply && (
               <SummaryCard
                 itemKey={item.key}
                 kind={item.kind === "PullRequest" ? "PR" : "issue"}
@@ -516,56 +421,12 @@ export function DetailPanel({
 
             {isPull && sources.slack && <SlackDiscussions itemKey={item.key} />}
             {(!isPull || sources.github) && (
-              <>
-                {canReply && (
-                  <header className="flex items-center gap-2">
-                    <GitHubIcon />
-                    <h3 className="text-sm font-semibold">GitHub</h3>
-                    {conversation && (
-                      <span className="text-xs text-muted-foreground">
-                        {conversation.entries.length + 1} message
-                        {conversation.entries.length > 0 ? "s" : ""}
-                      </span>
-                    )}
-                  </header>
-                )}
-                {isPending && (
-                  <div className="flex flex-col gap-3">
-                    <Skeleton className="h-4 w-2/3" />
-                    <Skeleton className="h-20 w-full" />
-                    <Skeleton className="h-16 w-full" />
-                  </div>
-                )}
-                {error && (
-                  <Alert variant="destructive">
-                    <AlertTitle>Conversation indisponible</AlertTitle>
-                    <AlertDescription>
-                      {error.message}. Ouvre-la sur GitHub en attendant.
-                    </AlertDescription>
-                  </Alert>
-                )}
-                {data && !conversation && (
-                  <p className="text-sm text-muted-foreground">
-                    Ce type de notification ne s'affiche pas ici. Ouvre-la sur
-                    GitHub.
-                  </p>
-                )}
-                {conversation && (
-                  <>
-                    <CommentBlock
-                      comment={conversation.description}
-                      note="a ouvert"
-                    />
-                    {conversation.entries.map((entry) => (
-                      <Entry
-                        key={entry.id}
-                        entry={entry}
-                        onReplyInThread={setTarget}
-                      />
-                    ))}
-                  </>
-                )}
-              </>
+              <GitHubConversation
+                conversation={data ? conversation : undefined}
+                isPending={isPending}
+                error={error}
+                onReplyInThread={setTarget}
+              />
             )}
             <div ref={bottomRef} />
           </div>
@@ -599,10 +460,11 @@ export function DetailPanel({
               <Kbd>Entrée</Kbd> pour envoyer
             </span>
           </div>
-          <Textarea
+          <MentionTextarea
             ref={composerRef}
+            repo={item.repoFullName}
             value={body}
-            onChange={(event) => setBody(event.target.value)}
+            onValueChange={setBody}
             onKeyDown={(event) => {
               if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
                 event.preventDefault()

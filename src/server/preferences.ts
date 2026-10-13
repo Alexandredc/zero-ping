@@ -11,6 +11,9 @@ const TIME = /^([01]\d|2[0-3]):[0-5]\d$/
 export const preferencesSchema = z.object({
   slackExcludedChannels: z.array(z.string()).default([]),
   slackAutoSearch: z.boolean().default(true),
+  /** After a review sent from the app, offer to tell the author on Slack. */
+  reviewNoticeEnabled: z.boolean().default(true),
+  reviewNoticeChannel: z.string().trim().min(1).default("pull-requests"),
   agentCli: z.enum(["claude", "codex"]).nullable().default(null),
   agentModel: z.string().trim().min(1).nullable().default(null),
   summaryModel: z.string().trim().min(1).nullable().default(null),
@@ -28,8 +31,11 @@ export const preferencesSchema = z.object({
   recapEnabled: z.boolean().default(true),
   recapTime: z.string().regex(TIME).default("09:05"),
   standupEnabled: z.boolean().default(true),
+  myStandupEnabled: z.boolean().default(true),
   teamStaleDays: z.number().int().min(1).max(90).default(7),
   reviewSlaHours: z.number().int().min(1).max(240).default(24),
+  /** `owner/number` of the project whose sprint « Mes issues » shows; null picks one. */
+  sprintProject: z.string().nullable().default(null),
 })
 
 export type Preferences = z.infer<typeof preferencesSchema>
@@ -38,6 +44,8 @@ export type Preferences = z.infer<typeof preferencesSchema>
 export const preferencesPatchSchema = z.object({
   slackExcludedChannels: z.array(z.string()).optional(),
   slackAutoSearch: z.boolean().optional(),
+  reviewNoticeEnabled: z.boolean().optional(),
+  reviewNoticeChannel: z.string().trim().min(1).optional(),
   agentCli: z.enum(["claude", "codex"]).nullable().optional(),
   agentModel: z.string().trim().min(1).nullable().optional(),
   summaryModel: z.string().trim().min(1).nullable().optional(),
@@ -53,8 +61,10 @@ export const preferencesPatchSchema = z.object({
   recapEnabled: z.boolean().optional(),
   recapTime: z.string().regex(TIME).optional(),
   standupEnabled: z.boolean().optional(),
+  myStandupEnabled: z.boolean().optional(),
   teamStaleDays: z.number().int().min(1).max(90).optional(),
   reviewSlaHours: z.number().int().min(1).max(240).optional(),
+  sprintProject: z.string().nullable().optional(),
 })
 
 const KEY = "preferences"
@@ -102,13 +112,42 @@ export async function updatePreferences(
   return next
 }
 
+/** The channel's id from a thread permalink (`…/archives/D01ABCD2EFG/p…`), lowercased. */
+export function channelIdOf(permalink: string): string | null {
+  return /\/archives\/([A-Z0-9]+)\//i.exec(permalink)?.[1].toLowerCase() ?? null
+}
+
+/**
+ * The names and channel ids to hide. The search agent names one channel in
+ * several ways (a DM above all), so an excluded name also excludes the ids of
+ * every thread already seen under that name, whatever the name it gets next.
+ */
+export function resolveExclusions(
+  excluded: string[],
+  known: Pick<SlackDiscussion, "channel" | "permalink">[]
+): Set<string> {
+  const hidden = new Set(excluded.map(normalizeChannel))
+  for (const discussion of known) {
+    const id = channelIdOf(discussion.permalink)
+    if (id && hidden.has(normalizeChannel(discussion.channel))) hidden.add(id)
+  }
+  return hidden
+}
+
 export function withoutExcludedChannels(
   discussions: SlackDiscussion[],
-  excluded: string[]
+  excluded: string[] | Set<string>
 ): SlackDiscussion[] {
-  if (excluded.length === 0) return discussions
-  const hidden = new Set(excluded.map(normalizeChannel))
-  return discussions.filter(
-    (discussion) => !hidden.has(normalizeChannel(discussion.channel))
-  )
+  const hidden =
+    excluded instanceof Set
+      ? excluded
+      : resolveExclusions(excluded, discussions)
+  if (hidden.size === 0) return discussions
+  return discussions.filter((discussion) => {
+    const id = channelIdOf(discussion.permalink)
+    return (
+      !hidden.has(normalizeChannel(discussion.channel)) &&
+      !(id && hidden.has(id))
+    )
+  })
 }

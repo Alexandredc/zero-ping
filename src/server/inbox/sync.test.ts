@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm"
 import type { Octokit } from "octokit"
 import { beforeEach, describe, expect, it } from "vitest"
-import { pollNotifications } from "./sync"
+import { pollNotifications, searchMissingSubjects } from "./sync"
 import type { RawNotification } from "./notifications"
 import { createDatabase } from "@/server/db/client"
 import type { Database } from "@/server/db/client"
@@ -108,5 +108,52 @@ describe("pollNotifications", () => {
 
     await pollNotifications(db, octokit)
     expect((await db.select().from(items))[0].doneAt).toBeNull()
+  })
+})
+
+describe("searchMissingSubjects", () => {
+  let db: Database
+
+  beforeEach(async () => {
+    db = await createDatabase()
+  })
+
+  /** Serves the review-requested search, and nothing for the author search. */
+  const searchOctokit = (updatedAt: string) =>
+    ({
+      rest: { search: { issuesAndPullRequests: "search" } },
+      paginate: async (_route: unknown, params: { q: string }) =>
+        params.q.includes("review-requested")
+          ? [
+              {
+                number: 12,
+                title: "Add retries",
+                html_url: "https://github.com/acme/api/pull/12",
+                repository_url: "https://api.github.com/repos/acme/api",
+                updated_at: updatedAt,
+              },
+            ]
+          : [],
+    }) as unknown as Octokit
+
+  it("refreshes a known PR whose review was re-requested without a notification", async () => {
+    await db.insert(repos).values({ fullName: "acme/api", tracked: true })
+    await db.insert(items).values({
+      key: "acme/api#12",
+      repoFullName: "acme/api",
+      number: 12,
+      kind: "PullRequest",
+      title: "Add retries",
+      htmlUrl: "https://github.com/acme/api/pull/12",
+      reason: "review_requested",
+      view: "other",
+      updatedAt: new Date("2026-10-13T09:52:00Z"),
+      enrichedAt: new Date("2026-10-13T09:53:00Z"),
+      doneAt: new Date("2026-10-13T09:53:00Z"),
+    })
+    await searchMissingSubjects(db, searchOctokit("2026-10-13T09:54:29Z"), true)
+    const [item] = await db.select().from(items)
+    expect(item.updatedAt.toISOString()).toBe("2026-10-13T09:54:29.000Z")
+    expect(item.doneAt).toBeNull()
   })
 })

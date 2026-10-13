@@ -119,5 +119,6 @@ export async function runDailyRecap(db: Database, now: Date = new Date()) {
       body: recap.line,
     },
   ])
-  if (preferences.standupEnabled) void startStandup(db, date)
+  if (preferences.standupEnabled) void startStandup(db, date, "team")
+  if (preferences.myStandupEnabled) void startStandup(db, date, "me")
 }

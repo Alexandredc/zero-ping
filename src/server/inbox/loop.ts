@@ -6,7 +6,7 @@ import {
   enrichItems,
   pollNotifications,
   rescoreAll,
-  searchReviewRequests,
+  searchMissingSubjects,
 } from "@/server/inbox/sync"
 import { prefetchLookups } from "@/server/slack/lookups"
 import { applyAutoRules } from "@/server/inbox/auto-done"
@@ -60,7 +60,7 @@ async function runOnce(forceSearch: boolean): Promise<number> {
     getViewer(),
   ])
   const { pollInterval } = await pollNotifications(db, octokit)
-  await searchReviewRequests(db, octokit, forceSearch)
+  await searchMissingSubjects(db, octokit, forceSearch)
   const notify = await attentionReady(db)
   const enriched = await enrichItems(db, octokit, viewer, undefined, { notify })
   // The initial backlog is done once a sync no longer fills a whole batch.

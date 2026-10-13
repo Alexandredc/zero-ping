@@ -8,6 +8,7 @@ import {
   SparklesIcon,
 } from "lucide-react"
 import { Hint } from "./hint"
+import { JevGauge } from "./jev-gauge"
 import { SlackIcon } from "@/components/brand-icons"
 import type { Item } from "@/server/db/schema"
 import type { InboxItem } from "@/server/inbox/actions"
@@ -154,12 +155,15 @@ export function ItemStrip({
   checked,
   onCheck,
   onSelect,
+  gauge = "priority",
 }: {
   item: InboxItem
   selected: boolean
   checked: boolean
   onCheck: () => void
   onSelect: () => void
+  /** « Toutes les PR » ranks by Jev alone, so its gauge shows Jev's urgency. */
+  gauge?: "priority" | "jev"
 }) {
   const [repoOwner, repoName] = item.repoFullName.split("/")
   const reasons = item.priorityReasons
@@ -190,10 +194,14 @@ export function ItemStrip({
         onClick={(event) => (event.shiftKey ? onCheck() : onSelect())}
         className="group flex min-w-0 flex-1 gap-3 py-3 pr-3 pl-2 text-left outline-none focus-visible:bg-muted/60"
       >
-        <PriorityGauge
-          priority={item.priority}
-          reasons={item.priorityReasons}
-        />
+        {gauge === "jev" ? (
+          <JevGauge urgency={item.jevUrgency} />
+        ) : (
+          <PriorityGauge
+            priority={item.priority}
+            reasons={item.priorityReasons}
+          />
+        )}
         <div className="flex min-w-0 flex-1 flex-col gap-1">
           <div className="flex h-5 items-center gap-1.5 text-xs text-muted-foreground">
             <Hint instant className="flex" content={kindLabel(item)}>

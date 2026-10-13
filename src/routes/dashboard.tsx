@@ -9,7 +9,7 @@ import {
   TimerIcon,
 } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
-import { Sidebar } from "@/components/inbox/sidebar"
+import { LeadPage, todayLabel } from "@/components/inbox/lead-page"
 import { Hint } from "@/components/inbox/hint"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
@@ -22,7 +22,6 @@ import {
   CardTitle,
 } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { ScrollArea } from "@/components/ui/scroll-area"
 import { Skeleton } from "@/components/ui/skeleton"
 import { dashboardQuery } from "@/hooks/use-inbox"
 import { avatarUrl, timeAgo } from "@/lib/format"
@@ -121,56 +120,53 @@ function WorkRuler({ workload }: { workload: Dashboard["workload"] }) {
 
 function Hero({ data }: { data: Dashboard }) {
   const { workload } = data
-  const today = new Date().toLocaleDateString("fr", {
-    weekday: "long",
-    day: "numeric",
-    month: "long",
-  })
   const legend: { view: ActiveView; label: string }[] = [
     { view: "review", label: "Reviews" },
     { view: "awaiting", label: "Réponses" },
     { view: "mine", label: "Mes PR" },
   ]
   return (
-    <section className="flex flex-col gap-5 rounded-xl border bg-card p-6">
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div className="flex flex-col gap-1">
-          <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
-            {today}
-          </p>
-          <h1 className="font-heading text-5xl leading-none font-semibold tracking-tight tabular-nums">
-            {workload.totalMinutes === 0
-              ? "Zéro Ping"
-              : formatMinutes(workload.totalMinutes)}
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            {workload.totalMinutes === 0
-              ? "Rien ne t'attend. Profites-en."
-              : "de travail t'attend, estimé d'après la taille des PR et les messages."}
-          </p>
+    <Card>
+      <CardContent className="flex flex-col gap-5">
+        <div className="flex flex-wrap items-end justify-between gap-4">
+          <div className="flex flex-col gap-1">
+            <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+              Ta file de travail
+            </p>
+            <h2 className="font-heading text-5xl leading-none font-semibold tracking-tight tabular-nums">
+              {workload.totalMinutes === 0
+                ? "Zéro Ping"
+                : formatMinutes(workload.totalMinutes)}
+            </h2>
+            <p className="text-sm text-muted-foreground">
+              {workload.totalMinutes === 0
+                ? "Rien ne t'attend. Profites-en."
+                : "de travail t'attend, estimé d'après la taille des PR et les messages."}
+            </p>
+          </div>
+          <dl className="flex gap-5 text-sm">
+            {legend.map(({ view, label }) => (
+              <div key={view} className="flex flex-col gap-0.5">
+                <dt className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                  <span
+                    className={cn("size-2 rounded-full", VIEW_TONE[view].dot)}
+                  />
+                  {label}
+                </dt>
+                <dd className="font-mono tabular-nums">
+                  <span className="font-medium">{workload.counts[view]}</span>
+                  <span className="text-muted-foreground">
+                    {" "}
+                    · {formatMinutes(workload.byView[view]).replace("≈ ", "")}
+                  </span>
+                </dd>
+              </div>
+            ))}
+          </dl>
         </div>
-        <dl className="flex gap-5 text-sm">
-          {legend.map(({ view, label }) => (
-            <div key={view} className="flex flex-col gap-0.5">
-              <dt className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                <span
-                  className={cn("size-2 rounded-full", VIEW_TONE[view].dot)}
-                />
-                {label}
-              </dt>
-              <dd className="font-mono tabular-nums">
-                <span className="font-medium">{workload.counts[view]}</span>
-                <span className="text-muted-foreground">
-                  {" "}
-                  · {formatMinutes(workload.byView[view]).replace("≈ ", "")}
-                </span>
-              </dd>
-            </div>
-          ))}
-        </dl>
-      </div>
-      {workload.totalMinutes > 0 && <WorkRuler workload={workload} />}
-    </section>
+        {workload.totalMinutes > 0 && <WorkRuler workload={workload} />}
+      </CardContent>
+    </Card>
   )
 }
 
@@ -564,35 +560,30 @@ function Trends({ data }: { data: Dashboard }) {
 function DashboardPage() {
   const { data, isPending } = useQuery(dashboardQuery())
   return (
-    <div className="flex h-svh overflow-hidden">
-      <Sidebar page="dashboard" />
-      <main className="flex min-w-0 flex-1 flex-col">
-        <ScrollArea className="min-h-0 flex-1">
-          <div className="mx-auto flex max-w-6xl flex-col gap-4 p-5">
-            {isPending && (
-              <>
-                <Skeleton className="h-48 w-full" />
-                <Skeleton className="h-72 w-full" />
-              </>
-            )}
-            {data && (
-              <>
-                <Hero data={data} />
-                <div className="grid gap-4 xl:grid-cols-2">
-                  <NextActions data={data} />
-                  <TeamWeather data={data} />
-                </div>
-                <Trends data={data} />
-                <p className="text-center text-xs text-muted-foreground">
-                  Estimations : 5 à 60 min par review selon la taille de la PR
-                  (moitié pour une re-review), 5 min par réponse, 2 à 20 min
-                  pour tes PR.
-                </p>
-              </>
-            )}
+    <LeadPage
+      page="dashboard"
+      description={`${todayLabel()} · ta charge, tes prochaines actions, la météo de l'équipe et les tendances.`}
+    >
+      {isPending && (
+        <>
+          <Skeleton className="h-48 w-full" />
+          <Skeleton className="h-72 w-full" />
+        </>
+      )}
+      {data && (
+        <>
+          <Hero data={data} />
+          <div className="grid gap-4 xl:grid-cols-2">
+            <NextActions data={data} />
+            <TeamWeather data={data} />
           </div>
-        </ScrollArea>
-      </main>
-    </div>
+          <Trends data={data} />
+          <p className="text-center text-xs text-muted-foreground">
+            Estimations : 5 à 60 min par review selon la taille de la PR (moitié
+            pour une re-review), 5 min par réponse, 2 à 20 min pour tes PR.
+          </p>
+        </>
+      )}
+    </LeadPage>
   )
 }

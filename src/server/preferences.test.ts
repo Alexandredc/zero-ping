@@ -1,7 +1,9 @@
 import { beforeEach, describe, expect, it } from "vitest"
 import {
   getPreferences,
+  channelIdOf,
   normalizeChannel,
+  resolveExclusions,
   preferencesPatchSchema,
   updatePreferences,
   withoutExcludedChannels,
@@ -12,7 +14,8 @@ import { getAgentConfig } from "@/server/agents/runner"
 
 const thread = (channel: string) => ({
   channel,
-  permalink: `https://acme.slack.com/archives/C1/p${channel.length}`,
+  // One channel id per name, as Slack gives each channel its own.
+  permalink: `https://acme.slack.com/archives/C${channel.replace(/\W/g, "").toUpperCase()}/p1`,
   match: "link" as const,
   messages: [],
 })
@@ -28,6 +31,8 @@ describe("preferences", () => {
     expect(await getPreferences(db)).toEqual({
       slackExcludedChannels: [],
       slackAutoSearch: true,
+      reviewNoticeEnabled: true,
+      reviewNoticeChannel: "pull-requests",
       agentCli: null,
       agentModel: null,
       summaryModel: null,
@@ -43,8 +48,10 @@ describe("preferences", () => {
       recapEnabled: true,
       recapTime: "09:05",
       standupEnabled: true,
+      myStandupEnabled: true,
       teamStaleDays: 7,
       reviewSlaHours: 24,
+      sprintProject: null,
     })
   })
 
@@ -75,6 +82,45 @@ describe("withoutExcludedChannels", () => {
       ["tech-team-general"]
     )
     expect(visible.map((t) => t.channel)).toEqual(["#pull-requests"])
+  })
+})
+
+describe("channel ids", () => {
+  const dm = (channel: string, ts: string) => ({
+    channel,
+    permalink: `https://acme.slack.com/archives/D01ABCD2EFG/p${ts}`,
+    match: "link" as const,
+    messages: [],
+  })
+
+  it("reads the channel id from the permalink", () => {
+    expect(channelIdOf("https://acme.slack.com/archives/D01ABCD2EFG/p1")).toBe(
+      "d01abcd2efg"
+    )
+    expect(channelIdOf("https://example.com/thread")).toBeNull()
+  })
+
+  it("hides a DM under every name the agent gives it, from one excluded name", () => {
+    const hidden = resolveExclusions(
+      ["dm github (bot) / alexandre da costa"],
+      [dm("#dm github (bot) / alexandre da costa", "1")]
+    )
+    const visible = withoutExcludedChannels(
+      [
+        dm("#dm (github bot ↔ alexandre da costa)", "2"),
+        thread("#pull-requests"),
+      ],
+      hidden
+    )
+    expect(visible.map((t) => t.channel)).toEqual(["#pull-requests"])
+  })
+
+  it("accepts a channel id as an exclusion", () => {
+    const visible = withoutExcludedChannels(
+      [dm("#dm with github", "3")],
+      ["D01ABCD2EFG"]
+    )
+    expect(visible).toEqual([])
   })
 })
 

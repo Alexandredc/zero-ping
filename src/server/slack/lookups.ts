@@ -4,7 +4,7 @@ import type { AgentConfig, AgentTask } from "@/server/agents/runner"
 import type { Database } from "@/server/db/client"
 import { items, slackLookups } from "@/server/db/schema"
 import type { Item, SlackLookup } from "@/server/db/schema"
-import { getPreferences } from "@/server/preferences"
+import { getPreferences, resolveExclusions } from "@/server/preferences"
 import {
   DISCUSSIONS_JSON_SCHEMA,
   buildSlackPrompt,
@@ -38,6 +38,21 @@ function isFresh(lookup: SlackLookup | undefined, now: number): boolean {
   return now - (lookup.finishedAt ?? lookup.startedAt).getTime() < LOOKUP_TTL_MS
 }
 
+/** Excluded names and channel ids, resolved over every thread found so far. */
+export async function slackExclusions(
+  db: Database,
+  excluded: string[]
+): Promise<Set<string>> {
+  if (excluded.length === 0) return new Set()
+  const rows = await db
+    .select({ discussions: slackLookups.discussions })
+    .from(slackLookups)
+  return resolveExclusions(
+    excluded,
+    rows.flatMap((row) => row.discussions)
+  )
+}
+
 /** Agent settings from the settings page, over the `.env` defaults. */
 export async function resolveAgentConfig(db: Database) {
   return getAgentConfig(process.env, await getPreferences(db))
@@ -56,9 +71,10 @@ async function runLookup(db: Database, item: Item, runner: AgentRunner) {
             number: item.number ?? 0,
             title: item.title,
             htmlUrl: item.htmlUrl,
+            kind: item.kind === "Issue" ? "Issue" : "PullRequest",
           },
           tools,
-          preferences.slackExcludedChannels
+          [...(await slackExclusions(db, preferences.slackExcludedChannels))]
         ),
         schema: DISCUSSIONS_JSON_SCHEMA,
         allowedTools: tools,
@@ -105,7 +121,11 @@ export async function requestLookup(
   ).at(0)
   if (queued.has(item.key)) return current
   if (!options.force && isFresh(current, now)) return current
-  if (item.kind !== "PullRequest" || item.number === null) return current
+  if (
+    (item.kind !== "PullRequest" && item.kind !== "Issue") ||
+    item.number === null
+  )
+    return current
 
   const pending = {
     itemKey: item.key,

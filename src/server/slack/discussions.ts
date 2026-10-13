@@ -7,6 +7,7 @@ export type SlackSubject = {
   number: number
   title: string
   htmlUrl: string
+  kind?: "PullRequest" | "Issue"
 }
 
 const discussionsSchema = z.strictObject({
@@ -58,9 +59,11 @@ export function buildSlackPrompt(
   excludedChannels: string[] = []
 ): string {
   const repoName = subject.repoFullName.split("/")[1]
-  const path = `${repoName}/pull/${subject.number}`
+  const isIssue = subject.kind === "Issue"
+  const noun = isIssue ? "issue" : "pull request"
+  const path = `${repoName}/${isIssue ? "issues" : "pull"}/${subject.number}`
   return [
-    `Find Slack discussions about the GitHub pull request ${subject.htmlUrl}`,
+    `Find Slack discussions about the GitHub ${noun} ${subject.htmlUrl}`,
     `(repository ${subject.repoFullName}, number ${subject.number}, title "${subject.title}").`,
     "",
     ...(tools.length
@@ -71,15 +74,16 @@ export function buildSlackPrompt(
     "Use your Slack tools to search three ways:",
     `1. Messages containing "${path}" or the full URL. Mark them match "link".`,
     `2. Messages mentioning "${repoName}#${subject.number}" or "#${subject.number}" alongside the repository. Mark them match "reference".`,
-    `3. Messages discussing the title. Mark them match "title", and only keep them when they are clearly about this pull request.`,
+    `3. Messages discussing the title. Mark them match "title", and only keep them when they are clearly about this ${noun}.`,
     "",
     ...(excludedChannels.length
       ? [
-          `Ignore these channels entirely: ${excludedChannels.map((channel) => `#${channel}`).join(", ")}.`,
+          `Ignore these channels entirely, matched by name or by channel ID (the ID is in the permalink, after /archives/): ${excludedChannels.join(", ")}.`,
         ]
       : []),
     "For every matching message, read its thread and return the whole conversation, root message first.",
     "Return each thread once, with its channel name (with #) and its Slack permalink.",
+    'Name a direct message "#dm <other participant\'s name>", always the same way.',
     "Keep message text verbatim in Slack mrkdwn and postedAt in ISO 8601.",
     "Set searched to true only if a Slack search tool actually ran; if you have no Slack access, set it to false.",
     "Return an empty list when nothing matches. Read only: never post, react or edit anything.",

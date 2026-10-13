@@ -1,3 +1,4 @@
+import { useRef } from "react"
 import { BellIcon } from "lucide-react"
 import type { getSettings } from "@/server/inbox/actions"
 import type { AttentionKind } from "@/server/db/schema"
@@ -26,6 +27,7 @@ import {
 import { Switch } from "@/components/ui/switch"
 import { useSavePreferences } from "@/hooks/use-inbox"
 import { useNotificationPermission } from "@/hooks/use-notification-permission"
+import { toast } from "@/components/ui/toast"
 
 type Settings = Awaited<ReturnType<typeof getSettings>>
 
@@ -53,6 +55,10 @@ const KINDS: { kind: AttentionKind; label: string; description: string }[] = [
   },
 ]
 
+/** The browser can accept a notification that macOS then hides. */
+const MACOS_HINT =
+  "Tu ne la vois pas ? Autorise ton navigateur dans Réglages Système > Notifications (Dia, Chrome…) et vérifie qu'aucun mode Concentration n'est actif."
+
 const PERMISSION_LABEL = {
   granted: "autorisées",
   denied: "bloquées",
@@ -63,7 +69,40 @@ const PERMISSION_LABEL = {
 export function NotificationSettings({ settings }: { settings: Settings }) {
   const save = useSavePreferences()
   const { permission, request } = useNotificationPermission()
+  const lastTest = useRef<Notification | null>(null)
   const { notifyEnabled, notifyKinds } = settings.preferences
+
+  const sendTest = () => {
+    // The previous test may still sit on screen: macOS then folds the new one into it.
+    lastTest.current?.close()
+    const sentAt = new Date().toLocaleTimeString("fr")
+    const notification = showNotification("Review demandée", {
+      // The time keeps two tests from looking identical, which some browsers drop.
+      body: `acme-web#1234 · Notification de test envoyée à ${sentAt}`,
+      tag: `test-${Date.now()}`,
+      renotify: true,
+    } as NotificationOptions)
+    lastTest.current = notification
+    if (!notification) {
+      toast.add({
+        title: "Notification impossible",
+        description: "Le navigateur ne l'autorise pas pour cette page.",
+        type: "error",
+      })
+      return
+    }
+    notification.onshow = () =>
+      toast.add({
+        title: "Notification transmise à macOS",
+        description: MACOS_HINT,
+      })
+    notification.onerror = () =>
+      toast.add({
+        title: "Notification refusée",
+        description: MACOS_HINT,
+        type: "error",
+      })
+  }
 
   const toggleKind = (kind: AttentionKind, on: boolean) =>
     save.mutate({
@@ -167,12 +206,7 @@ export function NotificationSettings({ settings }: { settings: Settings }) {
               variant="outline"
               size="sm"
               disabled={permission !== "granted"}
-              onClick={() =>
-                showNotification("Review demandée", {
-                  body: "acme-web#1234 · Exemple de notification Zéro Ping",
-                  tag: "test",
-                })
-              }
+              onClick={sendTest}
             >
               Envoyer un test
             </Button>

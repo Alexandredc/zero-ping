@@ -215,10 +215,17 @@ export function analyze(details: SubjectDetails, viewer: Viewer): Analysis {
     lastReview?.state === "CHANGES_REQUESTED" &&
     lastReview.newCommits
 
+  // The viewer's own PRs stay together in « Mes PR », even when someone
+  // waits for an answer there: the awaiting message is kept and still pings.
   let view: View = "other"
   if (reviewRequest || changesAddressed) view = "review"
+  else if (
+    isAuthor &&
+    details.kind === "PullRequest" &&
+    details.state === "OPEN"
+  )
+    view = "mine"
   else if (awaiting) view = "awaiting"
-  else if (isAuthor && details.state === "OPEN") view = "mine"
 
   return { view, reviewRequest, requestedAt, awaiting, lastReview }
 }

@@ -10,6 +10,7 @@ import {
 import { z } from "zod"
 import { GitHubIcon, SlackIcon } from "@/components/brand-icons"
 import { Sidebar } from "@/components/inbox/sidebar"
+import { PAGE_META } from "@/components/inbox/pages"
 import { AgentSettings } from "@/components/settings/agent-settings"
 import { NotificationSettings } from "@/components/settings/notification-settings"
 import { ReposSettings } from "@/components/settings/repos-settings"
@@ -69,8 +70,9 @@ function SettingsPage() {
             <ArrowLeftIcon />
           </Button>
           <div>
-            <h1 className="font-heading text-lg font-semibold tracking-tight">
-              Réglages
+            <h1 className="flex items-center gap-2 font-heading text-lg font-semibold tracking-tight">
+              <PAGE_META.settings.icon className="size-5 shrink-0 text-muted-foreground" />
+              {PAGE_META.settings.label}
             </h1>
             <p className="text-xs text-muted-foreground">
               Enregistrés sur ton Mac, appliqués tout de suite.
