@@ -105,9 +105,9 @@ function AuthorAvatar({ login, isPull }: { login: string; isPull: boolean }) {
     <Hint
       instant
       content={`${isPull ? "PR ouverte" : "Issue ouverte"} par @${login}`}
-      className="mt-0.5 shrink-0"
+      className="shrink-0"
     >
-      <Avatar className="size-11">
+      <Avatar className="size-10">
         <AvatarImage src={avatarUrl(login, 88)} alt={login} />
         <AvatarFallback>{login.slice(0, 2).toUpperCase()}</AvatarFallback>
       </Avatar>
@@ -132,7 +132,7 @@ function BranchName({
               toast.add({ title: "Branche copiée", description: branches.head })
             )
         }
-        className="inline-flex min-w-0 items-center gap-1 rounded font-mono text-xs text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+        className="inline-flex max-w-full min-w-0 items-center gap-1 rounded align-baseline font-mono text-xs text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
       >
         <GitBranchIcon className="size-3.5 shrink-0" />
         <span className="max-w-64 truncate">{branches.head}</span>
@@ -232,29 +232,16 @@ export function DetailPanel({
     >
       {isPull && <ChecksBar itemKey={item.key} />}
       <header className="flex flex-col gap-3 border-b px-5 py-4">
-        <div className="flex items-start gap-3">
-          {item.author && <AuthorAvatar login={item.author} isPull={isPull} />}
-          <div className="flex min-w-0 flex-1 flex-col gap-1">
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-              <p className="font-mono text-xs text-muted-foreground">
-                {item.repoFullName}
-                {item.number !== null && `#${item.number}`}
-              </p>
-              {conversation?.branches && (
-                <BranchName branches={conversation.branches} />
-              )}
-              {isPull && <ChecksIndicator itemKey={item.key} />}
-            </div>
-            <h2 className="font-heading text-xl leading-tight font-semibold tracking-tight">
-              {item.title}
-            </h2>
-            {item.number !== null &&
-              (item.kind === "PullRequest" || item.kind === "Issue") && (
-                <div className="flex flex-wrap items-center gap-1.5 pt-1">
-                  <ProjectFields itemKey={item.key} />
-                  {isPull && <UatBadge itemKey={item.key} />}
-                </div>
-              )}
+        <div className="flex items-center gap-2">
+          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-1">
+            <p className="font-mono text-xs text-muted-foreground">
+              {item.repoFullName}
+              {item.number !== null && `#${item.number}`}
+            </p>
+            {conversation?.branches && (
+              <BranchName branches={conversation.branches} />
+            )}
+            {isPull && <ChecksIndicator itemKey={item.key} />}
           </div>
           {onToggleFullscreen && (
             <FullscreenToggle
@@ -273,6 +260,19 @@ export function DetailPanel({
             </Button>
           </ActionHint>
         </div>
+        <div className="flex items-center gap-3">
+          {item.author && <AuthorAvatar login={item.author} isPull={isPull} />}
+          <h2 className="min-w-0 font-heading text-xl leading-tight font-semibold tracking-tight">
+            {item.title}
+          </h2>
+        </div>
+        {item.number !== null &&
+          (item.kind === "PullRequest" || item.kind === "Issue") && (
+            <div className="flex flex-wrap items-center gap-1.5">
+              <ProjectFields itemKey={item.key} />
+              {isPull && <UatBadge itemKey={item.key} />}
+            </div>
+          )}
         <div className="flex flex-wrap items-center gap-2">
           <ActionHint
             content={

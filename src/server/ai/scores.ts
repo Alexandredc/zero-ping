@@ -4,6 +4,8 @@ import { aiScores } from "@/server/db/schema"
 import type { SubjectDetails } from "@/server/inbox/analyze"
 import { MIN_AI_CONFIDENCE } from "@/server/inbox/priority"
 import { getDecisionModel } from "./models"
+import { getOctokit } from "@/server/github/client"
+import { projectPriorities } from "@/server/issues/project"
 import { triage, triageHash } from "./triage"
 import type { TriageInput } from "./triage"
 
@@ -28,7 +30,8 @@ export type Score = { urgency: number; confidence: number | null }
 /** The triage input of a subject, with neutral values for what Jev does not read. */
 export function toTriageInput(
   subject: ScoreSubject,
-  viewerLogin: string
+  viewerLogin: string,
+  projectPriority: string | null = null
 ): TriageInput {
   const details: SubjectDetails = {
     kind: subject.kind,
@@ -60,7 +63,7 @@ export function toTriageInput(
     })),
     reviewThreads: [],
   }
-  return { details, awaiting: null, viewerLogin }
+  return { details, awaiting: null, viewerLogin, projectPriority }
 }
 
 /** The urgency to rank by, or null when Jev has not answered or was unsure. */
@@ -114,10 +117,18 @@ export function scoreInBackground(
         )
       )
     const known = new Map(rows.map((row) => [row.key, row.hash]))
+    const boardPriorities = await projectPriorities(
+      await getOctokit(),
+      subjects.map((subject) => subject.key)
+    )
     const queue = subjects
       .filter((subject) => !inFlight.has(subject.key))
       .map((subject) => {
-        const input = toTriageInput(subject, viewerLogin)
+        const input = toTriageInput(
+          subject,
+          viewerLogin,
+          boardPriorities.get(subject.key) ?? null
+        )
         return { subject, input, hash: triageHash(input) }
       })
       .filter(({ subject, hash }) => known.get(subject.key) !== hash)

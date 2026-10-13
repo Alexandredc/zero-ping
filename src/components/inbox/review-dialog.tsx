@@ -71,7 +71,8 @@ export function ReviewDialog({
   const actions = useInboxActions()
   const send = useSendReviewNotice()
   const { data: notice } = useQuery(reviewNoticeQuery(review.key, review.event))
-  const [notify, setNotify] = useState(true)
+  // An approval rarely needs a ping: the message is offered, not sent by default.
+  const [notify, setNotify] = useState(review.event !== "APPROVE")
   const [message, setMessage] = useState("")
   const ready = notice?.enabled ? notice : null
   const copy = COPY[review.event]

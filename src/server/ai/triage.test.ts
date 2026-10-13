@@ -1,7 +1,7 @@
 import type { Experimental_DecisionModelV4CallOptions } from "@ai-sdk/provider"
 import { Experimental_DecisionMockModelV4 } from "ai/test"
 import { describe, expect, it } from "vitest"
-import { triage, triageHash } from "./triage"
+import { buildTriageState, triage, triageHash } from "./triage"
 import type { TriageInput } from "./triage"
 import type { SubjectDetails } from "@/server/inbox/analyze"
 
@@ -90,6 +90,18 @@ describe("triageHash", () => {
         ...input,
         details: { ...details, labels: ["hotfix", "p0"] },
       })
+    )
+  })
+})
+
+describe("buildTriageState", () => {
+  it("adds the board's priority only for an item that has a card", () => {
+    expect(buildTriageState(input)).not.toHaveProperty("projectPriority")
+    expect(triageHash({ ...input, projectPriority: null })).toBe(
+      triageHash(input)
+    )
+    expect(buildTriageState({ ...input, projectPriority: "P0" })).toMatchObject(
+      { projectPriority: "P0" }
     )
   })
 })

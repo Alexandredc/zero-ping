@@ -82,6 +82,7 @@ export const conversationQuery = (key: string) =>
     queryKey: ["conversation", key],
     queryFn: () => getItemConversation({ data: { key } }),
     staleTime: 30_000,
+    refetchInterval: 30_000,
   })
 
 export type SlackSubjectInput = {
@@ -525,6 +526,7 @@ export const workConversationQuery = (
     queryKey: ["work-conversation", key],
     queryFn: () => getWorkItemConversation({ data: { key, kind } }),
     staleTime: 30_000,
+    refetchInterval: 30_000,
   })
 
 export const projectFieldsQuery = (key: string) =>
@@ -532,6 +534,7 @@ export const projectFieldsQuery = (key: string) =>
     queryKey: ["project-fields", key],
     queryFn: () => getItemProjectFields({ data: { key } }),
     staleTime: 60_000,
+    refetchInterval: 60_000,
   })
 
 export const quietQuery = () =>
@@ -548,6 +551,7 @@ export const linkedIssuesQuery = (key: string) =>
     queryKey: ["linked-issues", key],
     queryFn: () => getItemLinkedIssues({ data: { key } }),
     staleTime: 5 * 60_000,
+    refetchInterval: 5 * 60_000,
   })
 
 export const uatStatusQuery = (key: string) =>
@@ -555,6 +559,7 @@ export const uatStatusQuery = (key: string) =>
     queryKey: ["uat", key],
     queryFn: () => getItemUatStatus({ data: { key } }),
     staleTime: 2 * 60_000,
+    refetchInterval: 2 * 60_000,
   })
 
 /** Sets the status or priority of an item's card, showing it before GitHub answers. */

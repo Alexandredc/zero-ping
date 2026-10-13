@@ -34,10 +34,13 @@ import type {
 } from "@/server/db/schema"
 import { getOctokit, getViewer } from "@/server/github/client"
 import { fetchConversation } from "@/server/github/conversation"
+import type { Conversation } from "@/server/github/conversation"
+import { createSwrCache } from "@/server/cache/swr"
 import { fetchPullFiles, setFileViewed } from "@/server/github/pull-files"
 import { fetchMergeInfo, mergePull } from "@/server/github/merge"
 import type { MergeMethod } from "@/server/github/merge"
 import { fetchChecks, rerunFailedJobs } from "@/server/github/checks"
+import type { PullChecks } from "@/server/github/checks"
 import {
   fetchReviewerOptions,
   reviewerChanges,
@@ -46,12 +49,15 @@ import {
 import {
   fetchAssignedIssues,
   fetchSprint,
-  fetchSprintBoard,
-  listSprintProjects,
   setItemStatus,
 } from "@/server/issues/sprint"
-import type { Sprint, SprintProjectRef, WorkItem } from "@/server/issues/sprint"
+import type { Sprint, WorkItem } from "@/server/issues/sprint"
 import { fetchProjectFields } from "@/server/issues/project-fields"
+import {
+  pickSprintProject,
+  sprintBoard,
+  sprintProjects,
+} from "@/server/issues/project"
 import {
   fetchPullForUat,
   fetchUatCommits,
@@ -408,6 +414,38 @@ async function getItem(key: string): Promise<Item> {
   throw new Error(`Élément introuvable : ${key}`)
 }
 
+const HOUR_MS = 60 * 60 * 1000
+
+/**
+ * What the detail panel reads from GitHub, kept stale-while-revalidate: an item
+ * opened again shows at once what it showed, while GitHub is asked behind.
+ */
+const conversations = createSwrCache<Conversation | null>({
+  freshMs: 20_000,
+  maxAgeMs: 6 * HOUR_MS,
+})
+const checksCache = createSwrCache<PullChecks>({
+  freshMs: 20_000,
+  maxAgeMs: 6 * HOUR_MS,
+})
+
+function cachedConversation(
+  octokit: Octokit,
+  ref: { owner: string; repo: string; number: number },
+  kind: "PullRequest" | "Issue"
+) {
+  return conversations.get(
+    `${kind}:${ref.owner}/${ref.repo}#${ref.number}`,
+    () => fetchConversation(octokit, { ...ref, kind })
+  )
+}
+
+/** A change made from the app shows on the next read, not after the cache ages. */
+function forgetConversation(key: string) {
+  conversations.invalidate(`PullRequest:${key}`)
+  conversations.invalidate(`Issue:${key}`)
+}
+
 export async function getConversation(key: string) {
   const item = await getItem(key)
   const ref = parseSubjectKey(key)
@@ -415,10 +453,7 @@ export async function getConversation(key: string) {
     return { item, conversation: null }
   }
   const octokit = await getOctokit()
-  const conversation = await fetchConversation(octokit, {
-    ...ref,
-    kind: item.kind,
-  })
+  const conversation = await cachedConversation(octokit, ref, item.kind)
   if (item.threadId && item.unread) {
     await octokit.rest.activity.markThreadAsRead({
       thread_id: Number(item.threadId),
@@ -487,7 +522,7 @@ export async function getWorkConversation(
 ) {
   const ref = parseSubjectKey(key)
   if (!ref) throw new Error(`Élément illisible : ${key}`)
-  return fetchConversation(await getOctokit(), { ...ref, kind })
+  return cachedConversation(await getOctokit(), ref, kind)
 }
 
 async function refreshItem(key: string) {
@@ -522,6 +557,7 @@ export async function reply(key: string, body: string, target: ReplyTarget) {
           issue_number: ref.number,
           body,
         })
+  forgetConversation(key)
   // Issues of « Mes issues » may not be in the inbox.
   if (await isInInbox(key)) await refreshItem(key)
   return { url: data.html_url }
@@ -544,6 +580,7 @@ export async function submitReview(
     event,
     body: body || undefined,
   })
+  forgetConversation(key)
   await refreshItem(key)
   return { url: data.html_url }
 }
@@ -1225,16 +1262,20 @@ export async function merge(
     method,
     deleteBranch,
   })
+  forgetConversation(key)
+  checksCache.invalidate(key)
   await refreshItem(key)
   return result
 }
 
 export async function getChecks(key: string) {
-  return fetchChecks(await getOctokit(), pullRef(key))
+  const ref = pullRef(key)
+  return checksCache.get(key, async () => fetchChecks(await getOctokit(), ref))
 }
 
 export async function rerunChecks(key: string) {
   const runs = await rerunFailedJobs(await getOctokit(), pullRef(key))
+  checksCache.invalidate(key)
   // The new runs take a few seconds to replace the failed status.
   setTimeout(() => void refreshItem(key).catch(() => undefined), 15_000)
   return { runs }
@@ -1320,42 +1361,6 @@ export async function setReviewers(key: string, wanted: string[]) {
   return changes
 }
 
-const PROJECTS_TTL_MS = 10 * 60 * 1000
-let projectsCache: { at: number; projects: SprintProjectRef[] } | null = null
-
-/** Projects with a sprint, among the owners of the tracked repos and the viewer's own. */
-async function sprintProjects(): Promise<SprintProjectRef[]> {
-  if (projectsCache && Date.now() - projectsCache.at < PROJECTS_TTL_MS)
-    return projectsCache.projects
-  const db = await getDb()
-  const [octokit, viewer, tracked] = await Promise.all([
-    getOctokit(),
-    getViewer(),
-    db.select().from(repos).where(eq(repos.tracked, true)),
-  ])
-  const owners = [
-    ...new Set([
-      ...tracked.map((repo) => repo.fullName.split("/")[0]),
-      viewer.login,
-    ]),
-  ]
-  const projects = await listSprintProjects(octokit, owners)
-  projectsCache = { at: Date.now(), projects }
-  return projects
-}
-
-/** The project chosen in the settings, else the first one with a sprint. */
-function pickSprintProject(
-  projects: SprintProjectRef[],
-  preference: string | null
-): SprintProjectRef | null {
-  return (
-    projects.find((p) => `${p.owner}/${p.number}` === preference) ??
-    projects.at(0) ??
-    null
-  )
-}
-
 /** « Mes issues »: the issues assigned to the viewer, and the current sprint of the team. */
 export async function listIssues() {
   const db = await getDb()
@@ -1400,28 +1405,28 @@ export async function listIssues() {
   }
 }
 
-let boardCache: {
-  at: number
-  ref: string
-  board: Awaited<ReturnType<typeof fetchSprintBoard>>
-} | null = null
+const projectFieldsCache = createSwrCache<
+  Awaited<ReturnType<typeof loadProjectFields>>
+>({ freshMs: 2 * 60_000, maxAgeMs: 24 * HOUR_MS })
 
-/** The sprint project's board fields, cached like the project list. */
-async function sprintBoard(octokit: Octokit, project: SprintProjectRef) {
-  const ref = `${project.owner}/${project.number}`
-  if (
-    boardCache &&
-    boardCache.ref === ref &&
-    Date.now() - boardCache.at < PROJECTS_TTL_MS
-  )
-    return boardCache.board
-  const board = await fetchSprintBoard(octokit, project)
-  boardCache = { at: Date.now(), ref, board }
-  return board
+/** Lists the sprint projects and reads the board, so the first panel opened finds them ready. */
+export async function warmProjectCaches() {
+  const db = await getDb()
+  const [octokit, preferences, projects] = await Promise.all([
+    getOctokit(),
+    getPreferences(db),
+    sprintProjects(),
+  ])
+  const project = pickSprintProject(projects, preferences.sprintProject)
+  if (project) await sprintBoard(octokit, project)
 }
 
 /** The status and priority of a PR or an issue on the sprint project's board. */
-export async function getProjectFields(key: string) {
+export function getProjectFields(key: string) {
+  return projectFieldsCache.get(key, () => loadProjectFields(key))
+}
+
+async function loadProjectFields(key: string) {
   const db = await getDb()
   const [octokit, preferences, projects] = await Promise.all([
     getOctokit(),
@@ -1465,8 +1470,17 @@ function uatLedgerOf(octokit: Octokit, repo: string) {
   return ledger
 }
 
+const uatStatusCache = createSwrCache<UatStatus | null>({
+  freshMs: 2 * 60_000,
+  maxAgeMs: 24 * HOUR_MS,
+})
+
 /** Whether a PR runs on uat; null for a repo without a uat branch. */
-export async function getUatStatus(key: string): Promise<UatStatus | null> {
+export function getUatStatus(key: string): Promise<UatStatus | null> {
+  return uatStatusCache.get(key, () => loadUatStatus(key))
+}
+
+async function loadUatStatus(key: string): Promise<UatStatus | null> {
   const ref = parseSubjectKey(key)
   if (!ref) return null
   const octokit = await getOctokit()
@@ -1554,8 +1568,17 @@ export type LinkedIssue = {
   assignees: string[]
 }
 
+const linkedIssuesCache = createSwrCache<LinkedIssue[]>({
+  freshMs: 5 * 60_000,
+  maxAgeMs: 24 * HOUR_MS,
+})
+
 /** The issues a PR closes, as GitHub's « Development » box links them. */
-export async function getLinkedIssues(key: string): Promise<LinkedIssue[]> {
+export function getLinkedIssues(key: string): Promise<LinkedIssue[]> {
+  return linkedIssuesCache.get(key, () => loadLinkedIssues(key))
+}
+
+async function loadLinkedIssues(key: string): Promise<LinkedIssue[]> {
   const ref = parseSubjectKey(key)
   if (!ref) return []
   const data = await (
@@ -1610,6 +1633,8 @@ export async function moveWorkItem(input: {
   optionId: string
 }) {
   await setItemStatus(await getOctokit(), input)
+  // The card may be the PR's own or its issue's: forget every item's fields.
+  projectFieldsCache.clear()
 }
 
 const MENTIONS_TTL_MS = 10 * 60 * 1000

@@ -9,6 +9,7 @@ import {
 } from "lucide-react"
 import { Hint } from "./hint"
 import { JevGauge } from "./jev-gauge"
+import { CiIcon } from "./ci-icon"
 import { SlackIcon } from "@/components/brand-icons"
 import type { Item } from "@/server/db/schema"
 import type { InboxItem } from "@/server/inbox/actions"
@@ -178,7 +179,7 @@ export function ItemStrip({
         "data-checked:bg-accent/60 data-selected:bg-accent data-selected:hover:bg-accent"
       )}
     >
-      <span className="flex w-7 shrink-0 justify-end pt-3.5">
+      <span className="flex w-5 shrink-0 justify-end pt-3.5">
         <Checkbox
           aria-label={`Sélectionner ${item.title}`}
           checked={checked}
@@ -192,7 +193,7 @@ export function ItemStrip({
       <button
         type="button"
         onClick={(event) => (event.shiftKey ? onCheck() : onSelect())}
-        className="group flex min-w-0 flex-1 gap-3 py-3 pr-3 pl-2 text-left outline-none focus-visible:bg-muted/60"
+        className="group flex min-w-0 flex-1 gap-2.5 py-3 pr-3 pl-1 text-left outline-none focus-visible:bg-muted/60"
       >
         {gauge === "jev" ? (
           <JevGauge urgency={item.jevUrgency} />
@@ -214,6 +215,7 @@ export function ItemStrip({
                 <span className="opacity-60">#{item.number}</span>
               )}
             </span>
+            {item.kind === "PullRequest" && <CiIcon ciState={item.ciState} />}
             {item.unread && (
               <Hint instant className="flex" content="Non lu sur GitHub">
                 <span
@@ -254,10 +256,6 @@ export function ItemStrip({
                 </Hint>
               )}
               <SizeChip item={item} />
-              {/* Fixed width keeps the chips of every row in the same column. */}
-              <span className="w-16 text-right tabular-nums">
-                {timeAgo(item.updatedAt)}
-              </span>
               {item.author && (
                 <Hint
                   instant
@@ -299,8 +297,9 @@ export function ItemStrip({
               Classé automatiquement · {item.autoDoneReason}
             </p>
           )}
-          {(reasons.length > 0 || item.needsCheck) && (
-            <p className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[0.7rem] text-muted-foreground">
+          {/* The age closes the row on the right, on one line whatever its length. */}
+          <div className="flex items-start gap-2 text-[0.7rem] text-muted-foreground">
+            <p className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-0.5">
               {reasons.map((reason) => (
                 <Hint
                   key={reason.label}
@@ -332,7 +331,10 @@ export function ItemStrip({
                 </Hint>
               )}
             </p>
-          )}
+            <span className="shrink-0 whitespace-nowrap tabular-nums">
+              {timeAgo(item.updatedAt)}
+            </span>
+          </div>
         </div>
       </button>
     </div>

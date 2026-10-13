@@ -14,6 +14,8 @@ export type TriageInput = {
   details: SubjectDetails
   awaiting: Awaiting | null
   viewerLogin: string
+  /** P0 to P3 on the team's project board, when the item has a card there. */
+  projectPriority?: string | null
 }
 
 function truncate(text: string, max: number): string {
@@ -25,8 +27,11 @@ export function buildTriageState({
   details,
   awaiting,
   viewerLogin,
+  projectPriority,
 }: TriageInput) {
   return {
+    // Left out off the board, so items without a card keep their score.
+    ...(projectPriority ? { projectPriority } : {}),
     reader: viewerLogin,
     kind: details.kind,
     title: details.title,
@@ -63,7 +68,7 @@ export async function triage(
   const urgency = {
     type: "score",
     instructions:
-      "How urgently should the reader, a lead developer, act on this item? Consider production impact, blocked teammates and explicit deadlines.",
+      "How urgently should the reader, a lead developer, act on this item? Consider production impact, blocked teammates and explicit deadlines. When projectPriority is given, it is the priority the team set on its project board, P0 the highest and P3 the lowest: weigh it as one signal among the others, never the main one, since it can be outdated and what the item itself says comes first.",
     criteria: [...URGENCY_LEVELS],
   } as const
 

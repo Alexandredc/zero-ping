@@ -1,4 +1,5 @@
 import { and, eq, inArray, isNull, lt, or, sql } from "drizzle-orm"
+import { projectPriorities } from "@/server/issues/project"
 import type { Octokit } from "octokit"
 import { getDecisionModel } from "@/server/ai/models"
 import { triage, triageHash } from "@/server/ai/triage"
@@ -255,6 +256,13 @@ export async function enrichItems(
   const openRefs = refs.filter((ref) => states.get(ref.key) === "OPEN")
   const subjects = await fetchSubjects(octokit, openRefs)
   const model = getDecisionModel()
+  // Jev weighs the board's priority too; nothing is read without a model.
+  const boardPriorities = model
+    ? await projectPriorities(
+        octokit,
+        openRefs.map((ref) => ref.key)
+      )
+    : new Map<string, string | null>()
 
   await Promise.all(
     pending.map(async (item) => {
@@ -290,6 +298,7 @@ export async function enrichItems(
           details,
           awaiting: analysis.awaiting,
           viewerLogin: viewer.login,
+          projectPriority: boardPriorities.get(item.key) ?? null,
         }
         const hash = triageHash(input)
         if (hash !== item.aiHash) {

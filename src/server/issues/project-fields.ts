@@ -109,3 +109,50 @@ export async function fetchProjectFields(
   const subject = data.repository?.issueOrPullRequest
   return subject ? pickProjectFields(subject, project) : null
 }
+
+const BATCH_SIZE = 25
+
+/** The board fields of many items, a few dozen per GraphQL query. */
+export async function fetchProjectFieldsBatch(
+  octokit: Octokit,
+  keys: string[],
+  project: SprintProjectRef,
+  fieldNames: { status: string; priority: string }
+): Promise<Map<string, ProjectFields | null>> {
+  const refs = keys.flatMap((key) => {
+    const match = /^([^/]+)\/([^#]+)#(\d+)$/.exec(key)
+    return match
+      ? [{ key, owner: match[1], name: match[2], number: Number(match[3]) }]
+      : []
+  })
+  const found = new Map<string, ProjectFields | null>()
+  for (let start = 0; start < refs.length; start += BATCH_SIZE) {
+    const batch = refs.slice(start, start + BATCH_SIZE)
+    const data = await octokit.graphql<
+      Record<string, { issueOrPullRequest: RawFieldsSubject | null } | null>
+    >(
+      `query ($status: String!, $priority: String!) {${batch
+        .map(
+          (ref, index) =>
+            `i${index}: repository(owner: ${JSON.stringify(ref.owner)}, name: ${JSON.stringify(ref.name)}) {
+              issueOrPullRequest(number: ${ref.number}) {
+                ... on Issue { ${ITEMS} }
+                ... on PullRequest {
+                  ${ITEMS}
+                  closingIssuesReferences(first: 5) {
+                    nodes { number repository { nameWithOwner } ${ITEMS} }
+                  }
+                }
+              }
+            }`
+        )
+        .join("\n")}}`,
+      fieldNames
+    )
+    batch.forEach((ref, index) => {
+      const subject = data[`i${index}`]?.issueOrPullRequest
+      found.set(ref.key, subject ? pickProjectFields(subject, project) : null)
+    })
+  }
+  return found
+}

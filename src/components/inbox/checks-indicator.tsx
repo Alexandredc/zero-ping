@@ -55,9 +55,11 @@ export function ChecksBar({ itemKey }: { itemKey: string }) {
 export function ChecksIndicator({ itemKey }: { itemKey: string }) {
   const { data, isPending, error } = useQuery({
     ...checksQuery(itemKey),
-    // Running checks finish on their own: look again until they do.
+    // Running checks finish on their own: look again soon until they do.
     refetchInterval: (query) =>
-      query.state.data && query.state.data.summary.pending > 0 ? 20_000 : false,
+      query.state.data && query.state.data.summary.pending > 0
+        ? 20_000
+        : 60_000,
   })
   if (isPending) return <Skeleton className="h-4 w-36" />
   if (error) return null

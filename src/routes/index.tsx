@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query"
+import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { createFileRoute, useNavigate } from "@tanstack/react-router"
 import { useEffect, useRef, useState } from "react"
 import { CheckIcon, ClockIcon, InboxIcon, XIcon } from "lucide-react"
@@ -22,8 +22,8 @@ import {
 } from "@/components/inbox/list-controls"
 import {
   PULL_FILTERS,
+  PULL_SORT_OPTIONS,
   PULL_SORTS,
-  pullSorts,
   serverSort,
   sortPulls,
 } from "@/components/inbox/pull-list-options"
@@ -52,7 +52,13 @@ import { formatWhen, nextMorning } from "@/lib/format"
 import { cn } from "@/lib/utils"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Skeleton } from "@/components/ui/skeleton"
-import { inboxQuery, useInboxActions } from "@/hooks/use-inbox"
+import {
+  checksQuery,
+  conversationQuery,
+  inboxQuery,
+  projectFieldsQuery,
+  useInboxActions,
+} from "@/hooks/use-inbox"
 import { useHotkeys } from "@/hooks/use-hotkeys"
 
 const searchSchema = z.object({
@@ -205,6 +211,26 @@ function InboxPage() {
       ?.scrollIntoView({ block: "nearest" })
   }, [selected])
 
+  // The neighbours are one keystroke away: their panel is ready before ↑ or ↓.
+  const queryClient = useQueryClient()
+  useEffect(() => {
+    if (selectedIndex < 0) return
+    const neighbours = [
+      items.at(selectedIndex + 1),
+      selectedIndex > 0 ? items.at(selectedIndex - 1) : undefined,
+    ]
+    for (const neighbour of neighbours) {
+      if (!neighbour) continue
+      // Reading a conversation marks it read on GitHub: an unread one waits for its click.
+      if (!neighbour.unread)
+        void queryClient.prefetchQuery(conversationQuery(neighbour.key))
+      if (neighbour.kind !== "PullRequest") continue
+      void queryClient.prefetchQuery(projectFieldsQuery(neighbour.key))
+      void queryClient.prefetchQuery(checksQuery(neighbour.key))
+    }
+    // The selection alone decides: a refreshed list must not prefetch again.
+  }, [selected?.key])
+
   const move = (delta: number) => {
     if (items.length === 0) return
     const next =
@@ -298,7 +324,7 @@ function InboxPage() {
           </div>
           <ListMenus
             sort={canSort ? search.sort : undefined}
-            sorts={canSort ? pullSorts(allPulls) : undefined}
+            sorts={canSort ? PULL_SORT_OPTIONS : undefined}
             onSort={(sort) =>
               void navigate({ search: (prev) => ({ ...prev, sort }) })
             }

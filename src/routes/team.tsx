@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query"
+import { CiIcon } from "@/components/inbox/ci-icon"
 import { Link, createFileRoute } from "@tanstack/react-router"
 import { useState } from "react"
 import {
@@ -219,6 +220,7 @@ function TeamRow({
               {name}
               <span className="opacity-60">#{pull.number}</span>
             </span>
+            <CiIcon ciState={pull.ciState} />
             <span>· par @{pull.author ?? "fantôme"}</span>
             <span>· ouverte {timeAgo(pull.createdAt, now)}</span>
             <span>· dernière activité {timeAgo(pull.updatedAt, now)}</span>

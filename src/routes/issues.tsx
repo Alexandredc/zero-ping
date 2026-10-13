@@ -53,6 +53,7 @@ import {
   useListFilters,
 } from "@/components/inbox/list-controls"
 import { applyFilters, byDate } from "@/lib/list-filters"
+import { sortOptions } from "@/lib/sorts"
 import type { FilterDef } from "@/lib/list-filters"
 import { issuesQuery, useSavePreferences } from "@/hooks/use-inbox"
 import { avatarUrl, timeAgo } from "@/lib/format"
@@ -92,11 +93,11 @@ type Group = { name: string; color: string | null; items: WorkItem[] }
 
 type Sort = "jev" | "recent" | "oldest"
 
-const SORTS: { value: Sort; label: string }[] = [
-  { value: "jev", label: "Priorité (Jev)" },
-  { value: "recent", label: "Activité récente" },
-  { value: "oldest", label: "Sans activité depuis longtemps" },
-]
+const SORTS = sortOptions<Sort>({
+  jev: "priority",
+  recent: "recent",
+  oldest: "oldest",
+})
 
 const URGENCY = ["Peut attendre", "Normale", "Importante", "Bloquante"]
 

@@ -1,5 +1,6 @@
 import { pullSize } from "@/lib/format"
 import { byDate } from "@/lib/list-filters"
+import { sortOptions } from "@/lib/sorts"
 import type { FilterDef } from "@/lib/list-filters"
 import type { InboxItem } from "@/server/inbox/actions"
 
@@ -12,15 +13,13 @@ export const PULL_SORTS = [
 ] as const
 export type PullSort = (typeof PULL_SORTS)[number]
 
-export function pullSorts(jev: boolean) {
-  return [
-    { value: "priority", label: jev ? "Priorité (Jev)" : "Priorité" },
-    { value: "size", label: "Taille" },
-    { value: "recent", label: "Activité récente" },
-    { value: "oldest", label: "Sans activité depuis longtemps" },
-    { value: "waiting", label: "En attente depuis longtemps" },
-  ] satisfies { value: PullSort; label: string }[]
-}
+export const PULL_SORT_OPTIONS = sortOptions<PullSort>({
+  priority: "priority",
+  size: "size",
+  recent: "recent",
+  oldest: "oldest",
+  waiting: "waiting",
+})
 
 /** The server ranks by priority or size; the other orders are the list's own. */
 export function serverSort(sort: PullSort): "priority" | "size" {

@@ -16,7 +16,7 @@ import { syncTeamPulls } from "@/server/team/pulls"
 import { repos } from "@/server/db/schema"
 import { eq } from "drizzle-orm"
 import { recordDailyPings } from "@/server/dashboard/activity"
-import { countPings } from "@/server/inbox/actions"
+import { countPings, warmProjectCaches } from "@/server/inbox/actions"
 import { localDate } from "@/server/recap/schedule"
 
 export type SyncStatus = {
@@ -86,6 +86,10 @@ async function runOnce(forceSearch: boolean): Promise<number> {
   }
   await runDailyRecap(db)
   await recordDailyPings(db, localDate(new Date()), await countPings())
+  // Keeps the project caches warm, so a panel never waits for the project list.
+  void warmProjectCaches().catch((error: unknown) =>
+    console.error("[projects]", error)
+  )
   // Agent sessions are slow: they run after the sync instead of delaying it.
   void prefetchLookups(db).catch((error: unknown) =>
     console.error("[slack]", error)
