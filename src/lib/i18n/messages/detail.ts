@@ -140,6 +140,9 @@ export const detail = defineMessages({
       inThread: (channel: string) =>
         `En réponse dans le fil de la PR sur #${channel}.`,
       newMessage: (channel: string) => `Nouveau message dans #${channel}.`,
+      broadcast: (channel: string) => `Aussi dans #${channel}`,
+      broadcastHint:
+        "La réponse reste dans le fil et s'affiche aussi dans le canal, comme « Envoyer aussi dans » sur Slack.",
       slackMessage: "Message Slack",
       willBeMentioned: (who: string) =>
         `${who} sera mentionné : l'agent retrouve son compte Slack, sinon il écrit son nom en clair.`,
@@ -192,6 +195,8 @@ export const detail = defineMessages({
       ghost: "fantôme",
       dismissed: "review rejetée",
       resolved: "Résolu",
+      foldedThread: (count: number, author: string | null) =>
+        `${count} commentaire${count > 1 ? "s" : ""}${author ? `, dernier de @${author}` : ""}`,
       replyInThread: "Répondre dans ce fil",
       messages: (n: number) => `${n} message${n > 1 ? "s" : ""}`,
       unavailable: "Conversation indisponible",
@@ -389,6 +394,9 @@ export const detail = defineMessages({
       inThread: (channel: string) =>
         `As a reply in the PR's thread on #${channel}.`,
       newMessage: (channel: string) => `New message in #${channel}.`,
+      broadcast: (channel: string) => `Also in #${channel}`,
+      broadcastHint:
+        "The reply stays in the thread and also shows in the channel, like Slack's « Also send to ».",
       slackMessage: "Slack message",
       willBeMentioned: (who: string) =>
         `${who} will be mentioned: the agent finds their Slack account, otherwise it writes their name in plain text.`,
@@ -441,6 +449,8 @@ export const detail = defineMessages({
       ghost: "ghost",
       dismissed: "review dismissed",
       resolved: "Resolved",
+      foldedThread: (count: number, author: string | null) =>
+        `${count} comment${count > 1 ? "s" : ""}${author ? `, last by @${author}` : ""}`,
       replyInThread: "Reply in this thread",
       messages: (n: number) => `${n} message${n === 1 ? "" : "s"}`,
       unavailable: "Conversation unavailable",

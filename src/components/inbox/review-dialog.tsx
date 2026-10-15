@@ -59,6 +59,8 @@ export function ReviewDialog({
   // An approval rarely needs a ping: the message is offered, not sent by default.
   const [notify, setNotify] = useState(review.event !== "APPROVE")
   const [message, setMessage] = useState("")
+  // A reply buried in an old thread goes unseen: it also shows in the channel.
+  const [broadcast, setBroadcast] = useState(true)
   const ready = notice?.enabled ? notice : null
   const copy =
     review.event === "APPROVE"
@@ -83,6 +85,7 @@ export function ReviewDialog({
       await send.mutateAsync({
         message,
         threadPermalink: ready.threadPermalink,
+        broadcast,
         // Only the people still named in the message get pinged.
         mentions:
           ready.author && message.includes(`@${ready.author.login}`)
@@ -135,6 +138,24 @@ export function ReviewDialog({
                 </FieldDescription>
               </FieldContent>
             </Field>
+            {notify && ready.threadPermalink && (
+              <Field orientation="horizontal">
+                <Checkbox
+                  id="review-broadcast"
+                  checked={broadcast}
+                  onCheckedChange={setBroadcast}
+                  disabled={busy}
+                />
+                <FieldContent>
+                  <FieldLabel htmlFor="review-broadcast">
+                    {t.detail.review.broadcast(ready.channel)}
+                  </FieldLabel>
+                  <FieldDescription>
+                    {t.detail.review.broadcastHint}
+                  </FieldDescription>
+                </FieldContent>
+              </Field>
+            )}
             {notify && (
               <Field>
                 <Textarea

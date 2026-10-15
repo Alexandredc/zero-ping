@@ -148,7 +148,12 @@ async function getPullFiles(
     totalDeletions: files.reduce((sum, file) => sum + file.deletions, 0),
     sinceReview:
       sinceReview && item.reviewedOid && item.headOid
-        ? { base: item.reviewedOid, head: item.headOid, commits: 2 }
+        ? {
+            base: item.reviewedOid,
+            head: item.headOid,
+            commits: 2,
+            rewritten: false,
+          }
         : null,
   }
 }

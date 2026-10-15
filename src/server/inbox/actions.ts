@@ -652,6 +652,8 @@ export async function getReviewNotice(key: string, event: ReviewEvent) {
 export async function sendReviewNotice(input: {
   message: string
   threadPermalink: string | null
+  /** A reply in the PR's thread also shows in the channel, like Slack's « Also send to ». */
+  broadcast: boolean
   mentions: NoticeMention[]
 }) {
   const db = await getDb()
@@ -673,7 +675,7 @@ export async function sendReviewNotice(input: {
     {
       prompt: buildNoticePrompt(
         thread
-          ? { thread }
+          ? { thread, broadcast: input.broadcast }
           : { channel: normalizeChannel(preferences.reviewNoticeChannel) },
         input.message,
         input.mentions,

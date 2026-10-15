@@ -84,12 +84,17 @@ async function runOnce(forceSearch: boolean): Promise<number> {
       .select({ fullName: repos.fullName })
       .from(repos)
       .where(eq(repos.tracked, true))
-    await syncTeamPulls(db, octokit, {
-      repos: tracked.map((repo) => repo.fullName),
-      viewerLogin: viewer.login,
-      staleDays: preferences.teamStaleDays,
-    })
-    loop.lastTeamSyncAt = Date.now()
+    // The team snapshot is a side view: its failure keeps the last one and the sync goes on.
+    try {
+      await syncTeamPulls(db, octokit, {
+        repos: tracked.map((repo) => repo.fullName),
+        viewerLogin: viewer.login,
+        staleDays: preferences.teamStaleDays,
+      })
+      loop.lastTeamSyncAt = Date.now()
+    } catch (error) {
+      console.error("[team]", error)
+    }
   }
   await runDailyRecap(db)
   await recordDailyPings(db, localDate(new Date()), await countPings())
