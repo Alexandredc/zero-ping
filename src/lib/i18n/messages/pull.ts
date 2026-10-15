@@ -19,6 +19,8 @@ export const pull = defineMessages({
       viewedHint: "Marqué aussi comme vu sur GitHub",
       viewed: "Vu",
       viewFileOnGitHub: (file: string) => `Voir ${file} sur GitHub`,
+      copyPath: "Copier le chemin du fichier",
+      pathCopied: "Chemin copié",
       notShown: "Diff non affiché (fichier binaire ou trop volumineux).",
       seeOnGitHub: "Le voir sur GitHub",
       rangeLabel: "Étendue du diff",
@@ -26,12 +28,14 @@ export const pull = defineMessages({
       wholePr: "Toute la PR",
       lastReview: (when: string) => `Ta dernière review date de ${when}`,
       forcePushNote:
-        ". Après un force-push, le diff inclut aussi ce que le rebase a apporté.",
+        ". Après un rebase, seuls les fichiers de la PR qui ont changé restent affichés.",
       unavailable: "Diff indisponible",
       reviewCommitGone:
         " Le commit de ta review a peut-être disparu après un force-push : affiche toute la PR.",
       commitsSinceReview: (n: number) =>
         `${n} ${plural(n, "commit")} depuis ta review ·`,
+      rewrittenSinceReview:
+        "Branche rebasée depuis ta review : seuls les fichiers de la PR qui ont changé, avec leur diff complet ·",
       files: (n: number) => `${n} ${plural(n, "fichier")}`,
       viewedCount: (viewed: number, total: number) => `${viewed}/${total} vus`,
       openOnGitHub: "Ouvrir le diff sur GitHub",
@@ -328,6 +332,8 @@ export const pull = defineMessages({
       viewedHint: "Also marked as viewed on GitHub",
       viewed: "Viewed",
       viewFileOnGitHub: (file: string) => `View ${file} on GitHub`,
+      copyPath: "Copy the file path",
+      pathCopied: "Path copied",
       notShown: "Diff not shown (binary or too large file).",
       seeOnGitHub: "View it on GitHub",
       rangeLabel: "Diff range",
@@ -335,12 +341,14 @@ export const pull = defineMessages({
       wholePr: "Whole PR",
       lastReview: (when: string) => `Your last review was ${when}`,
       forcePushNote:
-        ". After a force-push, the diff also includes what the rebase brought in.",
+        ". After a rebase, only the PR's files that changed stay listed.",
       unavailable: "Diff unavailable",
       reviewCommitGone:
         " The commit of your review may be gone after a force-push: show the whole PR.",
       commitsSinceReview: (n: number) =>
         `${n} ${pluralEn(n, "commit")} since your review ·`,
+      rewrittenSinceReview:
+        "Branch rebased since your review: only the PR's files that changed, with their whole diff ·",
       files: (n: number) => `${n} ${pluralEn(n, "file")}`,
       viewedCount: (viewed: number, total: number) =>
         `${viewed}/${total} viewed`,

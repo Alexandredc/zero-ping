@@ -353,6 +353,7 @@ export const postReviewNotice = createServerFn({ method: "POST" })
     z.object({
       message: z.string().trim().min(1).max(4000),
       threadPermalink: z.string().nullable(),
+      broadcast: z.boolean().default(true),
       mentions: z.array(
         z.object({ login: z.string(), name: z.string().nullable() })
       ),

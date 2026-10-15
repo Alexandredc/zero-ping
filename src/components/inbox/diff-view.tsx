@@ -3,6 +3,7 @@ import { useRef, useState } from "react"
 import {
   CheckIcon,
   ChevronRightIcon,
+  CopyIcon,
   ExternalLinkIcon,
   FileIcon,
   FolderIcon,
@@ -206,6 +207,7 @@ function FileDiff({
             {file.filename}
           </span>
         </button>
+        <CopyPath path={file.filename} />
         {file.viewed === "DISMISSED" && (
           <Hint content={m.changedSinceHint}>
             <Badge
@@ -346,6 +348,33 @@ function RangeToggle({
   )
 }
 
+/** Copies the file's path, for an editor or a terminal; a check confirms it. */
+function CopyPath({ path }: { path: string }) {
+  const { t } = useI18n()
+  const [copied, setCopied] = useState(false)
+  const Icon = copied ? CheckIcon : CopyIcon
+  return (
+    <Hint
+      instant
+      content={copied ? t.pull.diff.pathCopied : t.pull.diff.copyPath}
+    >
+      <button
+        type="button"
+        aria-label={t.pull.diff.copyPath}
+        onClick={() =>
+          void navigator.clipboard.writeText(path).then(() => {
+            setCopied(true)
+            setTimeout(() => setCopied(false), 1500)
+          })
+        }
+        className="flex shrink-0 rounded p-0.5 text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+      >
+        <Icon className={cn("size-3.5", copied && "text-diff-add-strong")} />
+      </button>
+    </Hint>
+  )
+}
+
 export function DiffView({ item }: { item: Item }) {
   const { t } = useI18n()
   const m = t.pull.diff
@@ -426,7 +455,9 @@ export function DiffView({ item }: { item: Item }) {
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
         {data.sinceReview && (
           <span className="font-medium text-foreground">
-            {m.commitsSinceReview(data.sinceReview.commits)}
+            {data.sinceReview.commits === null
+              ? m.rewrittenSinceReview
+              : m.commitsSinceReview(data.sinceReview.commits)}
           </span>
         )}
         <span>{m.files(data.files.length)}</span>

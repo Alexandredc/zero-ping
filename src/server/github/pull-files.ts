@@ -24,7 +24,77 @@ export type PullFiles = {
   totalAdditions: number
   totalDeletions: number
   /** Set when the diff only covers the commits pushed since the viewer's review. */
-  sinceReview: { base: string; head: string; commits: number } | null
+  sinceReview: {
+    base: string
+    head: string
+    /** Null after a rebase: the count would be the base branch's commits. */
+    commits: number | null
+    /** The reviewed commit is no longer in the branch (rebase, force-push). */
+    rewritten: boolean
+  } | null
+}
+
+/**
+ * After a rebase the reviewed commit and the head share no line: comparing
+ * them also lists everything the base branch gained. Only the PR's own files
+ * whose content differs between the two count, shown with their diff in the PR.
+ */
+const PATHS_PER_QUERY = 100
+
+/** The paths whose content differs between two commits, file by file. */
+export async function pathsChangedBetween(
+  octokit: Octokit,
+  ref: { owner: string; repo: string },
+  commits: { base: string; head: string },
+  paths: string[]
+): Promise<Set<string>> {
+  const changed = new Set<string>()
+  for (let start = 0; start < paths.length; start += PATHS_PER_QUERY) {
+    const batch = paths.slice(start, start + PATHS_PER_QUERY)
+    const files = batch
+      .map(
+        (path, index) =>
+          `f${index}: file(path: ${JSON.stringify(path)}) { oid }`
+      )
+      .join(" ")
+    type Side = { [alias: string]: { oid: string } | null } | null
+    type Data = { repository: { base: Side; head: Side } }
+    // A path missing on one side is an error, with the other paths still answered.
+    const data = await octokit
+      .graphql<Data>(
+        `query ($owner: String!, $repo: String!, $base: GitObjectID!, $head: GitObjectID!) {
+          repository(owner: $owner, name: $repo) {
+            base: object(oid: $base) { ... on Commit { ${files} } }
+            head: object(oid: $head) { ... on Commit { ${files} } }
+          }
+        }`,
+        {
+          owner: ref.owner,
+          repo: ref.repo,
+          base: commits.base,
+          head: commits.head,
+        }
+      )
+      .catch((error: unknown) => {
+        const partial = (error as { data?: Data } | null)?.data
+        if (partial?.repository) return partial
+        throw error
+      })
+    batch.forEach((path, index) => {
+      const before = data.repository.base?.[`f${index}`]?.oid ?? null
+      const after = data.repository.head?.[`f${index}`]?.oid ?? null
+      // Added or removed since the review counts as changed.
+      if (before !== after) changed.add(path)
+    })
+  }
+  return changed
+}
+
+export function filesChangedSinceRewrite(
+  pullFiles: PullFile[],
+  comparedNames: Set<string>
+): PullFile[] {
+  return pullFiles.filter((file) => comparedNames.has(file.filename))
 }
 
 const MAX_FILES = 300
@@ -131,6 +201,26 @@ export async function fetchPullFiles(
       basehead: `${since.base}...${since.head}`,
       per_page: 100,
     })
+    // The reviewed commit left the branch: narrow the PR's own files instead.
+    if (data.status === "diverged" || data.behind_by > 0) {
+      const whole = await fetchPullFiles(octokit, ref)
+      const files = filesChangedSinceRewrite(
+        whole.files,
+        await pathsChangedBetween(
+          octokit,
+          ref,
+          since,
+          whole.files.map((file) => file.filename)
+        )
+      )
+      return {
+        ...whole,
+        files,
+        totalAdditions: files.reduce((sum, file) => sum + file.additions, 0),
+        totalDeletions: files.reduce((sum, file) => sum + file.deletions, 0),
+        sinceReview: { ...since, commits: null, rewritten: true },
+      }
+    }
     const compared = (data.files ?? []).slice(0, MAX_FILES)
     const files = compared.map((file) => toPullFile(ref, file))
     const { pullRequestId, states } = await fetchViewedStates(octokit, ref)
@@ -142,7 +232,7 @@ export async function fetchPullFiles(
       truncated: (data.files?.length ?? 0) > MAX_FILES,
       totalAdditions: files.reduce((sum, file) => sum + file.additions, 0),
       totalDeletions: files.reduce((sum, file) => sum + file.deletions, 0),
-      sinceReview: { ...since, commits: data.ahead_by },
+      sinceReview: { ...since, commits: data.ahead_by, rewritten: false },
     }
   }
   const files: PullFile[] = []

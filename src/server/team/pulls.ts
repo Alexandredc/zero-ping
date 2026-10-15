@@ -109,7 +109,8 @@ async function fetchRepoPulls(
     })
     .join("\n")
   type Data = Record<string, { pullRequests: { nodes: RawTeamPull[] } } | null>
-  let data: Data
+  // GitHub can answer a heavy query with no data at all.
+  let data: Data | null | undefined
   try {
     data = await octokit.graphql(`query { ${fields} }`)
   } catch (error) {
@@ -118,8 +119,11 @@ async function fetchRepoPulls(
     if (!partial) throw error
     data = partial
   }
+  // An empty answer must not replace the team's PRs with nothing.
+  if (!data) throw new Error("GitHub n'a renvoyé aucune PR d'équipe.")
+  const answered = data
   return fullNames.flatMap((repo, index) =>
-    (data[`r${index}`]?.pullRequests.nodes ?? []).map((pull) => ({
+    (answered[`r${index}`]?.pullRequests.nodes ?? []).map((pull) => ({
       repo,
       pull,
     }))

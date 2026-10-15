@@ -1,5 +1,10 @@
 import { GitHubIcon } from "@/components/brand-icons"
-import { FileCodeIcon, MessageSquareReplyIcon } from "lucide-react"
+import { useState } from "react"
+import {
+  ChevronRightIcon,
+  FileCodeIcon,
+  MessageSquareReplyIcon,
+} from "lucide-react"
 import { Markdown } from "./markdown"
 import type {
   Conversation,
@@ -13,6 +18,7 @@ import { avatarUrl, timeAgo } from "@/lib/format"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useI18n } from "@/hooks/use-i18n"
+import { cn } from "@/lib/utils"
 
 export type ReplyTarget =
   | { type: "conversation" }
@@ -84,41 +90,84 @@ export function Entry({
       />
     )
   }
+  return <ThreadEntry entry={entry} onReplyInThread={onReplyInThread} />
+}
+
+/** A review thread; a resolved one folds to its header, as on GitHub. */
+function ThreadEntry({
+  entry,
+  onReplyInThread,
+}: {
+  entry: Extract<ConversationEntry, { type: "thread" }>
+  onReplyInThread: (target: ReplyTarget) => void
+}) {
+  const { t } = useI18n()
+  const [open, setOpen] = useState(!entry.isResolved)
   const first = entry.comments[0]
+  const last = entry.comments[entry.comments.length - 1]
   return (
-    <section className="flex flex-col gap-3 rounded-lg border bg-card p-3">
-      <header className="flex items-center gap-2 text-xs text-muted-foreground">
-        <FileCodeIcon className="size-3.5" />
+    <section
+      className={cn(
+        "flex flex-col gap-3 rounded-lg border bg-card p-3",
+        !open && "bg-muted/30"
+      )}
+    >
+      <button
+        type="button"
+        aria-expanded={open}
+        onClick={() => setOpen((current) => !current)}
+        className="-m-1 flex items-center gap-2 rounded p-1 text-left text-xs text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+      >
+        <ChevronRightIcon
+          className={cn(
+            "size-3.5 shrink-0 transition-transform",
+            open && "rotate-90"
+          )}
+        />
+        <FileCodeIcon className="size-3.5 shrink-0" />
         <span className="truncate font-mono">
           {entry.path}
           {entry.line !== null && `:${entry.line}`}
         </span>
+        {!open && (
+          <span className="shrink-0">
+            ·{" "}
+            {t.detail.conversation.foldedThread(
+              entry.comments.length,
+              last.author
+            )}
+          </span>
+        )}
         {entry.isResolved && (
           <Badge variant="secondary" className="ml-auto">
             {t.detail.conversation.resolved}
           </Badge>
         )}
-      </header>
-      {entry.comments.map((comment) => (
-        <CommentBlock key={comment.id} comment={comment} />
-      ))}
-      {!entry.isResolved && first.databaseId !== null && (
-        <Button
-          variant="ghost"
-          size="sm"
-          className="self-start"
-          onClick={() =>
-            onReplyInThread({
-              type: "thread",
-              commentDatabaseId: first.databaseId!,
-              path: entry.path,
-              author: entry.comments[entry.comments.length - 1].author,
-            })
-          }
-        >
-          <MessageSquareReplyIcon data-icon="inline-start" />
-          {t.detail.conversation.replyInThread}
-        </Button>
+      </button>
+      {open && (
+        <>
+          {entry.comments.map((comment) => (
+            <CommentBlock key={comment.id} comment={comment} />
+          ))}
+          {!entry.isResolved && first.databaseId !== null && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="self-start"
+              onClick={() =>
+                onReplyInThread({
+                  type: "thread",
+                  commentDatabaseId: first.databaseId!,
+                  path: entry.path,
+                  author: entry.comments[entry.comments.length - 1].author,
+                })
+              }
+            >
+              <MessageSquareReplyIcon data-icon="inline-start" />
+              {t.detail.conversation.replyInThread}
+            </Button>
+          )}
+        </>
       )}
     </section>
   )

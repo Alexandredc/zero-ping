@@ -34,12 +34,22 @@ describe("draftReviewNotice", () => {
 describe("buildNoticePrompt", () => {
   it("replies in the PR's thread when there is one", () => {
     const prompt = buildNoticePrompt(
-      { thread: { channelId: "C1", threadTs: "1.2" } },
+      { thread: { channelId: "C1", threadTs: "1.2" }, broadcast: false },
       "Salut",
       []
     )
     expect(prompt).toContain('channel_id "C1" and thread_ts "1.2"')
+    expect(prompt).toContain("Do not broadcast")
     expect(prompt).not.toContain("Slack mention")
+  })
+
+  it("also shows the thread reply in the channel when asked", () => {
+    const prompt = buildNoticePrompt(
+      { thread: { channelId: "C1", threadTs: "1.2" }, broadcast: true },
+      "Salut",
+      []
+    )
+    expect(prompt).toContain("reply_broadcast to true")
   })
 
   it("posts in the channel and only turns the listed handles into mentions", () => {

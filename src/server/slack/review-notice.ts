@@ -42,7 +42,7 @@ export function draftReviewNotice(
  * GitHub handles into Slack mentions.
  */
 export function buildNoticePrompt(
-  target: { thread: SlackThreadRef } | { channel: string },
+  target: { thread: SlackThreadRef; broadcast: boolean } | { channel: string },
   message: string,
   mentions: NoticeMention[],
   tools: string[] = []
@@ -55,7 +55,7 @@ export function buildNoticePrompt(
         ]
       : []),
     "thread" in target
-      ? `Reply in the existing thread: channel_id "${target.thread.channelId}" and thread_ts "${target.thread.threadTs}". Do not broadcast it to the channel.`
+      ? `Reply in the existing thread: channel_id "${target.thread.channelId}" and thread_ts "${target.thread.threadTs}". ${target.broadcast ? "Set reply_broadcast to true so that the reply also shows in the channel." : "Do not broadcast it to the channel."}`
       : `Post it as a new message in the channel #${target.channel.replace(/^#/, "")}: find the channel id with the channel search tool first.`,
     "The message is the JSON string below.",
     JSON.stringify(message),
