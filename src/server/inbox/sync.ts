@@ -6,7 +6,7 @@ import { triage, triageHash } from "@/server/ai/triage"
 import type { Database } from "@/server/db/client"
 import { items, repos, settings } from "@/server/db/schema"
 import type { Item } from "@/server/db/schema"
-import type { Viewer } from "@/server/inbox/analyze"
+import type { SubjectDetails, Viewer } from "@/server/inbox/analyze"
 import { analyze } from "@/server/inbox/analyze"
 import { parseSubjectKey, toItem } from "@/server/inbox/notifications"
 import type { RawNotification } from "@/server/inbox/notifications"
@@ -18,6 +18,10 @@ import { fetchStates, fetchSubjects } from "@/server/github/subjects"
 import type { SubjectRef } from "@/server/github/subjects"
 import { recordActivity, viewTransitions } from "@/server/dashboard/activity"
 import type { ActivityRow } from "@/server/dashboard/activity"
+import { assessReadiness } from "@/server/readiness/rules"
+import type { Readiness } from "@/server/readiness/rules"
+import { checkWait } from "@/server/readiness/wait"
+import type { Experimental_DecisionModel } from "ai"
 
 const INITIAL_LOOKBACK_MS = 30 * 24 * 60 * 60 * 1000
 const MAX_NOTIFICATION_PAGES = 10
@@ -277,6 +281,7 @@ export async function enrichItems(
           .set({
             state: states.get(item.key) ?? item.state,
             view: "other",
+            readiness: null,
             awaitingMe: false,
             priority: 0,
             priorityReasons: [],
@@ -319,6 +324,11 @@ export async function enrichItems(
         }
       }
 
+      const readiness =
+        isActive && analysis.view === "mine" && details.kind === "PullRequest"
+          ? await pullReadiness(model, item, details)
+          : null
+
       const enriched = {
         title: details.title,
         htmlUrl: details.url,
@@ -336,6 +346,8 @@ export async function enrichItems(
         reviewedState: analysis.lastReview?.state ?? null,
         ciState: details.ciState,
         reviewDecision: details.reviewDecision,
+        mergeStateStatus: details.mergeStateStatus,
+        readiness,
         reviewRequest: analysis.reviewRequest,
         approvals: details.approvals,
         pendingReviewers: details.reviewRequests.length,
@@ -382,6 +394,38 @@ export async function enrichItems(
   await recordAttention(db, attention)
   await recordActivity(db, transitions)
   return pending.length
+}
+
+/**
+ * Whether the viewer's own open PR can be merged: the rules first, then Jev
+ * only when every rule passes.
+ */
+export async function pullReadiness(
+  model: Experimental_DecisionModel | null,
+  item: Pick<Item, "number" | "readiness">,
+  details: SubjectDetails
+): Promise<Readiness> {
+  const readiness = assessReadiness({
+    isDraft: details.isDraft,
+    reviewDecision: details.reviewDecision,
+    mergeStateStatus: details.mergeStateStatus,
+    lastCommitAt: details.lastCommitAt,
+    reviews: details.reviews,
+    reviewThreads: details.reviewThreads,
+  })
+  return checkWait(
+    model,
+    readiness,
+    {
+      number: item.number ?? 0,
+      title: details.title,
+      body: details.body,
+      author: details.author,
+      labels: details.labels,
+      comments: details.comments,
+    },
+    item.readiness
+  )
 }
 
 function waitingSince(

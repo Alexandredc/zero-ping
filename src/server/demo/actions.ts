@@ -19,6 +19,7 @@ import type { SearchCandidate, SearchMatch } from "@/server/search/smart-search"
 import { MAX_CANDIDATES } from "@/server/search/smart-search"
 import { draftReviewNotice } from "@/server/slack/review-notice"
 import { getMessages } from "@/server/i18n"
+import { toMergeInfo } from "@/server/github/merge"
 import { messagesFor } from "@/lib/i18n/messages"
 import { getPreferences, normalizeChannel } from "@/server/preferences"
 import { teamPullToItem } from "@/server/team/as-item"
@@ -29,7 +30,7 @@ import {
   DEMO_PROJECT,
   DEMO_REPOS,
   demoIssueConversations,
-  demoMergeInfo,
+  DEMO_MERGE_SETTINGS,
   demoPulls,
   demoReviewerOptions,
   demoSprint,
@@ -175,7 +176,19 @@ async function getMergeInfo(key: string) {
   const item = await findItem(key)
   const head =
     pullOf(key)?.conversation?.().branches?.head ?? `feature/${item.number}`
-  return demoMergeInfo(item.title, head)
+  // The seeded merge state, so that the merge box agrees with the readiness.
+  return toMergeInfo(
+    {
+      ...DEMO_MERGE_SETTINGS,
+      pullRequest: {
+        title: item.title,
+        mergeStateStatus: item.mergeStateStatus ?? "CLEAN",
+        headRefName: head,
+        isCrossRepository: false,
+      },
+    },
+    (await getMessages()).t
+  )
 }
 
 async function getReviewerOptions(key: string) {

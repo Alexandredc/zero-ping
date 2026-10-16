@@ -22,15 +22,15 @@ const REVIEWER_FIELDS = `
 
 const PULL_REQUEST_FIELDS = `
   title url body createdAt state isDraft additions deletions changedFiles
-  reviewDecision headRefOid
+  reviewDecision headRefOid mergeStateStatus
   author { login }
   labels(first: 20) { nodes { name } }
   reviewRequests(first: 20) { nodes { requestedReviewer { ${REVIEWER_FIELDS} } } }
   latestOpinionatedReviews(first: 20) { nodes { state } }
   reviews(last: 30) { nodes { author { login } state submittedAt commit { oid } } }
-  commits(last: 1) { nodes { commit { statusCheckRollup { state } } } }
+  commits(last: 1) { nodes { commit { committedDate statusCheckRollup { state } } } }
   comments(last: 20) { nodes { ${COMMENT_FIELDS} } }
-  reviewThreads(last: 20) {
+  reviewThreads(last: 50) {
     nodes { isResolved comments(last: 10) { nodes { ${COMMENT_FIELDS} } } }
   }
   timelineItems(last: 20, itemTypes: [REVIEW_REQUESTED_EVENT]) {
@@ -72,6 +72,7 @@ type RawSubject = {
   changedFiles?: number
   headRefOid?: string
   reviewDecision?: string | null
+  mergeStateStatus?: string
   author: { login: string } | null
   labels: { nodes: { name: string }[] }
   reviewRequests?: { nodes: { requestedReviewer: RawReviewer }[] }
@@ -85,7 +86,12 @@ type RawSubject = {
     }[]
   }
   commits?: {
-    nodes: { commit: { statusCheckRollup: { state: string } | null } }[]
+    nodes: {
+      commit: {
+        committedDate?: string
+        statusCheckRollup: { state: string } | null
+      }
+    }[]
   }
   comments: { nodes: RawComment[] }
   reviewThreads?: {
@@ -146,6 +152,8 @@ export function toSubjectDetails(
     ),
     ciState: raw.commits?.nodes[0]?.commit.statusCheckRollup?.state ?? null,
     reviewDecision: raw.reviewDecision ?? null,
+    mergeStateStatus: raw.mergeStateStatus ?? null,
+    lastCommitAt: raw.commits?.nodes[0]?.commit.committedDate ?? null,
     reviewRequests: (raw.reviewRequests?.nodes ?? [])
       .map((node) => toReviewRequest(node.requestedReviewer))
       .filter((request) => request !== null),

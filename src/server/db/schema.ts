@@ -10,6 +10,7 @@ import {
   timestamp,
 } from "drizzle-orm/pg-core"
 import type { PriorityReason } from "@/server/inbox/priority"
+import type { Readiness } from "@/server/readiness/rules"
 
 export const settings = snakeCase.table("settings", {
   key: text().primaryKey(),
@@ -65,6 +66,10 @@ export const items = snakeCase.table("items", {
   reviewedOid: text(),
   reviewedAt: timestamp({ withTimezone: true }),
   reviewedState: text(),
+
+  /** Whether the viewer's own PR can be merged, or what it still misses. */
+  mergeStateStatus: text(),
+  readiness: jsonb().$type<Readiness>(),
 
   awaitingMe: boolean().notNull().default(false),
   awaitingUrl: text(),
@@ -183,6 +188,7 @@ export const teamPulls = snakeCase.table("team_pulls", {
   ciState: text(),
   mergeable: text(),
   problems: text().$type<TeamProblem>().array().notNull().default([]),
+  readiness: jsonb().$type<Readiness>(),
   syncedAt: timestamp({ withTimezone: true }).notNull(),
 })
 

@@ -50,6 +50,8 @@ export function toTriageInput(
     reviews: [],
     ciState: subject.ciState,
     reviewDecision: null,
+    mergeStateStatus: null,
+    lastCommitAt: null,
     reviewRequests: [],
     reviewRequestedAt: [],
     approvals: 0,

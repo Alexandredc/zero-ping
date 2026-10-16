@@ -2,6 +2,10 @@ import type { Octokit } from "octokit"
 import type { Database } from "@/server/db/client"
 import { teamPulls } from "@/server/db/schema"
 import type { TeamProblem } from "@/server/db/schema"
+import { getDecisionModel } from "@/server/ai/models"
+import { assessReadiness } from "@/server/readiness/rules"
+import type { Readiness } from "@/server/readiness/rules"
+import { checkWait } from "@/server/readiness/wait"
 import { isBot } from "@/server/inbox/auto-done"
 import { TEAM_PREFIX } from "./labels"
 import { scoreInBackground } from "@/server/ai/scores"
@@ -19,29 +23,48 @@ export type RawTeamPull = {
   author: { login: string } | null
   reviewDecision: string | null
   mergeable: string
+  mergeStateStatus: string
   reviewRequests: {
     nodes: {
       requestedReviewer: { login?: string; slug?: string } | null
     }[]
   }
   reviews: { totalCount: number }
+  approvals: { nodes: { state: string; submittedAt: string | null }[] }
+  reviewThreads: { nodes: { isResolved: boolean }[] }
   body: string
   labels: { nodes: { name: string }[] }
   comments: { nodes: { author: { login: string } | null; body: string }[] }
+  /** More of the discussion, for Jev's « wait before merging? » only. */
+  discussion: {
+    nodes: {
+      author: { login: string } | null
+      body: string
+      createdAt: string
+    }[]
+  }
   commits: {
-    nodes: { commit: { statusCheckRollup: { state: string } | null } }[]
+    nodes: {
+      commit: {
+        committedDate: string | null
+        statusCheckRollup: { state: string } | null
+      }
+    }[]
   }
 }
 
 const PULL_FIELDS = `
-  number title url createdAt updatedAt isDraft additions deletions mergeable reviewDecision
+  number title url createdAt updatedAt isDraft additions deletions mergeable mergeStateStatus reviewDecision
   author { login }
   reviewRequests(first: 10) { nodes { requestedReviewer { ... on User { login } ... on Team { slug } } } }
   reviews(first: 1) { totalCount }
+  approvals: reviews(last: 10, states: APPROVED) { nodes { state submittedAt } }
+  reviewThreads(last: 50) { nodes { isResolved } }
   body
   labels(first: 10) { nodes { name } }
   comments(last: 3) { nodes { author { login } body } }
-  commits(last: 1) { nodes { commit { statusCheckRollup { state } } } }
+  discussion: comments(last: 10) { nodes { author { login } body createdAt } }
+  commits(last: 1) { nodes { commit { committedDate statusCheckRollup { state } } } }
 `
 
 const DAY_MS = 24 * 60 * 60 * 1000
@@ -72,6 +95,45 @@ export function teamProblems(
   if (now.getTime() - new Date(pull.createdAt).getTime() > staleDays * DAY_MS)
     problems.push("stale")
   return problems
+}
+
+/** The same merge rules as the viewer's own PRs, before Jev is asked. */
+export function teamReadiness(pull: RawTeamPull): Readiness {
+  return assessReadiness({
+    isDraft: pull.isDraft,
+    reviewDecision: pull.reviewDecision,
+    mergeStateStatus: pull.mergeStateStatus,
+    lastCommitAt: pull.commits.nodes[0]?.commit.committedDate ?? null,
+    reviews: pull.approvals.nodes.flatMap((review) =>
+      review.submittedAt
+        ? [{ state: review.state, submittedAt: review.submittedAt }]
+        : []
+    ),
+    reviewThreads: pull.reviewThreads.nodes,
+  })
+}
+
+async function withJevWait(
+  pull: RawTeamPull,
+  previous: Readiness | null
+): Promise<Readiness> {
+  return checkWait(
+    getDecisionModel(),
+    teamReadiness(pull),
+    {
+      number: pull.number,
+      title: pull.title,
+      body: pull.body,
+      author: pull.author?.login ?? null,
+      labels: pull.labels.nodes.map((label) => label.name),
+      comments: pull.discussion.nodes.map((comment) => ({
+        author: comment.author?.login ?? null,
+        body: comment.body,
+        createdAt: comment.createdAt,
+      })),
+    },
+    previous
+  )
 }
 
 export function toScoreSubject(repo: string, pull: RawTeamPull): ScoreSubject {
@@ -145,36 +207,49 @@ export async function syncTeamPulls(
   ).flat()
 
   const viewer = options.viewerLogin.toLowerCase()
-  const rows = fetched
-    .filter(({ pull }) => {
-      const author = pull.author?.login ?? null
-      return author?.toLowerCase() !== viewer && !isBot(author)
-    })
-    .map(({ repo, pull }) => ({
-      key: `${repo}#${pull.number}`,
-      repoFullName: repo,
-      number: pull.number,
-      title: pull.title,
-      htmlUrl: pull.url,
-      author: pull.author?.login ?? null,
-      isDraft: pull.isDraft,
-      createdAt: new Date(pull.createdAt),
-      updatedAt: new Date(pull.updatedAt),
-      additions: pull.additions,
-      deletions: pull.deletions,
-      // Teams are prefixed so that people and teams can be told apart.
-      reviewers: pull.reviewRequests.nodes.flatMap(({ requestedReviewer }) => {
-        if (requestedReviewer?.login) return [requestedReviewer.login]
-        if (requestedReviewer?.slug)
-          return [`${TEAM_PREFIX}${requestedReviewer.slug}`]
-        return []
-      }),
-      reviewDecision: pull.reviewDecision,
-      ciState: pull.commits.nodes[0]?.commit.statusCheckRollup?.state ?? null,
-      mergeable: pull.mergeable,
-      problems: teamProblems(pull, now, options.staleDays),
-      syncedAt: now,
-    }))
+  const kept = fetched.filter(({ pull }) => {
+    const author = pull.author?.login ?? null
+    return author?.toLowerCase() !== viewer && !isBot(author)
+  })
+  // The snapshot is replaced below: Jev's previous answers are read first.
+  const previous = new Map(
+    (
+      await db
+        .select({ key: teamPulls.key, readiness: teamPulls.readiness })
+        .from(teamPulls)
+    ).map((row) => [row.key, row.readiness])
+  )
+  const readiness = await Promise.all(
+    kept.map(({ repo, pull }) =>
+      withJevWait(pull, previous.get(`${repo}#${pull.number}`) ?? null)
+    )
+  )
+  const rows = kept.map(({ repo, pull }, index) => ({
+    key: `${repo}#${pull.number}`,
+    repoFullName: repo,
+    number: pull.number,
+    title: pull.title,
+    htmlUrl: pull.url,
+    author: pull.author?.login ?? null,
+    isDraft: pull.isDraft,
+    createdAt: new Date(pull.createdAt),
+    updatedAt: new Date(pull.updatedAt),
+    additions: pull.additions,
+    deletions: pull.deletions,
+    // Teams are prefixed so that people and teams can be told apart.
+    reviewers: pull.reviewRequests.nodes.flatMap(({ requestedReviewer }) => {
+      if (requestedReviewer?.login) return [requestedReviewer.login]
+      if (requestedReviewer?.slug)
+        return [`${TEAM_PREFIX}${requestedReviewer.slug}`]
+      return []
+    }),
+    reviewDecision: pull.reviewDecision,
+    ciState: pull.commits.nodes[0]?.commit.statusCheckRollup?.state ?? null,
+    mergeable: pull.mergeable,
+    problems: teamProblems(pull, now, options.staleDays),
+    readiness: readiness[index],
+    syncedAt: now,
+  }))
 
   // Jev ranks « Toutes les PR »; the snapshot does not wait for it.
   scoreInBackground(

@@ -24,6 +24,7 @@ import { ProjectFields } from "./project-fields"
 import { UatBadge } from "./uat-badge"
 import type { PendingReview, ReviewEvent } from "./review-dialog"
 import { FailedChecks } from "./failed-checks"
+import { ReadinessCard } from "./merge-readiness"
 import { ChecksBar, ChecksIndicator } from "./checks-indicator"
 import { LinkedIssues } from "./linked-issues"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -447,6 +448,9 @@ export function DetailPanel({
                 itemKey={item.key}
                 kind={item.kind === "PullRequest" ? "PR" : "issue"}
               />
+            )}
+            {isPull && item.state === "OPEN" && item.readiness && (
+              <ReadinessCard readiness={item.readiness} />
             )}
             {isPull &&
               item.state === "OPEN" &&

@@ -35,6 +35,8 @@ function pr(overrides: Partial<SubjectDetails> = {}): SubjectDetails {
     reviews: [],
     ciState: "SUCCESS",
     reviewDecision: null,
+    mergeStateStatus: null,
+    lastCommitAt: null,
     reviewRequests: [],
     reviewRequestedAt: [],
     approvals: 0,

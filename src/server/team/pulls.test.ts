@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { teamProblems, toScoreSubject } from "./pulls"
+import { teamProblems, teamReadiness, toScoreSubject } from "./pulls"
 import type { RawTeamPull } from "./pulls"
 
 const NOW = new Date("2026-10-12T12:00:00Z")
@@ -17,13 +17,24 @@ function pull(overrides: Partial<RawTeamPull> = {}): RawTeamPull {
     author: { login: "dev" },
     reviewDecision: null,
     mergeable: "MERGEABLE",
+    mergeStateStatus: "CLEAN",
     reviewRequests: { nodes: [{ requestedReviewer: { login: "lead" } }] },
     reviews: { totalCount: 0 },
+    approvals: { nodes: [] },
+    reviewThreads: { nodes: [] },
     body: "Adds a CSV export.",
     labels: { nodes: [{ name: "feature" }] },
     comments: { nodes: [{ author: { login: "lead" }, body: "Looks good" }] },
+    discussion: { nodes: [] },
     commits: {
-      nodes: [{ commit: { statusCheckRollup: { state: "SUCCESS" } } }],
+      nodes: [
+        {
+          commit: {
+            committedDate: "2026-10-11T09:00:00Z",
+            statusCheckRollup: { state: "SUCCESS" },
+          },
+        },
+      ],
     },
     ...overrides,
   }
@@ -56,7 +67,14 @@ describe("teamProblems", () => {
           reviewDecision: "CHANGES_REQUESTED",
           mergeable: "CONFLICTING",
           commits: {
-            nodes: [{ commit: { statusCheckRollup: { state: "FAILURE" } } }],
+            nodes: [
+              {
+                commit: {
+                  committedDate: null,
+                  statusCheckRollup: { state: "FAILURE" },
+                },
+              },
+            ],
           },
         }),
         NOW,
@@ -92,5 +110,39 @@ describe("toScoreSubject", () => {
       ciState: "SUCCESS",
       comments: [{ author: "lead", body: "Looks good" }],
     })
+  })
+})
+
+describe("teamReadiness", () => {
+  it("reads the merge rules from the team query", () => {
+    expect(
+      teamReadiness(
+        pull({
+          reviewDecision: "APPROVED",
+          approvals: {
+            nodes: [{ state: "APPROVED", submittedAt: "2026-10-12T08:00:00Z" }],
+          },
+        })
+      )
+    ).toEqual({ status: "ready", gaps: [], waitHash: null })
+  })
+
+  it("lists what a teammate's PR still misses", () => {
+    expect(
+      teamReadiness(
+        pull({
+          reviewDecision: "APPROVED",
+          mergeStateStatus: "BEHIND",
+          approvals: {
+            nodes: [{ state: "APPROVED", submittedAt: "2026-10-10T08:00:00Z" }],
+          },
+          reviewThreads: { nodes: [{ isResolved: false }] },
+        })
+      ).gaps
+    ).toEqual([
+      { kind: "commit-after-approval" },
+      { kind: "threads", count: 1 },
+      { kind: "behind" },
+    ])
   })
 })

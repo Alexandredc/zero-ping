@@ -312,7 +312,12 @@ export async function listAllPulls(
   const all: InboxItem[] = [
     ...team.map((pull) => {
       const item = known.get(pull.key)
-      if (item) return withCachedScore(item)
+      // Only the viewer's own PRs get a readiness in the inbox: the team's fills in.
+      if (item)
+        return withCachedScore({
+          ...item,
+          readiness: item.readiness ?? pull.readiness,
+        })
       const synthetic = withJevScore(
         teamPullToItem(pull, viewer.login),
         scores.get(pull.key),

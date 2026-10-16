@@ -317,6 +317,38 @@ export const pull = defineMessages({
       urgencyHint:
         "Estimée d'après le titre, la description, les labels et les derniers commentaires. Plus le score est haut, plus c'est à traiter tôt.",
     },
+    readiness: {
+      ready: "Prête à merger",
+      almost: "Presque :",
+      computing: "État de merge en cours de calcul",
+      readyHint:
+        "Approuvée sans commit depuis, aucun fil ouvert, à jour et CI au vert ; rien dans la discussion ne dit d'attendre.",
+      computingHint:
+        "GitHub calcule encore si la branche se merge proprement. Rien ne manque pour l'instant.",
+      waitHint:
+        "Jev a lu la description et la discussion : elles disent d'attendre avant de merger.",
+      gaps: {
+        draft: "en brouillon",
+        changesRequested: "changements demandés",
+        notApproved: "pas encore approuvée",
+        commitAfterApproval: "commit après l'approbation",
+        threads: (n: number) =>
+          `${n} ${plural(n, "fil")} ${plural(n, "ouvert")}`,
+        behind: "à rebaser",
+        blocked: "bloquée par la protection de branche",
+        unstable: "CI pas au vert",
+        dirty: "conflit",
+      },
+      wait: {
+        dependency: (number: number | null) =>
+          number === null ? "attend une autre PR" : `attend #${number}`,
+        hold: "« ne pas merger » demandé",
+        freeze: "gel des déploiements",
+        label: "label de blocage",
+        question: "question sans réponse",
+        other: "la discussion dit d'attendre",
+      },
+    },
   },
   en: {
     diff: {
@@ -620,6 +652,37 @@ export const pull = defineMessages({
         `Jev urgency: ${level} (${score} out of 100)`,
       urgencyHint:
         "Estimated from the title, description, labels and latest comments. The higher the score, the sooner to handle it.",
+    },
+    readiness: {
+      ready: "Ready to merge",
+      almost: "Almost:",
+      computing: "Merge state being computed",
+      readyHint:
+        "Approved with no commit since, no open thread, up to date and CI green; nothing in the discussion says to wait.",
+      computingHint:
+        "GitHub is still working out whether the branch merges cleanly. Nothing is missing so far.",
+      waitHint:
+        "Jev read the description and the discussion: they say to wait before merging.",
+      gaps: {
+        draft: "draft",
+        changesRequested: "changes requested",
+        notApproved: "not approved yet",
+        commitAfterApproval: "commit after the approval",
+        threads: (n: number) => `${n} open ${pluralEn(n, "thread")}`,
+        behind: "needs a rebase",
+        blocked: "blocked by branch protection",
+        unstable: "CI not green",
+        dirty: "conflict",
+      },
+      wait: {
+        dependency: (number: number | null) =>
+          number === null ? "waits for another PR" : `waits for #${number}`,
+        hold: "asked not to merge yet",
+        freeze: "deploy freeze",
+        label: "blocking label",
+        question: "unanswered question",
+        other: "the discussion says to wait",
+      },
     },
   },
 })

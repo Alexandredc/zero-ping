@@ -40,6 +40,10 @@ export type SubjectDetails = {
   reviews: Review[]
   ciState: string | null
   reviewDecision: string | null
+  /** Pull requests only: GitHub's merge state, null while unknown to the app. */
+  mergeStateStatus: string | null
+  /** Commit date of the head commit. */
+  lastCommitAt: string | null
   reviewRequests: ReviewRequest[]
   reviewRequestedAt: { reviewer: ReviewRequest; createdAt: string }[]
   approvals: number

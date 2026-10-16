@@ -22,6 +22,8 @@ const details: SubjectDetails = {
   reviews: [],
   ciState: "SUCCESS",
   reviewDecision: null,
+  mergeStateStatus: null,
+  lastCommitAt: null,
   reviewRequests: [{ user: "lead" }],
   reviewRequestedAt: [],
   approvals: 0,
