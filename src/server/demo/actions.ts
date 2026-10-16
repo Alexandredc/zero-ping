@@ -300,9 +300,9 @@ async function getReviewNotice(key: string, event: ReviewEvent) {
         event,
         repoFullName: item.repoFullName,
         number: item.number,
-        title: item.title,
         url: item.htmlUrl,
         author: item.author,
+        inThread: Boolean(thread),
       },
       messagesFor(preferences.language)
     ),

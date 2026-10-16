@@ -7,26 +7,44 @@ const fr = messagesFor("fr")
 const pull = {
   repoFullName: "acme/acme-api",
   number: 9026,
-  title: "round the shipping fees",
   url: "https://github.com/acme/acme-api/pull/9026",
   author: "jdoe",
+  inThread: false,
 }
 
 describe("draftReviewNotice", () => {
-  it("links the PR and pings its author by handle", () => {
+  it("names and links the PR in the channel, pinging its author", () => {
     expect(draftReviewNotice({ ...pull, event: "APPROVE" }, fr)).toBe(
-      "✅ J'ai approuvé acme-api#9026 (round the shipping fees) : @jdoe c'est bon pour moi, tu peux merger.\nhttps://github.com/acme/acme-api/pull/9026"
+      "@jdoe j'ai regardé ta PR acme-api#9026, c'est tout bon pour moi, tu peux merger ✅\nhttps://github.com/acme/acme-api/pull/9026"
     )
+  })
+
+  it("keeps to one short line in the PR's thread", () => {
     expect(
-      draftReviewNotice({ ...pull, event: "REQUEST_CHANGES" }, fr)
-    ).toMatch(/^🔁 .* @jdoe je t'ai laissé des retours\.\n/)
+      draftReviewNotice(
+        { ...pull, event: "REQUEST_CHANGES", inThread: true },
+        fr
+      )
+    ).toBe("@jdoe je t'ai laissé quelques retours avant de merger 🔁")
+  })
+
+  it("reads without an author to ping", () => {
+    expect(
+      draftReviewNotice(
+        { ...pull, event: "COMMENT", author: null, inThread: true },
+        fr
+      )
+    ).toBe("Je t'ai laissé quelques commentaires 💬")
+    expect(
+      draftReviewNotice({ ...pull, event: "APPROVE", author: null }, fr)
+    ).toMatch(/^J'ai regardé acme-api#9026, c'est tout bon/)
   })
 
   it("drafts the message in the chosen language", () => {
     expect(
       draftReviewNotice({ ...pull, event: "APPROVE" }, messagesFor("en"))
     ).toBe(
-      "✅ I approved acme-api#9026 (round the shipping fees): @jdoe looks good to me, you can merge.\nhttps://github.com/acme/acme-api/pull/9026"
+      "@jdoe I looked at your PR acme-api#9026, all good for me, you can merge ✅\nhttps://github.com/acme/acme-api/pull/9026"
     )
   })
 })

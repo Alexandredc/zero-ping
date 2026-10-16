@@ -137,21 +137,17 @@ export const server = defineMessages({
       confidenceMissing: "non fournie",
     },
     reviewNotice: {
-      approve: {
-        opening: "✅ J'ai approuvé",
-        closing: "c'est bon pour moi, tu peux merger.",
-      },
-      requestChanges: {
-        opening: "🔁 J'ai demandé des changements sur",
-        closing: "je t'ai laissé des retours.",
-      },
-      comment: {
-        opening: "💬 J'ai laissé une review sur",
-        closing: "je t'ai laissé quelques commentaires.",
-      },
-      /** "✅ J'ai approuvé repo#12 (Titre) : @auteur c'est bon pour moi…". */
-      message: (opening: string, subject: string, closing: string) =>
-        `${opening} ${subject} : ${closing}`,
+      approve: "c'est tout bon pour moi, tu peux merger ✅",
+      requestChanges: "je t'ai laissé quelques retours avant de merger 🔁",
+      comment: "je t'ai laissé quelques commentaires 💬",
+      /** In the PR's thread, which already says which PR it is: "@auteur c'est tout bon…". */
+      inThread: (who: string | null, body: string) =>
+        who ? `${who} ${body}` : body[0].toUpperCase() + body.slice(1),
+      /** In the channel: "@auteur j'ai regardé ta PR repo#12, c'est tout bon…". */
+      inChannel: (who: string | null, subject: string, body: string) =>
+        who
+          ? `${who} j'ai regardé ta PR ${subject}, ${body}`
+          : `J'ai regardé ${subject}, ${body}`,
     },
   },
   en: {
@@ -282,20 +278,15 @@ export const server = defineMessages({
       confidenceMissing: "not given",
     },
     reviewNotice: {
-      approve: {
-        opening: "✅ I approved",
-        closing: "looks good to me, you can merge.",
-      },
-      requestChanges: {
-        opening: "🔁 I requested changes on",
-        closing: "I left you some feedback.",
-      },
-      comment: {
-        opening: "💬 I left a review on",
-        closing: "I left you a few comments.",
-      },
-      message: (opening: string, subject: string, closing: string) =>
-        `${opening} ${subject}: ${closing}`,
+      approve: "all good for me, you can merge ✅",
+      requestChanges: "I left you some feedback before merging 🔁",
+      comment: "I left you a few comments 💬",
+      inThread: (who: string | null, body: string) =>
+        who ? `${who} ${body}` : body[0].toUpperCase() + body.slice(1),
+      inChannel: (who: string | null, subject: string, body: string) =>
+        who
+          ? `${who} I looked at your PR ${subject}, ${body}`
+          : `I looked at ${subject}, ${body}`,
     },
   },
 })

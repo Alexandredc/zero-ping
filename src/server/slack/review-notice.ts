@@ -15,25 +15,26 @@ const WORDING = {
 /**
  * The message offered with a review, pinging the author by handle. It is the
  * user's own message, so it starts in the app's language; they edit it before sending.
+ * In the PR's own thread it is one short line; in the channel it names and links the PR.
  */
 export function draftReviewNotice(
   input: {
     event: ReviewEvent
     repoFullName: string
     number: number
-    title: string
     url: string
     author: string | null
+    inThread: boolean
   },
   t: Messages
 ): string {
   const m = t.server.reviewNotice
-  const { opening, closing } = m[WORDING[input.event]]
-  const repo = input.repoFullName.split("/")[1]
-  const who = input.author ? `@${input.author} ` : ""
-  const subject = `${repo}#${input.number} (${input.title})`
+  const body = m[WORDING[input.event]]
+  const who = input.author ? `@${input.author}` : null
+  if (input.inThread) return m.inThread(who, body)
+  const subject = `${input.repoFullName.split("/")[1]}#${input.number}`
   // A bare URL on its own line reads well in the box, and Slack links it.
-  return `${m.message(opening, subject, `${who}${closing}`)}\n${input.url}`
+  return `${m.inChannel(who, subject, body)}\n${input.url}`
 }
 
 /**
