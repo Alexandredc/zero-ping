@@ -18,6 +18,7 @@ const pull = {
   ciState: "FAILURE",
   mergeable: "MERGEABLE",
   problems: ["ci" as const],
+  readiness: null,
   syncedAt: new Date("2026-10-12T11:00:00Z"),
 }
 
@@ -45,6 +46,11 @@ describe("teamPullToItem", () => {
       ciState: "FAILURE",
       mergeable: "MERGEABLE",
       problems: ["ci"],
+      readiness: {
+        status: "almost",
+        gaps: [{ kind: "unstable" }],
+        waitHash: null,
+      },
       syncedAt: new Date("2026-10-12T11:00:00Z"),
     })
     expect(item).toMatchObject({
@@ -56,6 +62,7 @@ describe("teamPullToItem", () => {
       author: "jdoe",
       ciState: "FAILURE",
       pendingReviewers: 1,
+      readiness: { status: "almost", gaps: [{ kind: "unstable" }] },
       priority: 0,
       doneAt: null,
     })

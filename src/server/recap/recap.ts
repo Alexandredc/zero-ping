@@ -68,7 +68,13 @@ export async function buildRecap(db: Database, now: Date = new Date()) {
           sql`${items.ciState} in ('FAILURE', 'ERROR')`
         )
       ),
-      count(and(eq(items.view, "mine"), eq(items.reviewDecision, "APPROVED"))),
+      // Only the PRs every rule and Jev let through, not merely approved ones.
+      count(
+        and(
+          eq(items.view, "mine"),
+          sql`${items.readiness}->>'status' = 'ready'`
+        )
+      ),
       db
         .select({ count: sql<number>`count(*)::int` })
         .from(teamPulls)

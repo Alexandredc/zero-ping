@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query"
 import { CiIcon } from "@/components/inbox/ci-icon"
+import { ReadinessLine } from "@/components/inbox/merge-readiness"
 import { Link, createFileRoute } from "@tanstack/react-router"
 import { useState } from "react"
 import {
@@ -225,7 +226,9 @@ function TeamRow({
               </span>
             </Hint>
           </p>
-          {healthy ? (
+          {healthy && pull.readiness?.status === "ready" ? (
+            <ReadinessLine readiness={pull.readiness} />
+          ) : healthy ? (
             <p className="flex items-center gap-1.5 text-xs text-diff-add-strong">
               <CircleCheckIcon className="size-3.5" />
               {pull.isDraft ? t.team.row.draft : t.team.row.healthy}

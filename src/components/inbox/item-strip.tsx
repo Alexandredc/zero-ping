@@ -10,6 +10,7 @@ import {
 import { Hint } from "./hint"
 import { JevGauge } from "./jev-gauge"
 import { CiIcon } from "./ci-icon"
+import { ReadinessLine } from "./merge-readiness"
 import { SlackIcon } from "@/components/brand-icons"
 import type { Item } from "@/server/db/schema"
 import type { InboxItem } from "@/server/inbox/actions"
@@ -286,6 +287,9 @@ export function ItemStrip({
           >
             {item.title}
           </p>
+          {item.kind === "PullRequest" &&
+            item.state === "OPEN" &&
+            item.readiness && <ReadinessLine readiness={item.readiness} />}
           {item.awaitingExcerpt && (
             <p className="line-clamp-1 text-xs text-muted-foreground">
               <span className="font-medium text-foreground/80">

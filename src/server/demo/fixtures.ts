@@ -12,7 +12,7 @@ import type {
   ConversationEntry,
 } from "@/server/github/conversation"
 import type { PullChecks } from "@/server/github/checks"
-import type { MergeInfo } from "@/server/github/merge"
+import type { Readiness } from "@/server/readiness/rules"
 import type { PullFile } from "@/server/github/pull-files"
 import type { ReviewerOptions } from "@/server/github/reviewers"
 import type { UatStatus } from "@/server/github/uat"
@@ -276,7 +276,34 @@ export function demoItems(now: Date): DemoItem[] {
       reviewDecision: "APPROVED",
       approvals: 2,
       headOid: "f00dcaf",
+      mergeStateStatus: "CLEAN",
+      readiness: { status: "ready", gaps: [], waitHash: "demo" },
       aiUrgency: 1.1,
+    },
+    {
+      ...base,
+      ...pull("acme/api", 417),
+      title: "feat: retry failed webhooks with backoff",
+      reason: "author",
+      view: "mine",
+      updatedAt: ago(now, 3 * HOUR_MS),
+      author: ME,
+      labels: ["enhancement"],
+      additions: 128,
+      deletions: 19,
+      changedFiles: 4,
+      ciState: "SUCCESS",
+      reviewDecision: "APPROVED",
+      approvals: 1,
+      headOid: "beefcab",
+      mergeStateStatus: "CLEAN",
+      // Every rule passes; Jev read « wait for the rate limiting first ».
+      readiness: {
+        status: "almost",
+        gaps: [{ kind: "wait", reason: "dependency", pull: 412 }],
+        waitHash: "demo",
+      },
+      aiUrgency: 0.8,
     },
     {
       ...base,
@@ -294,6 +321,16 @@ export function demoItems(now: Date): DemoItem[] {
       reviewDecision: "REVIEW_REQUIRED",
       pendingReviewers: 2,
       headOid: "b0b0b0b",
+      mergeStateStatus: "BLOCKED",
+      readiness: {
+        status: "almost",
+        gaps: [
+          { kind: "review", decision: "REVIEW_REQUIRED" },
+          { kind: "threads", count: 2 },
+          { kind: "behind" },
+        ],
+        waitHash: null,
+      },
       aiUrgency: 1.5,
     },
     {
@@ -311,6 +348,12 @@ export function demoItems(now: Date): DemoItem[] {
       ciState: "SUCCESS",
       reviewDecision: null,
       headOid: "0ace0fb",
+      mergeStateStatus: "DRAFT",
+      readiness: {
+        status: "almost",
+        gaps: [{ kind: "draft" }, { kind: "review", decision: null }],
+        waitHash: null,
+      },
       aiUrgency: 0.6,
     },
 
@@ -417,6 +460,7 @@ export function demoTeamPulls(now: Date) {
       mergeable?: string
       problems?: TeamProblem[]
       isDraft?: boolean
+      readiness?: Readiness
     }
   ) => ({
     key: `${repo}#${number}`,
@@ -435,6 +479,15 @@ export function demoTeamPulls(now: Date) {
     ciState: fields.ciState ?? "SUCCESS",
     mergeable: fields.mergeable ?? "MERGEABLE",
     problems: fields.problems ?? [],
+    readiness: fields.readiness ?? {
+      status: "almost" as const,
+      gaps: [
+        fields.reviewDecision === "CHANGES_REQUESTED"
+          ? { kind: "review" as const, decision: "CHANGES_REQUESTED" }
+          : { kind: "review" as const, decision: "REVIEW_REQUIRED" },
+      ],
+      waitHash: null,
+    },
     syncedAt: now,
   })
   return [
@@ -502,6 +555,14 @@ export function demoTeamPulls(now: Date) {
       reviewers: ["priya-shah"],
       mergeable: "CONFLICTING",
       problems: ["conflict", "stale"],
+      readiness: {
+        status: "almost",
+        gaps: [
+          { kind: "review", decision: "REVIEW_REQUIRED" },
+          { kind: "dirty" },
+        ],
+        waitHash: null,
+      },
     }),
     pull("acme/web", 242, {
       title: "docs: Storybook stories for Button and Input",
@@ -511,6 +572,7 @@ export function demoTeamPulls(now: Date) {
       deletions: 0,
       reviewers: ["priya-shah"],
       reviewDecision: "APPROVED",
+      readiness: { status: "ready", gaps: [], waitHash: "demo" },
     }),
     pull("acme/web", 226, {
       title: "refactor: split the cart store",
@@ -1127,6 +1189,30 @@ export function demoPulls(now: Date): DemoPull[] {
       project: { status: "Ready to merge", priority: "P2" },
     },
     {
+      key: "acme/api#417",
+      conversation: conversation(
+        "acme/api#417",
+        {
+          author: ME,
+          daysAgo: 1,
+          body: "Closes #398. Au plus 5 tentatives par webhook, avec un backoff exponentiel et une seule stack par échec.\n\nÀ merger après #412 : les nouvelles tentatives passent par le rate limiting.",
+        },
+        () => [
+          {
+            type: "comment",
+            ...comment(
+              "c417",
+              "sam-lee",
+              "Approuvé. On garde bien l'ordre : #412 d'abord, puis celle-ci.",
+              ago(now, 3 * HOUR_MS),
+              pullUrl("acme/api", 417)
+            ),
+          },
+        ]
+      ),
+      checks: checks(14),
+    },
+    {
       key: "acme/api#398",
       conversation: conversation(
         "acme/api#398",
@@ -1189,19 +1275,14 @@ export function demoIssueConversations(now: Date): Map<string, Conversation> {
   ])
 }
 
-export function demoMergeInfo(title: string, head: string): MergeInfo {
-  return {
-    methods: ["SQUASH", "MERGE", "REBASE"],
-    defaultMethod: "SQUASH",
-    mergeStateStatus: "CLEAN",
-    canMerge: true,
-    blockedReason: null,
-    headRef: head,
-    autoDeletesBranch: true,
-    isCrossRepository: false,
-    title,
-  }
-}
+/** The repository side of the merge box: every method allowed. */
+export const DEMO_MERGE_SETTINGS = {
+  squashMergeAllowed: true,
+  mergeCommitAllowed: true,
+  rebaseMergeAllowed: true,
+  deleteBranchOnMerge: true,
+  viewerDefaultMergeMethod: "SQUASH",
+} as const
 
 export function demoReviewerOptions(author: string | null): ReviewerOptions {
   const others = DEMO_PEOPLE.filter((person) => person.login !== author)

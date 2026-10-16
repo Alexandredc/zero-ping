@@ -134,6 +134,7 @@ describe("demo database", () => {
       review: 5,
       awaiting: 2,
       ciFailing: 1,
+      // acme/api#417 is approved too, but Jev read that it waits for #412.
       readyToMerge: 1,
       team: 5,
     })
