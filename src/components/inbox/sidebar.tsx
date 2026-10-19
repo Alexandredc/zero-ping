@@ -11,11 +11,17 @@ import {
   SunIcon,
   TriangleAlertIcon,
 } from "lucide-react"
-import { FOLDER_ICONS, PRIMARY_FOLDERS, SECONDARY_FOLDERS } from "./folders"
+import {
+  ALL_ISSUES_ICON,
+  ALL_PULLS_ICON,
+  FOLDER_ICONS,
+  PRIMARY_FOLDERS,
+  SECONDARY_FOLDERS,
+} from "./folders"
+import type { Scope } from "./folders"
 import { PAGE_ICONS } from "./pages"
 import type { Folder } from "@/server/inbox/actions"
 import type { SyncStatus } from "@/server/inbox/loop"
-import { Kbd } from "@/components/ui/kbd"
 import { Separator } from "@/components/ui/separator"
 import { Spinner } from "@/components/ui/spinner"
 import {
@@ -28,6 +34,7 @@ import { formatWhen, nextMorning, timeAgo } from "@/lib/format"
 import { useTheme } from "@/lib/theme"
 import { LOGO_URL, formatPings } from "@/lib/pings"
 import {
+  browseCountsQuery,
   folderCountsQuery,
   issuesQuery,
   pingCountQuery,
@@ -48,12 +55,15 @@ import { DND_FOREVER, doNotDisturb, isForever } from "@/lib/quiet"
 import { useNotificationPermission } from "@/hooks/use-notification-permission"
 import { useHotkeys } from "@/hooks/use-hotkeys"
 import { useSidebarCollapsed } from "@/hooks/use-sidebar-collapsed"
+import { usePrefetchPages } from "@/hooks/use-prefetch-pages"
 import type { Theme } from "@/lib/theme"
 import { useI18n } from "@/hooks/use-i18n"
 import type { Messages } from "@/lib/i18n/messages"
 
 type SidebarProps = {
   folder?: Folder
+  /** « Toutes les PR » or « Toutes les issues » is open: « Mes PR » widened to every open PR or issue. */
+  browse?: Exclude<Scope, "mine"> | null
   page?: "dashboard" | "team" | "recap" | "issues"
   counts?: Record<Folder, number>
   sync?: SyncStatus
@@ -117,28 +127,34 @@ function FolderLink({
 /** A link to a page outside the inbox folders, styled like a folder. */
 function PageLink({
   to,
+  search,
   label,
   hint,
   icon: Icon,
   active,
   count,
+  loading = false,
   collapsed,
 }: {
-  to: "/dashboard" | "/team" | "/recap" | "/issues"
+  to: "/" | "/dashboard" | "/team" | "/recap" | "/issues"
+  search?: { folder: Folder; scope: Exclude<Scope, "mine"> }
   label: string
   hint: string
   icon: React.ComponentType<{ className?: string }>
   active: boolean
   count?: number
+  /** Read from GitHub for the first time: a spinner stands for the count. */
+  loading?: boolean
   collapsed: boolean
 }) {
-  const hasCount = count !== undefined && count > 0
+  const hasCount = !loading && count !== undefined && count > 0
   return (
     <Tooltip>
       <TooltipTrigger
         render={
           <Link
             to={to}
+            search={search}
             aria-label={collapsed ? label : undefined}
             className={cn(
               "relative flex items-center gap-2.5 rounded-md py-1.5 text-sm text-sidebar-foreground/80 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground",
@@ -150,6 +166,14 @@ function PageLink({
       >
         <Icon className="size-4 shrink-0 opacity-70" />
         {!collapsed && <span className="flex-1 truncate">{label}</span>}
+        {loading && (
+          <Spinner
+            className={cn(
+              "shrink-0 text-muted-foreground",
+              collapsed ? "absolute top-0.5 right-0.5 size-2.5" : "size-3"
+            )}
+          />
+        )}
         {hasCount &&
           (collapsed ? (
             <span className="absolute top-0.5 right-1 font-mono text-[0.6rem] leading-none text-muted-foreground tabular-nums">
@@ -343,6 +367,7 @@ function LogoWithPings() {
 
 export function Sidebar({
   folder,
+  browse = null,
   page,
   counts,
   sync,
@@ -364,7 +389,9 @@ export function Sidebar({
     enabled: !counts,
   })
   const folderCounts = counts ?? ownCounts
+  const { data: browseCounts } = useQuery(browseCountsQuery())
   useHotkeys({ "[": toggle })
+  usePrefetchPages()
 
   const nextTheme =
     THEME_ORDER[(THEME_ORDER.indexOf(theme) + 1) % THEME_ORDER.length]
@@ -378,7 +405,7 @@ export function Sidebar({
     <aside
       className={cn(
         "flex h-full shrink-0 flex-col border-r bg-sidebar py-3 transition-[width] duration-200",
-        collapsed ? "w-14 px-2" : "w-52 px-2.5"
+        collapsed ? "w-14 px-2" : "w-56 px-2.5"
       )}
     >
       <Link
@@ -430,7 +457,7 @@ export function Sidebar({
           <FolderLink
             key={f}
             folder={f}
-            active={f === folder}
+            active={f === folder && !(f === "mine" && browse)}
             count={folderCounts?.[f]}
             collapsed={collapsed}
           />
@@ -442,6 +469,31 @@ export function Sidebar({
           icon={PAGE_ICONS.issues}
           active={page === "issues"}
           count={issues?.assigned.length}
+          collapsed={collapsed}
+        />
+        <SectionTitle collapsed={collapsed}>
+          {copy.sections.browse}
+        </SectionTitle>
+        <PageLink
+          to="/"
+          search={{ folder: "mine", scope: "all" }}
+          label={t.inbox.list.allPulls}
+          hint={t.inbox.list.allPullsHint}
+          icon={ALL_PULLS_ICON}
+          active={browse === "all"}
+          count={browseCounts?.pulls}
+          loading={browseCounts?.pullsLoading}
+          collapsed={collapsed}
+        />
+        <PageLink
+          to="/"
+          search={{ folder: "mine", scope: "issues" }}
+          label={t.inbox.list.allIssues}
+          hint={t.inbox.list.allIssuesHint}
+          icon={ALL_ISSUES_ICON}
+          active={browse === "issues"}
+          count={browseCounts?.issues ?? undefined}
+          loading={browseCounts?.issues === null}
           collapsed={collapsed}
         />
         <SectionTitle collapsed={collapsed}>{copy.sections.filed}</SectionTitle>
@@ -519,7 +571,6 @@ export function Sidebar({
         <MenuRow
           icon={collapsed ? PanelLeftOpenIcon : PanelLeftCloseIcon}
           label={copy.collapse}
-          detail={<Kbd>[</Kbd>}
           hint={collapsed ? copy.expandHint : copy.collapseHint}
           collapsed={collapsed}
           onClick={toggle}

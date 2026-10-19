@@ -1,12 +1,22 @@
-import { useQuery, useQueryClient } from "@tanstack/react-query"
+import {
+  useInfiniteQuery,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query"
 import { createFileRoute, useNavigate } from "@tanstack/react-router"
+import { useVirtualizer } from "@tanstack/react-virtual"
 import { useEffect, useRef, useState } from "react"
 import { CheckIcon, ClockIcon, InboxIcon, XIcon } from "lucide-react"
 import { z } from "zod"
 import { DetailPanel } from "@/components/inbox/detail-panel"
 import { ReviewDialog } from "@/components/inbox/review-dialog"
 import type { PendingReview } from "@/components/inbox/review-dialog"
-import { FOLDER_ICONS } from "@/components/inbox/folders"
+import {
+  ALL_ISSUES_ICON,
+  ALL_PULLS_ICON,
+  FOLDER_ICONS,
+  SCOPES,
+} from "@/components/inbox/folders"
 import { ItemStrip } from "@/components/inbox/item-strip"
 import { DetailPlaceholder } from "@/components/inbox/detail-placeholder"
 import {
@@ -47,14 +57,15 @@ import {
   DropdownMenuLabel,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { formatWhen, nextMorning } from "@/lib/format"
 import { cn } from "@/lib/utils"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Spinner } from "@/components/ui/spinner"
 import {
   checksQuery,
   conversationQuery,
+  allIssuesQuery,
   inboxQuery,
   projectFieldsQuery,
   useInboxActions,
@@ -69,8 +80,8 @@ const searchSchema = z.object({
   repo: z.string().optional(),
   item: z.string().optional(),
   sort: z.enum(PULL_SORTS).default("priority"),
-  /** « Mes PR » only: the viewer's PRs, or every open PR of the tracked repos. */
-  scope: z.enum(["mine", "all"]).default("mine"),
+  /** « Mes PR » only: the viewer's PRs, or every open PR or issue of the tracked repos. */
+  scope: z.enum(SCOPES).default("mine"),
   /** The open item takes the whole window. */
   full: z.boolean().optional(),
 })
@@ -112,7 +123,11 @@ function InboxPage() {
   const { t, language } = useI18n()
   const copy = t.inbox.list
   const filterDefs = pullFilters(t)
-  const allPulls = search.folder === "mine" && search.scope === "all"
+  // « Toutes les PR » or « Toutes les issues », opened from « Parcourir ».
+  const browse =
+    search.folder === "mine" && search.scope !== "mine" ? search.scope : null
+  const allPulls = browse === "all"
+  const allIssues = browse === "issues"
   const { data, isPending } = useQuery(
     inboxQuery(
       search.folder,
@@ -121,9 +136,14 @@ function InboxPage() {
       search.scope
     )
   )
+  const issuePages = useInfiniteQuery({
+    ...allIssuesQuery(search.repo),
+    enabled: allIssues,
+  })
+  const listPending = allIssues ? issuePages.isPending : isPending
   const actions = useInboxActions()
   const composerRef = useRef<HTMLTextAreaElement>(null)
-  const listRef = useRef<HTMLDivElement>(null)
+  const viewportRef = useRef<HTMLDivElement>(null)
   const [checked, setChecked] = useState<Set<string>>(new Set())
   // Kept by the page: an approved PR leaves its folder and closes the panel.
   const [pendingReview, setPendingReview] = useState<PendingReview | null>(null)
@@ -133,18 +153,20 @@ function InboxPage() {
       ? `pulls:${search.scope}`
       : `inbox:${search.folder}`
   )
-  const loaded = data?.items ?? []
+  const loaded = allIssues
+    ? (issuePages.data?.pages.flatMap((page) => page.items) ?? [])
+    : (data?.items ?? [])
   const listed = sortPulls(
     applyFilters(loaded, filterDefs, filters.selection),
     search.sort
   )
   const smart = useSmartSearch({
-    kind: "PR",
+    kind: allIssues ? "issue" : "PR",
     items: listed,
     toCandidate: pullCandidate,
     resetKey: `${search.folder}:${search.scope}:${search.repo ?? ""}`,
   })
-  const items = allPulls ? smart.visible : listed
+  const items = browse ? smart.visible : listed
   // Items that left the folder (done, synced away) drop out of the selection.
   const selection = items.filter(
     (item) => item.inInbox && checked.has(item.key)
@@ -180,7 +202,7 @@ function InboxPage() {
   const selected =
     selectedIndex >= 0
       ? items[selectedIndex]
-      : data?.items.find((item) => item.key === search.item)
+      : loaded.find((item) => item.key === search.item)
 
   const select = (key: string | undefined) =>
     navigate({
@@ -198,12 +220,33 @@ function InboxPage() {
       replace: true,
     })
 
+  // Hundreds of issues: only the rows in view are rendered.
+  const virtualizer = useVirtualizer({
+    count: items.length,
+    getScrollElement: () => viewportRef.current,
+    estimateSize: () => 76,
+    overscan: 8,
+    getItemKey: (index) => items[index].key,
+  })
+
+  // The next page of « Toutes les issues » loads as the end of the list comes into view.
+  const lastShown = virtualizer.getVirtualItems().at(-1)?.index ?? -1
+  const { hasNextPage, isFetchingNextPage, fetchNextPage } = issuePages
   useEffect(() => {
-    if (!selected) return
-    listRef.current
-      ?.querySelector<HTMLElement>(`[data-key="${CSS.escape(selected.key)}"]`)
-      ?.scrollIntoView({ block: "nearest" })
-  }, [selected])
+    if (
+      allIssues &&
+      hasNextPage &&
+      !isFetchingNextPage &&
+      lastShown >= items.length - 10
+    )
+      void fetchNextPage()
+  }, [allIssues, hasNextPage, isFetchingNextPage, lastShown, items.length])
+
+  useEffect(() => {
+    if (selectedIndex >= 0)
+      virtualizer.scrollToIndex(selectedIndex, { align: "auto" })
+    // Only a new selection scrolls: a refreshed list must not pull the view back.
+  }, [selected?.key])
 
   // The neighbours are one keystroke away: their panel is ready before ↑ or ↓.
   const queryClient = useQueryClient()
@@ -254,7 +297,21 @@ function InboxPage() {
   })
 
   const meta = t.nav.folders[search.folder]
-  const FolderIcon = FOLDER_ICONS[search.folder]
+  const FolderIcon = allPulls
+    ? ALL_PULLS_ICON
+    : allIssues
+      ? ALL_ISSUES_ICON
+      : FOLDER_ICONS[search.folder]
+  const title = allPulls
+    ? copy.allPulls
+    : allIssues
+      ? copy.allIssues
+      : meta.label
+  const hint = allPulls
+    ? copy.allPullsHint
+    : allIssues
+      ? copy.allIssuesHint
+      : meta.hint
   const canSort = search.folder !== "done"
   const snoozeOptions = [
     {
@@ -270,6 +327,7 @@ function InboxPage() {
       {!fullscreen && (
         <Sidebar
           folder={search.folder}
+          browse={browse}
           counts={data?.counts}
           sync={data?.sync}
           onSync={() => actions.sync.mutate()}
@@ -286,34 +344,14 @@ function InboxPage() {
           <div>
             <h1 className="flex items-center gap-2 font-heading text-lg font-semibold tracking-tight">
               <FolderIcon className="size-5 shrink-0 text-muted-foreground" />
-              {meta.label}
+              {title}
               {search.folder === "other" && data && (
                 <span className="font-mono text-sm font-normal text-muted-foreground tabular-nums">
                   {data.counts.other}
                 </span>
               )}
             </h1>
-            <p className="text-xs text-muted-foreground">
-              {allPulls ? copy.allPullsHint : meta.hint}
-            </p>
-            {search.folder === "mine" && (
-              <ToggleGroup
-                size="sm"
-                value={[search.scope]}
-                onValueChange={(value) => {
-                  const scope = value[0] as "mine" | "all" | undefined
-                  if (scope)
-                    void navigate({
-                      search: (prev) => ({ ...prev, scope, item: undefined }),
-                    })
-                }}
-                aria-label={copy.choosePulls}
-                className="mt-2"
-              >
-                <ToggleGroupItem value="mine">{copy.myPulls}</ToggleGroupItem>
-                <ToggleGroupItem value="all">{copy.allPulls}</ToggleGroupItem>
-              </ToggleGroup>
-            )}
+            <p className="text-xs text-muted-foreground">{hint}</p>
           </div>
           <ListMenus
             sort={canSort ? search.sort : undefined}
@@ -336,7 +374,9 @@ function InboxPage() {
           shown={listed.length}
           total={loaded.length}
         />
-        {allPulls && <SmartSearchBar search={smart} noun="PR" />}
+        {browse && (
+          <SmartSearchBar search={smart} noun={allIssues ? "issues" : "PR"} />
+        )}
         {items.length > 0 && (
           <div
             className={cn(
@@ -410,9 +450,9 @@ function InboxPage() {
             )}
           </div>
         )}
-        <ScrollArea className="min-h-0 flex-1">
-          <div ref={listRef}>
-            {isPending &&
+        <ScrollArea className="min-h-0 flex-1" viewportRef={viewportRef}>
+          <div>
+            {listPending &&
               Array.from({ length: 6 }, (_, index) => (
                 <div key={index} className="flex gap-3 border-b px-3 py-3">
                   <Skeleton className="h-12 w-9" />
@@ -422,7 +462,7 @@ function InboxPage() {
                   </div>
                 </div>
               ))}
-            {!isPending &&
+            {!listPending &&
               items.length === 0 &&
               !smart.query &&
               Object.keys(filters.selection).length === 0 && (
@@ -433,28 +473,56 @@ function InboxPage() {
                     </EmptyMedia>
                     <EmptyTitle>{copy.empty.title}</EmptyTitle>
                     <EmptyDescription>
-                      {copy.empty[search.folder]}
+                      {
+                        copy.empty[
+                          allPulls
+                            ? "allPulls"
+                            : allIssues
+                              ? "allIssues"
+                              : search.folder
+                        ]
+                      }
                     </EmptyDescription>
                   </EmptyHeader>
                 </Empty>
               )}
-            {items.map((item) => (
-              <div key={item.key} data-key={item.key} className="flex flex-col">
-                <div className="flex">
-                  <ItemStrip
-                    item={item}
-                    selected={item.key === selected?.key}
-                    checked={checked.has(item.key)}
-                    onCheck={() => toggleChecked(item.key)}
-                    onSelect={() => void select(item.key)}
-                    gauge={allPulls ? "jev" : "priority"}
-                  />
-                </div>
-                <MatchReason
-                  reason={allPulls ? smart.reasonOf(item.key) : null}
-                />
+            <div
+              className="relative w-full"
+              style={{ height: virtualizer.getTotalSize() }}
+            >
+              {virtualizer.getVirtualItems().map((row) => {
+                const item = items[row.index]
+                return (
+                  <div
+                    key={row.key}
+                    ref={virtualizer.measureElement}
+                    data-index={row.index}
+                    data-key={item.key}
+                    className="absolute top-0 left-0 flex w-full flex-col"
+                    style={{ transform: `translateY(${row.start}px)` }}
+                  >
+                    <div className="flex">
+                      <ItemStrip
+                        item={item}
+                        selected={item.key === selected?.key}
+                        checked={checked.has(item.key)}
+                        onCheck={() => toggleChecked(item.key)}
+                        onSelect={() => void select(item.key)}
+                        gauge={allPulls ? "jev" : "priority"}
+                      />
+                    </div>
+                    <MatchReason
+                      reason={browse ? smart.reasonOf(item.key) : null}
+                    />
+                  </div>
+                )
+              })}
+            </div>
+            {allIssues && isFetchingNextPage && (
+              <div className="flex justify-center py-3 text-muted-foreground">
+                <Spinner className="size-4" />
               </div>
-            ))}
+            )}
           </div>
         </ScrollArea>
       </main>

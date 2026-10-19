@@ -23,6 +23,7 @@ import { toMergeInfo } from "@/server/github/merge"
 import { messagesFor } from "@/lib/i18n/messages"
 import { getPreferences, normalizeChannel } from "@/server/preferences"
 import { teamPullToItem } from "@/server/team/as-item"
+import { teamIssueToItem } from "@/server/team/issues"
 import { DEMO_VIEWER, DemoOfflineError } from "./mode"
 import {
   DEMO_BOARD,
@@ -64,6 +65,29 @@ const offline = (): never => {
   throw new DemoOfflineError()
 }
 
+/** « Toutes les issues » over the open issues of the demo sprint. */
+function demoTeamIssues(): Item[] {
+  const { sprint, assigned } = demoSprint(new Date())
+  return [...sprint.items, ...assigned].flatMap((work) =>
+    work.kind === "issue" &&
+    work.state === "OPEN" &&
+    work.repo &&
+    work.number !== null &&
+    work.url
+      ? [
+          teamIssueToItem(work.repo, {
+            number: work.number,
+            title: work.title,
+            url: work.url,
+            updatedAt: work.updatedAt ?? new Date().toISOString(),
+            author: null,
+            labels: { nodes: work.labels },
+          }),
+        ]
+      : []
+  )
+}
+
 async function findItem(key: string): Promise<Item> {
   const db = await getDb()
   const item = (await db.select().from(items).where(eq(items.key, key))).at(0)
@@ -72,6 +96,8 @@ async function findItem(key: string): Promise<Item> {
     await db.select().from(teamPulls).where(eq(teamPulls.key, key))
   ).at(0)
   if (pull) return teamPullToItem(pull, DEMO_VIEWER.login)
+  const issue = demoTeamIssues().find((entry) => entry.key === key)
+  if (issue) return issue
   throw new Error(`Élément introuvable : ${key}`)
 }
 
@@ -419,6 +445,8 @@ export const demoActions = {
   getUatStatus,
   getLinkedIssues,
   listIssues,
+  listAllIssues: (repo?: string, page?: { offset: number; limit: number }) =>
+    live.listAllIssues(repo, page, () => Promise.resolve(demoTeamIssues())),
   getPullInsights,
   getSlackDiscussions,
   getReviewNotice,

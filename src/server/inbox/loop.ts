@@ -1,4 +1,6 @@
+import type { Octokit } from "octokit"
 import { getDb } from "@/server/db/client"
+import type { Database } from "@/server/db/client"
 import { getOctokit, getViewer } from "@/server/github/client"
 import { attentionReady, markAttentionReady } from "@/server/inbox/attention"
 import {
@@ -17,7 +19,11 @@ import { syncTeamPulls } from "@/server/team/pulls"
 import { repos } from "@/server/db/schema"
 import { eq } from "drizzle-orm"
 import { recordDailyPings } from "@/server/dashboard/activity"
-import { countPings, warmProjectCaches } from "@/server/inbox/actions"
+import {
+  countPings,
+  warmAllIssues,
+  warmProjectCaches,
+} from "@/server/inbox/actions"
 import { localDate } from "@/server/recap/schedule"
 import { isDemo } from "@/server/demo/mode"
 
@@ -28,6 +34,8 @@ export type SyncStatus = {
   nextSyncAt: string | null
   /** The shortest wait GitHub allows between two notification polls. */
   githubIntervalS: number | null
+  /** The last team PR snapshot taken since the app started, null before the first. */
+  teamSyncedAt: string | null
 }
 
 type LoopState = {
@@ -35,6 +43,7 @@ type LoopState = {
   timer: ReturnType<typeof setTimeout> | null
   current: Promise<void> | null
   lastTeamSyncAt: number
+  teamSync: Promise<void> | null
 }
 
 const MIN_INTERVAL_S = 30
@@ -50,12 +59,48 @@ function state(): LoopState {
       lastError: null,
       nextSyncAt: null,
       githubIntervalS: null,
+      teamSyncedAt: null,
     },
     timer: null,
     current: null,
     lastTeamSyncAt: 0,
+    teamSync: null,
   }
   return globalForLoop.__githubInboxLoop
+}
+
+/**
+ * Takes the team PR snapshot behind the sync: Jev's checks make it slow, and
+ * « Toutes les PR » must not wait for the inbox, nor the inbox for it.
+ */
+function syncTeamInBackground(
+  db: Database,
+  octokit: Octokit,
+  viewerLogin: string,
+  force: boolean
+) {
+  const loop = state()
+  if (loop.teamSync) return
+  if (!force && Date.now() - loop.lastTeamSyncAt <= TEAM_SYNC_MS) return
+  loop.teamSync = (async () => {
+    const [tracked, preferences] = await Promise.all([
+      db
+        .select({ fullName: repos.fullName })
+        .from(repos)
+        .where(eq(repos.tracked, true)),
+      getPreferences(db),
+    ])
+    await syncTeamPulls(db, octokit, {
+      repos: tracked.map((repo) => repo.fullName),
+      viewerLogin,
+      staleDays: preferences.teamStaleDays,
+    })
+    loop.lastTeamSyncAt = Date.now()
+    loop.status.teamSyncedAt = new Date().toISOString()
+  })()
+    // The team snapshot is a side view: its failure keeps the last one and the sync goes on.
+    .catch((error: unknown) => console.error("[team]", error))
+    .finally(() => (loop.teamSync = null))
 }
 
 async function runOnce(forceSearch: boolean): Promise<number> {
@@ -64,6 +109,11 @@ async function runOnce(forceSearch: boolean): Promise<number> {
     getOctokit(),
     getViewer(),
   ])
+  // « Toutes les PR » and « Toutes les issues » load from the start, page or not.
+  syncTeamInBackground(db, octokit, viewer.login, forceSearch)
+  void warmAllIssues().catch((error: unknown) =>
+    console.error("[issues]", error)
+  )
   const { pollInterval } = await pollNotifications(db, octokit)
   await searchMissingSubjects(db, octokit, forceSearch)
   const notify = await attentionReady(db)
@@ -78,24 +128,6 @@ async function runOnce(forceSearch: boolean): Promise<number> {
     preferences,
     messagesFor(preferences.language)
   )
-  const loop = state()
-  if (forceSearch || Date.now() - loop.lastTeamSyncAt > TEAM_SYNC_MS) {
-    const tracked = await db
-      .select({ fullName: repos.fullName })
-      .from(repos)
-      .where(eq(repos.tracked, true))
-    // The team snapshot is a side view: its failure keeps the last one and the sync goes on.
-    try {
-      await syncTeamPulls(db, octokit, {
-        repos: tracked.map((repo) => repo.fullName),
-        viewerLogin: viewer.login,
-        staleDays: preferences.teamStaleDays,
-      })
-      loop.lastTeamSyncAt = Date.now()
-    } catch (error) {
-      console.error("[team]", error)
-    }
-  }
   await runDailyRecap(db)
   await recordDailyPings(db, localDate(new Date()), await countPings())
   // Keeps the project caches warm, so a panel never waits for the project list.
@@ -106,6 +138,7 @@ async function runOnce(forceSearch: boolean): Promise<number> {
   void prefetchLookups(db).catch((error: unknown) =>
     console.error("[slack]", error)
   )
+  const loop = state()
   loop.status.githubIntervalS = pollInterval
   return syncInterval(pollInterval, preferences.syncIntervalSeconds)
 }

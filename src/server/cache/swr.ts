@@ -50,6 +50,10 @@ export function createSwrCache<TValue>(options: {
       }
       return load(key, loader)
     },
+    /** The value stored for a key, however old, without loading it. */
+    peek(key: string): TValue | undefined {
+      return entries.get(key)?.value
+    },
     /** Forgets a key, after a change made from the app. */
     invalidate(key: string) {
       entries.delete(key)

@@ -12,12 +12,15 @@ export const inbox = defineMessages({
         other: "Rien d'autre dans les repos suivis.",
         snoozed: "Rien en pause.",
         done: "Rien de traité pour l'instant. Utilise e pour marquer un élément comme traité.",
+        allPulls: "Aucune PR ouverte dans les repos suivis.",
+        allIssues: "Aucune issue ouverte dans les repos suivis.",
       },
       allPullsHint:
         "Toutes les PR ouvertes des repos suivis, classées par l'urgence qu'estime Jev.",
-      choosePulls: "Choisir les PR",
-      myPulls: "Mes PR",
       allPulls: "Toutes les PR",
+      allIssuesHint:
+        "Toutes les issues ouvertes des repos suivis, les plus récemment mises à jour d'abord.",
+      allIssues: "Toutes les issues",
       selectAll: "Tout sélectionner",
       selected: (count: number) =>
         `${count} sélectionné${count > 1 ? "s" : ""}`,
@@ -50,6 +53,7 @@ export const inbox = defineMessages({
       sections: {
         lead: "Lead",
         todo: "À traiter",
+        browse: "Parcourir",
         filed: "Classement",
         app: "Application",
       },
@@ -270,12 +274,15 @@ export const inbox = defineMessages({
         other: "Nothing else in the tracked repos.",
         snoozed: "Nothing snoozed.",
         done: "Nothing done yet. Press e to mark an item as done.",
+        allPulls: "No open PR in the tracked repos.",
+        allIssues: "No open issue in the tracked repos.",
       },
       allPullsHint:
         "Every open PR of the tracked repos, ranked by the urgency Jev estimates.",
-      choosePulls: "Choose the PRs",
-      myPulls: "My PRs",
       allPulls: "All PRs",
+      allIssuesHint:
+        "Every open issue of the tracked repos, the most recently updated first.",
+      allIssues: "All issues",
       selectAll: "Select all",
       selected: (count: number) => `${count} selected`,
       markDone: "Done",
@@ -307,6 +314,7 @@ export const inbox = defineMessages({
       sections: {
         lead: "Lead",
         todo: "To handle",
+        browse: "Browse",
         filed: "Filed",
         app: "App",
       },

@@ -35,6 +35,7 @@ import type {
   SummaryLength,
   View,
 } from "@/server/db/schema"
+import type { Database } from "@/server/db/client"
 import { getOctokit, getViewer } from "@/server/github/client"
 import { fetchConversation } from "@/server/github/conversation"
 import type { Conversation } from "@/server/github/conversation"
@@ -128,6 +129,15 @@ import {
   parseChatAnswer,
 } from "@/server/summary/chat"
 import { subjectToItem, teamPullToItem } from "@/server/team/as-item"
+import {
+  ISSUES_PAGE,
+  ISSUES_PER_PAGE,
+  fetchRepoIssues,
+  mergeIssues,
+  pageOf,
+  teamIssueToItem,
+} from "@/server/team/issues"
+import type { IssuePage } from "@/server/team/issues"
 import {
   readScores,
   scoreInBackground,
@@ -244,48 +254,33 @@ export async function listInbox(
   }))
 }
 
-/**
- * Every open PR of the tracked repos: the viewer's, and the team's ones. A PR
- * already in the inbox keeps its item, with its priority and its review state.
- */
-export async function listAllPulls(
-  repo?: string,
-  sort: SortOrder = "priority"
-): Promise<InboxItem[]> {
-  const db = await getDb()
-  const [team, rows, viewer] = await Promise.all([
-    db
-      .select()
-      .from(teamPulls)
-      .where(repo ? eq(teamPulls.repoFullName, repo) : undefined),
-    db
-      .select({ item: items, slack: slackLookups.discussions })
-      .from(items)
-      .innerJoin(repos, eq(repos.fullName, items.repoFullName))
-      .leftJoin(
-        slackLookups,
-        and(
-          eq(slackLookups.itemKey, items.key),
-          eq(slackLookups.status, "done")
-        )
+/** The open items of the tracked repos already in the inbox, by key, as the inbox lists them. */
+async function knownOpenItems(
+  db: Database,
+  kind: "PullRequest" | "Issue",
+  repo?: string
+): Promise<Map<string, InboxItem>> {
+  const rows = await db
+    .select({ item: items, slack: slackLookups.discussions })
+    .from(items)
+    .innerJoin(repos, eq(repos.fullName, items.repoFullName))
+    .leftJoin(
+      slackLookups,
+      and(eq(slackLookups.itemKey, items.key), eq(slackLookups.status, "done"))
+    )
+    .where(
+      and(
+        eq(repos.tracked, true),
+        eq(items.kind, kind),
+        eq(items.state, "OPEN"),
+        repo ? eq(items.repoFullName, repo) : undefined
       )
-      .where(
-        and(
-          eq(repos.tracked, true),
-          eq(items.kind, "PullRequest"),
-          eq(items.state, "OPEN"),
-          repo ? eq(items.repoFullName, repo) : undefined
-        )
-      ),
-    getViewer(),
-  ])
-  const preferences = await getPreferences(db)
-  const t = messagesFor(preferences.language)
+    )
   const hiddenChannels = await slackExclusions(
     db,
-    preferences.slackExcludedChannels
+    (await getPreferences(db)).slackExcludedChannels
   )
-  const known = new Map(
+  return new Map(
     rows.map((row) => [
       row.item.key,
       {
@@ -298,6 +293,145 @@ export async function listAllPulls(
       },
     ])
   )
+}
+
+/**
+ * Every open issue of the tracked repos, read from GitHub every few minutes:
+ * there are too many for a snapshot, and Jev does not rank them.
+ */
+const teamIssues = createSwrCache<Item[]>({
+  freshMs: 5 * 60_000,
+  maxAgeMs: 60 * 60_000,
+})
+
+async function trackedRepoNames(db: Database): Promise<string[]> {
+  const tracked = await db
+    .select({ fullName: repos.fullName })
+    .from(repos)
+    .where(eq(repos.tracked, true))
+  return tracked.map((row) => row.fullName).sort()
+}
+
+/** Every open issue of the tracked repos, or only each repo's `max` most recently updated. */
+async function trackedIssues(db: Database, max?: number): Promise<Item[]> {
+  const names = await trackedRepoNames(db)
+  return teamIssues.get(`${max ?? "all"}:${names.join(",")}`, async () => {
+    const octokit = await getOctokit()
+    const fetched = await Promise.all(
+      names.map((name) => fetchRepoIssues(octokit, name, max))
+    )
+    return fetched.flat().map(({ repo, issue }) => teamIssueToItem(repo, issue))
+  })
+}
+
+/**
+ * The issues a page needs. The first pages never wait for every issue: the
+ * most recently updated ones overall are among each repo's first GitHub page.
+ */
+function issuesFor(
+  db: Database,
+  page: { offset: number; limit: number }
+): Promise<Item[]> {
+  const all = trackedIssues(db)
+  if (page.offset + page.limit > ISSUES_PER_PAGE) return all
+  return Promise.any([all, trackedIssues(db, ISSUES_PER_PAGE)])
+}
+
+/** The issue among those already read from GitHub; never reads it again. */
+async function findTrackedIssue(
+  db: Database,
+  key: string
+): Promise<Item | undefined> {
+  const names = (await trackedRepoNames(db)).join(",")
+  const find = (issues: Item[] | undefined) =>
+    issues?.find((entry) => entry.key === key)
+  return (
+    find(teamIssues.peek(`all:${names}`)) ??
+    find(teamIssues.peek(`${ISSUES_PER_PAGE}:${names}`))
+  )
+}
+
+/**
+ * Every open issue of the tracked repos, the most recently updated first. An
+ * issue already in the inbox keeps its item.
+ */
+export async function listAllIssues(
+  repo?: string,
+  page: { offset: number; limit: number } = { offset: 0, limit: ISSUES_PAGE },
+  source: (
+    db: Database,
+    page: { offset: number; limit: number }
+  ) => Promise<Item[]> = issuesFor
+): Promise<IssuePage> {
+  const db = await getDb()
+  const [fetched, known] = await Promise.all([
+    source(db, page),
+    knownOpenItems(db, "Issue", repo),
+  ])
+  return pageOf(mergeIssues(known, fetched, repo), page)
+}
+
+/**
+ * What « Toutes les PR » and « Toutes les issues » count in the sidebar. The
+ * issues count is null until every issue was read from GitHub once.
+ */
+export async function countBrowse(): Promise<{
+  pulls: number
+  issues: number | null
+}> {
+  const db = await getDb()
+  const names = await trackedRepoNames(db)
+  const [[team], [own]] = await Promise.all([
+    db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(teamPulls)
+      .where(inArray(teamPulls.repoFullName, names)),
+    // The team snapshot leaves out the viewer's own PRs.
+    db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(items)
+      .where(
+        and(
+          inArray(items.repoFullName, names),
+          eq(items.kind, "PullRequest"),
+          eq(items.state, "OPEN"),
+          eq(items.view, "mine")
+        )
+      ),
+  ])
+  const issues = teamIssues.peek(`all:${names.join(",")}`)
+  return {
+    pulls: team.count + own.count,
+    issues: issues
+      ? mergeIssues(await knownOpenItems(db, "Issue"), issues).length
+      : null,
+  }
+}
+
+/** Reads the issues from GitHub ahead of time, so that « Toutes les issues » opens at once. */
+export async function warmAllIssues() {
+  await trackedIssues(await getDb())
+}
+
+/**
+ * Every open PR of the tracked repos: the viewer's, and the team's ones. A PR
+ * already in the inbox keeps its item, with its priority and its review state.
+ */
+export async function listAllPulls(
+  repo?: string,
+  sort: SortOrder = "priority"
+): Promise<InboxItem[]> {
+  const db = await getDb()
+  const [team, known, viewer, preferences] = await Promise.all([
+    db
+      .select()
+      .from(teamPulls)
+      .where(repo ? eq(teamPulls.repoFullName, repo) : undefined),
+    knownOpenItems(db, "PullRequest", repo),
+    getViewer(),
+    getPreferences(db),
+  ])
+  const t = messagesFor(preferences.language)
   const teamKeys = new Set(team.map((pull) => pull.key))
   const scores = await readScores(db, [
     ...team.map((pull) => pull.key),
@@ -423,6 +557,9 @@ async function getItem(key: string): Promise<Item> {
     await db.select().from(teamPulls).where(eq(teamPulls.key, key))
   ).at(0)
   if (pull) return teamPullToItem(pull, (await getViewer()).login)
+  // A teammate's issue opened from « Toutes les issues ».
+  const issue = await findTrackedIssue(db, key)
+  if (issue) return issue
   const { t } = await getMessages(db)
   throw new Error(t.server.errors.itemNotFound(key))
 }

@@ -66,4 +66,12 @@ describe("createSwrCache", () => {
     await cache.get("c", () => Promise.resolve(1))
     expect(await cache.get("a", () => Promise.resolve(9))).toBe(9)
   })
+
+  it("peeks at a stored value without loading it", async () => {
+    const { cache, advance } = setup()
+    expect(cache.peek("a")).toBeUndefined()
+    await cache.get("a", () => Promise.resolve(1))
+    advance(200)
+    expect(cache.peek("a")).toBe(1)
+  })
 })

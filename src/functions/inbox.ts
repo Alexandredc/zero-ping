@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start"
 import { z } from "zod"
 import {
+  countBrowse,
   countFolders,
   countPings,
   countTeamProblems,
@@ -46,6 +47,7 @@ import {
   savePreferences,
   listAccessibleRepos,
   listInbox,
+  listAllIssues,
   listAllPulls,
   listRepos,
   markDone,
@@ -60,6 +62,7 @@ import {
 } from "@/server/inbox/api"
 import { preferencesPatchSchema } from "@/server/preferences"
 import { getLanguage } from "@/server/i18n"
+import { ISSUES_PAGE } from "@/server/team/issues"
 
 const folderSchema = z.enum([
   "review",
@@ -77,20 +80,47 @@ export const getInbox = createServerFn({ method: "GET" })
       repo: z.string().optional(),
       sort: z.enum(["priority", "size"]).optional(),
       /** In « Mes PR », every open PR of the tracked repos instead of the viewer's. */
-      scope: z.enum(["mine", "all"]).optional(),
+      scope: z.enum(["mine", "all", "issues"]).optional(),
     })
   )
   .handler(async ({ data }) => {
     ensureSyncLoop()
     const [items, counts, team] = await Promise.all([
-      data.folder === "mine" && data.scope === "all"
-        ? listAllPulls(data.repo, data.sort)
-        : listInbox(data.folder, data.repo, data.sort),
+      data.folder !== "mine" || !data.scope || data.scope === "mine"
+        ? listInbox(data.folder, data.repo, data.sort)
+        : data.scope === "all"
+          ? listAllPulls(data.repo, data.sort)
+          : // « Toutes les issues » loads its pages with getAllIssues.
+            Promise.resolve([]),
       countFolders(),
       countTeamProblems(),
     ])
     return { items, counts, team, sync: getSyncStatus() }
   })
+
+export const getBrowseCounts = createServerFn({ method: "GET" }).handler(
+  async () => {
+    // Every page shows the sidebar: the background loads start from any of them.
+    ensureSyncLoop()
+    const counts = await countBrowse()
+    return {
+      ...counts,
+      /** Until the first team snapshot of this run, the count is an old one. */
+      pullsLoading: getSyncStatus().teamSyncedAt === null,
+    }
+  }
+)
+
+export const getAllIssues = createServerFn({ method: "GET" })
+  .validator(
+    z.object({
+      repo: z.string().optional(),
+      offset: z.number().int().min(0),
+    })
+  )
+  .handler(({ data }) =>
+    listAllIssues(data.repo, { offset: data.offset, limit: ISSUES_PAGE })
+  )
 
 export const getItemConversation = createServerFn({ method: "GET" })
   .validator(z.object({ key: z.string() }))

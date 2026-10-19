@@ -70,8 +70,10 @@ const PULL_FIELDS = `
 const DAY_MS = 24 * 60 * 60 * 1000
 /** Requested changes left without a push for this long block the PR. */
 const CHANGES_IDLE_DAYS = 2
-const REPOS_PER_QUERY = 4
-const PULLS_PER_REPO = 50
+/** GitHub times out (502) on 50 PRs of a busy repo with these fields. */
+const PULLS_PER_PAGE = 20
+/** Past this many open PRs, a repo's least recently updated ones stay out: Jev scores each one. */
+const MAX_PULLS_PER_REPO = 100
 
 /** What keeps a teammate's PR from moving, most blocking first. */
 export function teamProblems(
@@ -156,40 +158,55 @@ export function toScoreSubject(repo: string, pull: RawTeamPull): ScoreSubject {
   }
 }
 
-async function fetchRepoPulls(
-  octokit: Octokit,
-  fullNames: string[]
-): Promise<{ repo: string; pull: RawTeamPull }[]> {
-  const fields = fullNames
-    .map((fullName, index) => {
-      const [owner, name] = fullName.split("/")
-      return `r${index}: repository(owner: ${JSON.stringify(owner)}, name: ${JSON.stringify(name)}) {
-        pullRequests(states: OPEN, first: ${PULLS_PER_REPO}, orderBy: { field: UPDATED_AT, direction: DESC }) {
-          nodes { ${PULL_FIELDS} }
-        }
-      }`
-    })
-    .join("\n")
-  type Data = Record<string, { pullRequests: { nodes: RawTeamPull[] } } | null>
-  // GitHub can answer a heavy query with no data at all.
-  let data: Data | null | undefined
-  try {
-    data = await octokit.graphql(`query { ${fields} }`)
-  } catch (error) {
-    // A deleted repo or a lost access must not hide the others.
-    const partial = (error as { data?: Data }).data
-    if (!partial) throw error
-    data = partial
+const REPO_PULLS_QUERY = `query($owner: String!, $name: String!, $after: String) {
+  repository(owner: $owner, name: $name) {
+    pullRequests(states: OPEN, first: ${PULLS_PER_PAGE}, after: $after, orderBy: { field: UPDATED_AT, direction: DESC }) {
+      pageInfo { hasNextPage endCursor }
+      nodes { ${PULL_FIELDS} }
+    }
   }
-  // An empty answer must not replace the team's PRs with nothing.
-  if (!data) throw new Error("GitHub n'a renvoyé aucune PR d'équipe.")
-  const answered = data
-  return fullNames.flatMap((repo, index) =>
-    (answered[`r${index}`]?.pullRequests.nodes ?? []).map((pull) => ({
-      repo,
-      pull,
-    }))
-  )
+}`
+
+type RepoPullsPage = {
+  pageInfo: { hasNextPage: boolean; endCursor: string | null }
+  nodes: RawTeamPull[]
+}
+type RepoPullsData = { repository: { pullRequests: RepoPullsPage } | null }
+
+/**
+ * The open PRs of one repo, page by page. One repo per query: GitHub refuses
+ * several repos' PRs at once with RESOURCE_LIMITS_EXCEEDED.
+ */
+export async function fetchRepoPulls(
+  octokit: Pick<Octokit, "graphql">,
+  fullName: string
+): Promise<{ repo: string; pull: RawTeamPull }[]> {
+  const [owner, name] = fullName.split("/")
+  const pulls: RawTeamPull[] = []
+  let after: string | null = null
+  do {
+    let data: RepoPullsData | null | undefined
+    try {
+      // GitHub can answer a heavy query with no data at all.
+      data = await octokit.graphql<RepoPullsData | null>(REPO_PULLS_QUERY, {
+        owner,
+        name,
+        after,
+      })
+    } catch (error) {
+      // A deleted repo or a lost access must not hide the others; any other error keeps the last snapshot.
+      const partial = (error as { data?: RepoPullsData | null }).data
+      if (partial?.repository !== null) throw error
+      data = partial
+    }
+    // An empty answer must not replace the team's PRs with nothing.
+    if (!data) throw new Error("GitHub n'a renvoyé aucune PR d'équipe.")
+    const page: RepoPullsPage | undefined = data.repository?.pullRequests
+    if (!page) break
+    pulls.push(...page.nodes)
+    after = page.pageInfo.hasNextPage ? page.pageInfo.endCursor : null
+  } while (after && pulls.length < MAX_PULLS_PER_REPO)
+  return pulls.map((pull) => ({ repo: fullName, pull }))
 }
 
 /** Replaces the team PRs of the given repos with their current state on GitHub. */
@@ -199,11 +216,10 @@ export async function syncTeamPulls(
   options: { repos: string[]; viewerLogin: string; staleDays: number }
 ): Promise<number> {
   const now = new Date()
-  const batches: string[][] = []
-  for (let start = 0; start < options.repos.length; start += REPOS_PER_QUERY)
-    batches.push(options.repos.slice(start, start + REPOS_PER_QUERY))
   const fetched = (
-    await Promise.all(batches.map((batch) => fetchRepoPulls(octokit, batch)))
+    await Promise.all(
+      options.repos.map((repo) => fetchRepoPulls(octokit, repo))
+    )
   ).flat()
 
   const viewer = options.viewerLogin.toLowerCase()

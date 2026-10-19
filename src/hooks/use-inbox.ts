@@ -1,4 +1,5 @@
 import {
+  infiniteQueryOptions,
   queryOptions,
   useMutation,
   useQueryClient,
@@ -38,6 +39,8 @@ import {
   deleteChat,
   getWorkItemConversation,
   postReviewers,
+  getAllIssues,
+  getBrowseCounts,
   getInbox,
   getItemConversation,
   getItemFiles,
@@ -58,6 +61,7 @@ import {
   triggerSync,
 } from "@/functions/inbox"
 import type { Folder, SortOrder } from "@/server/inbox/actions"
+import type { Scope } from "@/components/inbox/folders"
 import type { StandupKind } from "@/server/recap/standup"
 import { toast } from "@/components/ui/toast"
 import { languageQuery, useI18n } from "@/hooks/use-i18n"
@@ -70,13 +74,25 @@ export const inboxQuery = (
   folder: Folder,
   repo?: string,
   sort: SortOrder = "priority",
-  scope: "mine" | "all" = "mine"
+  scope: Scope = "mine"
 ) =>
   queryOptions({
     queryKey: ["inbox", folder, repo ?? null, sort, scope],
     queryFn: () => getInbox({ data: { folder, repo, sort, scope } }),
     refetchInterval: LOCAL_REFRESH_MS,
     refetchOnWindowFocus: true,
+  })
+
+/** « Toutes les issues », a page at a time: hundreds of issues would refresh too slowly every 4 s. */
+export const allIssuesQuery = (repo?: string) =>
+  infiniteQueryOptions({
+    queryKey: ["all-issues", repo ?? null],
+    queryFn: ({ pageParam }) =>
+      getAllIssues({ data: { repo, offset: pageParam } }),
+    initialPageParam: 0,
+    getNextPageParam: (page) => page.nextOffset ?? undefined,
+    staleTime: 30_000,
+    refetchInterval: 60_000,
   })
 
 export const conversationQuery = (key: string) =>
@@ -335,6 +351,20 @@ export const folderCountsQuery = () =>
     queryKey: ["inbox", "counts"],
     queryFn: () => getFolderCounts(),
     refetchInterval: LOCAL_REFRESH_MS,
+  })
+
+/** The counts of « Toutes les PR » and « Toutes les issues », which change slowly. */
+export const browseCountsQuery = () =>
+  queryOptions({
+    queryKey: ["browse", "counts"],
+    queryFn: () => getBrowseCounts(),
+    // A first load shows a spinner: its end is checked often.
+    refetchInterval: (query) => {
+      const counts = query.state.data
+      return !counts || counts.pullsLoading || counts.issues === null
+        ? 3000
+        : 30_000
+    },
   })
 
 export const pingCountQuery = () =>

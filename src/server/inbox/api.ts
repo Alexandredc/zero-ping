@@ -33,6 +33,7 @@ const demoSync = {
     lastError: null,
     nextSyncAt: null,
     githubIntervalS: 60,
+    teamSyncedAt: new Date().toISOString(),
   }),
 }
 const sync = isDemo() ? demoSync : loop
@@ -40,6 +41,7 @@ const sync = isDemo() ? demoSync : loop
 export const {
   askAboutItem,
   clearChat,
+  countBrowse,
   countFolders,
   countPings,
   countTeamProblems,
@@ -67,6 +69,7 @@ export const {
   getWeekSummary,
   getWorkConversation,
   listAccessibleRepos,
+  listAllIssues,
   listAllPulls,
   listInbox,
   listIssues,
