@@ -32,6 +32,8 @@ export function teamPullToItem(pull: TeamPull, viewerLogin?: string): Item {
     ciState: pull.ciState,
     reviewDecision: pull.reviewDecision,
     reviewRequest: null,
+    reviewTeams: [],
+    reviewIgnoredAt: null,
     approvals: 0,
     pendingReviewers: pull.reviewers.length,
     requestedAt: null,

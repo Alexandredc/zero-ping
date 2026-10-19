@@ -614,6 +614,26 @@ export async function getConversation(key: string) {
   return { item, conversation }
 }
 
+/**
+ * Takes PRs asked of the viewer's team out of « À reviewer », or brings them
+ * back: someone else on the team handles them.
+ */
+export async function ignoreTeamReview(keys: string[], ignore: boolean) {
+  if (keys.length === 0) return
+  const db = await getDb()
+  await db
+    .update(items)
+    .set({ reviewIgnoredAt: ignore ? new Date() : null })
+    .where(inArray(items.key, keys))
+  // The folder follows at once, without waiting for the next sync.
+  const [octokit, viewer, rows] = await Promise.all([
+    getOctokit(),
+    getViewer(),
+    db.select().from(items).where(inArray(items.key, keys)),
+  ])
+  await enrichItems(db, octokit, viewer, rows)
+}
+
 export async function markDone(keys: string[], done: boolean) {
   if (keys.length === 0) return
   const db = await getDb()
@@ -1021,6 +1041,7 @@ export async function getSettings() {
       .sort((a, b) => b.threads - a.threads),
     env: {
       githubLogin: viewer?.login ?? null,
+      githubTeams: viewer?.teams ?? [],
       githubTokenSource: process.env.GITHUB_TOKEN
         ? "GITHUB_TOKEN"
         : "gh auth token",
@@ -1048,9 +1069,23 @@ export async function getQuietState() {
 export async function savePreferences(
   patch: z.infer<typeof preferencesPatchSchema>
 ) {
-  const next = await updatePreferences(await getDb(), patch)
+  const db = await getDb()
+  const next = await updatePreferences(db, patch)
   // A new interval applies to the sync already waiting, not the one after.
   if (patch.syncIntervalSeconds !== undefined) await rescheduleSync()
+  if (patch.reviewTeams !== undefined) {
+    // The PRs asked of a team move in or out of « À reviewer » on the next sync.
+    await db
+      .update(items)
+      .set({ enrichedAt: null })
+      .where(
+        or(
+          eq(items.reason, "review_requested"),
+          sql`cardinality(${items.reviewTeams}) > 0`
+        )
+      )
+    void syncNow()
+  }
   return next
 }
 

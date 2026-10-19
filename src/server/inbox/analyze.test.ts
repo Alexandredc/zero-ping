@@ -173,6 +173,50 @@ describe("analyze", () => {
     ).toBe("team")
   })
 
+  it("keeps a team request out of « À reviewer » when the team is not followed", () => {
+    const team = pr({ reviewRequests: [{ team: "acme/backend" }] })
+    expect(analyze(team, viewer, ["acme/frontend"])).toMatchObject({
+      view: "other",
+      reviewRequest: null,
+      reviewTeams: ["acme/backend"],
+    })
+    expect(analyze(team, viewer, ["acme/backend"]).view).toBe("review")
+  })
+
+  it("brings a request naming the viewer whatever the followed teams", () => {
+    const named = pr({
+      reviewRequests: [{ user: "lead" }, { team: "acme/backend" }],
+    })
+    expect(analyze(named, viewer, [])).toMatchObject({
+      view: "review",
+      reviewRequest: "direct",
+    })
+  })
+
+  it("lets an ignored team request go, but not a request naming the viewer", () => {
+    const team = pr({ reviewRequests: [{ team: "acme/backend" }] })
+    expect(analyze(team, viewer, null, true)).toMatchObject({
+      view: "other",
+      reviewRequest: null,
+      reviewTeams: ["acme/backend"],
+    })
+    const named = pr({
+      reviewRequests: [{ team: "acme/backend" }, { user: "lead" }],
+    })
+    expect(analyze(named, viewer, null, true).view).toBe("review")
+  })
+
+  it("lists only the viewer's teams among the requested ones", () => {
+    expect(
+      analyze(
+        pr({
+          reviewRequests: [{ team: "acme/backend" }, { team: "acme/design" }],
+        }),
+        viewer
+      ).reviewTeams
+    ).toEqual(["acme/backend"])
+  })
+
   it("drops review requests that were fulfilled or on closed PRs", () => {
     expect(analyze(pr(), viewer).view).toBe("other")
     expect(

@@ -12,6 +12,7 @@ import { parseSubjectKey, toItem } from "@/server/inbox/notifications"
 import type { RawNotification } from "@/server/inbox/notifications"
 import { computePriority } from "@/server/inbox/priority"
 import { getMessages } from "@/server/i18n"
+import { getPreferences } from "@/server/preferences"
 import { detectAttention, recordAttention } from "@/server/inbox/attention"
 import type { AttentionDraft } from "@/server/inbox/attention"
 import { fetchStates, fetchSubjects } from "@/server/github/subjects"
@@ -258,7 +259,10 @@ export async function enrichItems(
 
   const now = new Date()
   // Priority reasons and notifications are stored as written, in the chosen language.
-  const { t } = await getMessages(db)
+  const [{ t }, preferences] = await Promise.all([
+    getMessages(db),
+    getPreferences(db),
+  ])
   const states = await fetchStates(octokit, refs)
   const openRefs = refs.filter((ref) => states.get(ref.key) === "OPEN")
   const subjects = await fetchSubjects(octokit, openRefs)
@@ -292,7 +296,12 @@ export async function enrichItems(
         transitions.push(...viewTransitions(item.key, item.view, "other", now))
         return
       }
-      const analysis = analyze(details, viewer)
+      const analysis = analyze(
+        details,
+        viewer,
+        preferences.reviewTeams,
+        item.reviewIgnoredAt !== null
+      )
 
       let ai = {
         aiUrgency: item.aiUrgency,
@@ -349,6 +358,7 @@ export async function enrichItems(
         mergeStateStatus: details.mergeStateStatus,
         readiness,
         reviewRequest: analysis.reviewRequest,
+        reviewTeams: analysis.reviewTeams,
         approvals: details.approvals,
         pendingReviewers: details.reviewRequests.length,
         requestedAt: analysis.requestedAt,

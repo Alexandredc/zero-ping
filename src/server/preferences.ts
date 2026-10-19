@@ -47,6 +47,8 @@ export const preferencesSchema = z.object({
   teamStandupCommand: z.string().trim().regex(COMMAND).default("/standup:team"),
   myStandupCommand: z.string().trim().regex(COMMAND).default("/standup"),
   teamStaleDays: z.number().int().min(1).max(90).default(7),
+  /** `org/slug` teams whose review requests bring a PR into « À reviewer »; null follows them all. */
+  reviewTeams: z.array(z.string()).nullable().default(null),
   reviewSlaHours: z.number().int().min(1).max(240).default(24),
   /** `owner/number` of the project whose sprint « Mes issues » shows; null picks one. */
   sprintProject: z.string().nullable().default(null),
@@ -87,6 +89,7 @@ export const preferencesPatchSchema = z.object({
   autoDoneCi: z.boolean().optional(),
   autoDoneReleases: z.boolean().optional(),
   autoDoneAuthors: z.array(z.string().trim().min(1)).optional(),
+  reviewTeams: z.array(z.string()).nullable().optional(),
   recapEnabled: z.boolean().optional(),
   recapTime: z.string().regex(TIME).optional(),
   standupEnabled: z.boolean().optional(),
@@ -146,6 +149,10 @@ export async function updatePreferences(
       next.autoDoneAuthors.map((login) => login.replace(/^@/, "").toLowerCase())
     ),
   ].sort()
+  if (next.reviewTeams)
+    next.reviewTeams = [
+      ...new Set(next.reviewTeams.map((team) => team.toLowerCase())),
+    ].sort()
   await db
     .insert(settings)
     .values({ key: KEY, value: next })

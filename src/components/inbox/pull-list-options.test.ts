@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest"
-import { pullFilters } from "./pull-list-options"
+import { DIRECT_REQUEST, pullFilters } from "./pull-list-options"
 import { messagesFor } from "@/lib/i18n/messages"
+import { filterOptions } from "@/lib/list-filters"
+import type { InboxItem } from "@/server/inbox/actions"
 
 const labelsOf = (language: "fr" | "en", id: string) =>
   pullFilters(messagesFor(language))
@@ -35,5 +37,24 @@ describe("pullFilters", () => {
     const ids = (language: "fr" | "en") =>
       pullFilters(messagesFor(language)).map((def) => def.id)
     expect(ids("en")).toEqual(ids("fr"))
+  })
+
+  it("tells a request naming the viewer from one asked of a team", () => {
+    const team = pullFilters(messagesFor("fr")).find((def) => def.id === "team")
+    const request = (
+      reviewRequest: InboxItem["reviewRequest"],
+      reviewTeams: string[] = []
+    ) => ({ reviewRequest, reviewTeams }) as InboxItem
+    const items = [
+      request("direct", ["acme/web"]),
+      request("team", ["acme/web", "acme/api"]),
+      request(null),
+    ]
+    expect(team?.valuesOf(items[0])).toEqual([DIRECT_REQUEST])
+    expect(team?.valuesOf(items[1])).toEqual(["acme/web", "acme/api"])
+    expect(team?.valuesOf(items[2])).toEqual([])
+    expect(
+      team && filterOptions(items, team, "fr").map((option) => option.label)
+    ).toEqual(["Moi, nommément", "@acme/api", "@acme/web"])
   })
 })

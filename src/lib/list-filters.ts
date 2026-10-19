@@ -8,6 +8,8 @@ export type FilterDef<T> = {
   valuesOf: (item: T) => string[]
   /** Values in the menu's order; when absent, the values the items have, sorted. */
   options?: { value: string; label: string }[]
+  /** The label of a value found on the items, when there are no fixed options. */
+  labelOf?: (value: string) => string
 }
 
 export type FilterSelection = Record<string, string[]>
@@ -42,7 +44,7 @@ export function filterOptions<T>(
     def.options ??
     [...counts.keys()]
       .sort((a, b) => a.localeCompare(b, language))
-      .map((value) => ({ value, label: value }))
+      .map((value) => ({ value, label: def.labelOf?.(value) ?? value }))
   return options
     .map((option) => ({ ...option, count: counts.get(option.value) ?? 0 }))
     .filter((option) => option.count > 0)

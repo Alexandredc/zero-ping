@@ -14,6 +14,12 @@ export const detail = defineMessages({
       openOnGitHubHint:
         "Ouvre la PR ou l'issue sur GitHub dans un nouvel onglet (o).",
       undoneHint: "Remet l'élément dans son dossier de l'inbox.",
+      ignoreTeam: "Ignorer",
+      ignoreTeamHint:
+        "La review est demandée à ton équipe, pas à toi : la PR quitte « À reviewer » pour « Autres ». Elle ne revient que si on te demande nommément ou si quelqu'un attend ta réponse. Rien ne change sur GitHub.",
+      unignoreTeam: "Ne plus ignorer",
+      unignoreTeamHint:
+        "Remet la PR dans « À reviewer » tant que ton équipe est demandée en review.",
       doneHint:
         "Retire l'élément de l'inbox et le marque « Done » dans tes notifications GitHub. Il revient tout seul s'il y a du nouveau.",
       undone: "Remettre dans l'inbox",
@@ -266,6 +272,12 @@ export const detail = defineMessages({
         "Opens GitHub right on the message waiting for your reply (o).",
       openOnGitHubHint: "Opens the PR or issue on GitHub in a new tab (o).",
       undoneHint: "Puts the item back in its inbox folder.",
+      ignoreTeam: "Ignore",
+      ignoreTeamHint:
+        "The review is requested from your team, not from you: the PR leaves « To review » for « Other ». It only comes back when you are requested by name or someone waits for your answer. Nothing changes on GitHub.",
+      unignoreTeam: "Stop ignoring",
+      unignoreTeamHint:
+        "Puts the PR back in « To review » while your team is requested.",
       doneHint:
         "Removes the item from the inbox and marks it “Done” in your GitHub notifications. It comes back by itself when something new happens.",
       undone: "Back to the inbox",

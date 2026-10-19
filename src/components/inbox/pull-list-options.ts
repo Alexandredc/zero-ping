@@ -47,10 +47,25 @@ const CI: Record<string, string> = {
   EXPECTED: "pending",
 }
 
+/** The « Demandée à » value of a review request naming the viewer. */
+export const DIRECT_REQUEST = "@me"
+
 /** The filters of the PR lists, named in the chosen language. */
 export function pullFilters(t: Messages): FilterDef<InboxItem>[] {
   const f = t.inbox.filters
   return [
+    {
+      id: "team",
+      label: f.team,
+      // A PR asked of several of the viewer's teams counts for each.
+      valuesOf: (item) =>
+        item.reviewRequest === "direct"
+          ? [DIRECT_REQUEST]
+          : item.reviewRequest === "team"
+            ? item.reviewTeams
+            : [],
+      labelOf: (value) => (value === DIRECT_REQUEST ? f.direct : `@${value}`),
+    },
     {
       id: "kind",
       label: f.kind,

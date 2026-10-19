@@ -4,6 +4,8 @@ import { useEffect, useRef, useState } from "react"
 import {
   CheckIcon,
   ClockIcon,
+  EyeIcon,
+  EyeOffIcon,
   GitBranchIcon,
   MessageSquareReplyIcon,
   Undo2Icon,
@@ -372,6 +374,39 @@ export function DetailPanel({
                   </DropdownMenuGroup>
                 </DropdownMenuContent>
               </DropdownMenu>
+              {isPull &&
+                item.state === "OPEN" &&
+                (item.reviewRequest === "team" ||
+                  item.reviewIgnoredAt !== null) && (
+                  <ActionHint
+                    content={
+                      item.reviewIgnoredAt
+                        ? t.detail.panel.unignoreTeamHint
+                        : t.detail.panel.ignoreTeamHint
+                    }
+                  >
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() =>
+                        actions.ignoreTeam.mutate({
+                          keys: [item.key],
+                          ignore: item.reviewIgnoredAt === null,
+                        })
+                      }
+                      disabled={actions.ignoreTeam.isPending}
+                    >
+                      {item.reviewIgnoredAt ? (
+                        <EyeIcon data-icon="inline-start" />
+                      ) : (
+                        <EyeOffIcon data-icon="inline-start" />
+                      )}
+                      {item.reviewIgnoredAt
+                        ? t.detail.panel.unignoreTeam
+                        : t.detail.panel.ignoreTeam}
+                    </Button>
+                  </ActionHint>
+                )}
             </>
           )}
           {isPull && item.state === "OPEN" && item.view === "mine" && (

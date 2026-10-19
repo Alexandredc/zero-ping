@@ -53,6 +53,7 @@ import {
   postReply,
   postReview,
   setDone,
+  setTeamReviewIgnored,
   setFileViewedState,
   setPreferences,
   setRepo,
@@ -220,6 +221,25 @@ export function useInboxActions() {
     onError: onError(copy.markDoneFailed),
   })
 
+  const ignoreTeam = useMutation({
+    mutationFn: (input: { keys: string[]; ignore: boolean }) =>
+      setTeamReviewIgnored({ data: input }),
+    onSuccess: (_, input) => {
+      void refresh()
+      if (input.ignore)
+        toast.add({
+          title: copy.teamReviewIgnored,
+          description: copy.teamReviewIgnoredDescription,
+          actionProps: {
+            children: t.common.cancel,
+            onClick: () =>
+              ignoreTeam.mutate({ keys: input.keys, ignore: false }),
+          },
+        })
+    },
+    onError: onError(copy.ignoreTeamFailed),
+  })
+
   const snooze = useMutation({
     mutationFn: (input: { keys: string[]; until: Date | null }) =>
       setSnooze({
@@ -285,7 +305,7 @@ export function useInboxActions() {
     onError: onError(copy.repoFailed),
   })
 
-  return { done, snooze, reply, review, sync, trackRepo }
+  return { done, ignoreTeam, snooze, reply, review, sync, trackRepo }
 }
 
 export const settingsQuery = () =>

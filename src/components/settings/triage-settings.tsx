@@ -1,9 +1,16 @@
 import { useState } from "react"
-import { ArchiveIcon, SunriseIcon, UsersIcon, XIcon } from "lucide-react"
+import {
+  ArchiveIcon,
+  GitPullRequestIcon,
+  SunriseIcon,
+  UsersIcon,
+  XIcon,
+} from "lucide-react"
 import type { getSettings } from "@/server/inbox/actions"
 import type { Preferences } from "@/server/preferences"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Checkbox } from "@/components/ui/checkbox"
 import {
   Card,
   CardContent,
@@ -133,12 +140,84 @@ function AuthorList({ preferences }: { preferences: Preferences }) {
   )
 }
 
+/** The teams whose review requests bring a PR into « À reviewer ». */
+function ReviewTeamsCard({ settings }: { settings: Settings }) {
+  const { t } = useI18n()
+  const save = useSavePreferences()
+  const copy = t.settings.reviewTeams
+  const teams = [...settings.env.githubTeams].sort((a, b) => a.localeCompare(b))
+  const followed = settings.preferences.reviewTeams
+  const follows = (team: string) =>
+    followed === null || followed.includes(team.toLowerCase())
+  const toggle = (team: string, checked: boolean) => {
+    const current = followed ?? teams.map((name) => name.toLowerCase())
+    save.mutate({
+      reviewTeams: checked
+        ? [...current, team.toLowerCase()]
+        : current.filter((name) => name !== team.toLowerCase()),
+    })
+  }
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <GitPullRequestIcon className="size-4" />
+          {copy.title}
+        </CardTitle>
+        <CardDescription>{copy.description}</CardDescription>
+      </CardHeader>
+      <CardContent>
+        {teams.length === 0 ? (
+          <p className="text-sm text-muted-foreground">{copy.none}</p>
+        ) : (
+          <FieldGroup>
+            <SwitchField
+              id="review-teams-all"
+              label={copy.all}
+              description={copy.allDescription}
+              checked={followed === null}
+              // Following them one by one starts from them all: nothing moves until one is unticked.
+              onChange={(checked) =>
+                save.mutate({
+                  reviewTeams: checked
+                    ? null
+                    : teams.map((name) => name.toLowerCase()),
+                })
+              }
+            />
+            {followed !== null && (
+              <FieldSet>
+                {teams.map((team) => (
+                  <Field key={team} orientation="horizontal">
+                    <Checkbox
+                      id={`review-team-${team}`}
+                      checked={follows(team)}
+                      onCheckedChange={(checked) => toggle(team, checked)}
+                    />
+                    <FieldLabel
+                      htmlFor={`review-team-${team}`}
+                      className="font-mono text-sm font-normal"
+                    >
+                      @{team}
+                    </FieldLabel>
+                  </Field>
+                ))}
+              </FieldSet>
+            )}
+          </FieldGroup>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
+
 export function TriageSettings({ settings }: { settings: Settings }) {
   const { t } = useI18n()
   const save = useSavePreferences()
   const { preferences } = settings
   return (
     <div className="flex flex-col gap-6">
+      <ReviewTeamsCard settings={settings} />
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">

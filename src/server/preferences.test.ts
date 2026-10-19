@@ -56,6 +56,7 @@ describe("preferences", () => {
       teamStandupCommand: "/standup:team",
       myStandupCommand: "/standup",
       teamStaleDays: 7,
+      reviewTeams: null,
       reviewSlaHours: 24,
       sprintProject: null,
       syncIntervalSeconds: null,
@@ -78,6 +79,18 @@ describe("preferences", () => {
       slackExcludedChannels: ["eng-general", "random"],
       agentCli: "codex",
     })
+  })
+
+  it("lowercases the followed teams, and null follows them all", async () => {
+    await updatePreferences(db, {
+      reviewTeams: ["acme/Developers", "acme/developers", "acme/web"],
+    })
+    expect((await getPreferences(db)).reviewTeams).toEqual([
+      "acme/web",
+      "acme/developers",
+    ])
+    await updatePreferences(db, { reviewTeams: null })
+    expect((await getPreferences(db)).reviewTeams).toBeNull()
   })
 })
 

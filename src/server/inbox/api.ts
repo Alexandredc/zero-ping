@@ -76,6 +76,7 @@ export const {
   listRepos,
   listTeam,
   markDone,
+  ignoreTeamReview,
   markFileViewed,
   merge,
   moveWorkItem,

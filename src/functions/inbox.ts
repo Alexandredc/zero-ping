@@ -51,6 +51,7 @@ import {
   listAllPulls,
   listRepos,
   markDone,
+  ignoreTeamReview,
   markFileViewed,
   reply,
   setRepoTracked,
@@ -134,6 +135,10 @@ export const triggerSync = createServerFn({ method: "POST" }).handler(
 )
 
 const keysSchema = z.array(z.string()).min(1).max(500)
+
+export const setTeamReviewIgnored = createServerFn({ method: "POST" })
+  .validator(z.object({ keys: keysSchema, ignore: z.boolean() }))
+  .handler(({ data }) => ignoreTeamReview(data.keys, data.ignore))
 
 export const setDone = createServerFn({ method: "POST" })
   .validator(z.object({ keys: keysSchema, done: z.boolean() }))

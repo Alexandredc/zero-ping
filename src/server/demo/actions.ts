@@ -1,4 +1,4 @@
-import { eq, inArray } from "drizzle-orm"
+import { and, eq, inArray } from "drizzle-orm"
 import { getDb } from "@/server/db/client"
 import {
   items,
@@ -445,6 +445,18 @@ export const demoActions = {
   getUatStatus,
   getLinkedIssues,
   listIssues,
+  // Nothing is read again from GitHub: the PR simply leaves « À reviewer ».
+  ignoreTeamReview: async (keys: string[], ignore: boolean) => {
+    const db = await getDb()
+    await db
+      .update(items)
+      .set({ reviewIgnoredAt: ignore ? new Date() : null })
+      .where(inArray(items.key, keys))
+    await db
+      .update(items)
+      .set(ignore ? { view: "other" } : { view: "review" })
+      .where(and(inArray(items.key, keys), eq(items.reviewRequest, "team")))
+  },
   listAllIssues: (repo?: string, page?: { offset: number; limit: number }) =>
     live.listAllIssues(repo, page, () => Promise.resolve(demoTeamIssues())),
   getPullInsights,

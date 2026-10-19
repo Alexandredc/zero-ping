@@ -6,6 +6,7 @@ import {
   GitPullRequestIcon,
   MessagesSquareIcon,
   SparklesIcon,
+  UsersIcon,
 } from "lucide-react"
 import { Hint } from "./hint"
 import { JevGauge } from "./jev-gauge"
@@ -226,6 +227,24 @@ export function ItemStrip({
             )}
             <span className="ml-auto flex shrink-0 items-center gap-1.5">
               {/* Right-aligned from the date: the most frequent chips sit closest to it. */}
+              {item.reviewRequest === "team" && item.reviewTeams.length > 0 && (
+                <Hint
+                  instant
+                  className="flex"
+                  content={t.inbox.strip.teamRequestHint(
+                    item.reviewTeams.map((team) => `@${team}`).join(", ")
+                  )}
+                >
+                  <span className="inline-flex h-4 max-w-28 items-center gap-1 rounded border px-1 text-[0.65rem] leading-none text-muted-foreground">
+                    <UsersIcon className="size-3 shrink-0" aria-hidden />
+                    <span className="truncate">
+                      {item.reviewTeams[0].split("/")[1]}
+                      {item.reviewTeams.length > 1 &&
+                        ` +${item.reviewTeams.length - 1}`}
+                    </span>
+                  </span>
+                </Hint>
+              )}
               {hasNewCommitsSinceReview(item) && (
                 <Hint
                   instant

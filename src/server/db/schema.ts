@@ -57,6 +57,10 @@ export const items = snakeCase.table("items", {
   ciState: text(),
   reviewDecision: text(),
   reviewRequest: text().$type<"direct" | "team" | null>(),
+  /** The viewer's teams asked to review the PR, `org/slug`, followed or not. */
+  reviewTeams: text().array().notNull().default([]),
+  /** The viewer ignored the request made to their team: only one naming them brings the PR back. */
+  reviewIgnoredAt: timestamp({ withTimezone: true }),
   approvals: integer().notNull().default(0),
   pendingReviewers: integer().notNull().default(0),
   requestedAt: timestamp({ withTimezone: true }),

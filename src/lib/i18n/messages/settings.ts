@@ -68,6 +68,15 @@ export const settings = defineMessages({
         placeholder: "login GitHub, par ex. release-bot",
       },
     },
+    reviewTeams: {
+      title: "Équipes suivies",
+      description:
+        "Une PR demandée à une équipe n'arrive dans « À reviewer » que si tu suis cette équipe. Les demandes qui te nomment y arrivent toujours.",
+      all: "Toutes mes équipes",
+      allDescription:
+        "Toute review demandée à l'une de tes équipes arrive dans « À reviewer ».",
+      none: "GitHub ne te connaît aucune équipe.",
+    },
     team: {
       title: "Vue équipe",
       description:
@@ -332,6 +341,15 @@ export const settings = defineMessages({
           "Notifications from these GitHub accounts are marked as done automatically, unless they mention you or request your review.",
         placeholder: "GitHub login, e.g. release-bot",
       },
+    },
+    reviewTeams: {
+      title: "Followed teams",
+      description:
+        "A PR requested from a team only lands in « To review » when you follow that team. Requests naming you always land there.",
+      all: "All my teams",
+      allDescription:
+        "Any review requested from one of your teams lands in « To review ».",
+      none: "GitHub knows no team of yours.",
     },
     team: {
       title: "Team view",

@@ -1,0 +1,1 @@
+ALTER TABLE "items" ADD COLUMN "review_teams" text[] DEFAULT '{}'::text[] NOT NULL;

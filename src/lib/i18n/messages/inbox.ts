@@ -124,6 +124,8 @@ export const inbox = defineMessages({
       newCommitsHint:
         "Des commits sont arrivés depuis ta dernière review : le diff peut se limiter à eux.",
       newCommits: "Nouveaux commits depuis ta review",
+      teamRequestHint: (teams: string) =>
+        `Review demandée à ton équipe ${teams}, pas à toi nommément`,
       slackDiscussionsHint: (count: number) =>
         `${count} discussion${count > 1 ? "s" : ""} Slack sur cette PR`,
       slackDiscussions: (count: number) =>
@@ -153,6 +155,8 @@ export const inbox = defineMessages({
     },
     filters: {
       kind: "Type",
+      team: "Demandée à",
+      direct: "Moi, nommément",
       review: "Review",
       reviewRequired: "Review requise",
       changesRequested: "Changements demandés",
@@ -216,6 +220,10 @@ export const inbox = defineMessages({
       markedDoneDescription:
         "Rangé dans « Traités » et marqué Done sur GitHub. Il revient tout seul s'il y a du nouveau.",
       markDoneFailed: "Impossible de marquer comme traité",
+      teamReviewIgnored: "Demande d'équipe ignorée",
+      teamReviewIgnoredDescription:
+        "Rangée dans « Autres ». Elle revient si on te demande nommément.",
+      ignoreTeamFailed: "Impossible d'ignorer la demande d'équipe",
       snoozed: (count: number) =>
         count > 1 ? `${count} éléments mis en pause` : "Mis en pause",
       snoozedUntil: (when: string) => `Jusqu'au ${when}`,
@@ -384,6 +392,8 @@ export const inbox = defineMessages({
       newCommitsHint:
         "Commits landed since your last review: the diff can be limited to them.",
       newCommits: "New commits since your review",
+      teamRequestHint: (teams: string) =>
+        `Review requested from your team ${teams}, not from you by name`,
       slackDiscussionsHint: (count: number) =>
         `${count} Slack discussion${count > 1 ? "s" : ""} about this PR`,
       slackDiscussions: (count: number) =>
@@ -412,6 +422,8 @@ export const inbox = defineMessages({
     },
     filters: {
       kind: "Type",
+      team: "Requested from",
+      direct: "Me, by name",
       review: "Review",
       reviewRequired: "Review required",
       changesRequested: "Changes requested",
@@ -472,6 +484,10 @@ export const inbox = defineMessages({
       markedDoneDescription:
         "Moved to “Done” and marked Done on GitHub. It comes back on its own when something new happens.",
       markDoneFailed: "Couldn't mark as done",
+      teamReviewIgnored: "Team request ignored",
+      teamReviewIgnoredDescription:
+        "Moved to « Other ». It comes back when you are requested by name.",
+      ignoreTeamFailed: "Couldn't ignore the team request",
       snoozed: (count: number) =>
         count > 1 ? `${count} items snoozed` : "Snoozed",
       snoozedUntil: (when: string) => `Until ${when}`,

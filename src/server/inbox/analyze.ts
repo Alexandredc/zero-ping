@@ -75,6 +75,8 @@ export type LastReview = {
 export type Analysis = {
   view: View
   reviewRequest: "direct" | "team" | null
+  /** The viewer's teams asked to review, followed or not. */
+  reviewTeams: string[]
   requestedAt: Date | null
   awaiting: Awaiting | null
   lastReview: LastReview | null
@@ -177,19 +179,35 @@ export function findLastReview(
   }
 }
 
-export function analyze(details: SubjectDetails, viewer: Viewer): Analysis {
+/**
+ * `followedTeams`: the teams whose review requests bring a PR into « À
+ * reviewer », lowercased; null follows every team of the viewer.
+ * `ignoreTeams`: the viewer ignored this PR's team request, so no team counts.
+ */
+export function analyze(
+  details: SubjectDetails,
+  viewer: Viewer,
+  followedTeams: string[] | null = null,
+  ignoreTeams = false
+): Analysis {
+  const isMyTeam = (team: string) =>
+    viewer.teams.some((mine) => mine.toLowerCase() === team.toLowerCase())
   const isReviewer = (request: ReviewRequest): "direct" | "team" | null => {
     if ("user" in request)
       return sameLogin(request.user, viewer.login) ? "direct" : null
-    return viewer.teams.some(
-      (team) => team.toLowerCase() === request.team.toLowerCase()
-    )
-      ? "team"
-      : null
+    const followed =
+      !ignoreTeams &&
+      (followedTeams === null ||
+        followedTeams.includes(request.team.toLowerCase()))
+    return isMyTeam(request.team) && followed ? "team" : null
   }
 
   let reviewRequest: "direct" | "team" | null = null
+  let reviewTeams: string[] = []
   if (details.kind === "PullRequest" && details.state === "OPEN") {
+    reviewTeams = details.reviewRequests.flatMap((request) =>
+      "team" in request && isMyTeam(request.team) ? [request.team] : []
+    )
     const kinds = details.reviewRequests.map(isReviewer)
     reviewRequest = kinds.includes("direct")
       ? "direct"
@@ -231,5 +249,12 @@ export function analyze(details: SubjectDetails, viewer: Viewer): Analysis {
     view = "mine"
   else if (awaiting) view = "awaiting"
 
-  return { view, reviewRequest, requestedAt, awaiting, lastReview }
+  return {
+    view,
+    reviewRequest,
+    reviewTeams,
+    requestedAt,
+    awaiting,
+    lastReview,
+  }
 }
