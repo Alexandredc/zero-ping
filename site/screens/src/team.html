@@ -1,0 +1,246 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Team</title>
+    <link rel="stylesheet" href="app.css" />
+    <style>
+      .page {
+        flex: 1;
+        overflow: hidden;
+        padding: 26px 40px;
+      }
+      .ph {
+        display: flex;
+        align-items: flex-start;
+        gap: 20px;
+      }
+      .ph h1 {
+        margin: 0;
+        font-size: 24px;
+      }
+      .ph p {
+        max-width: 640px;
+        margin-top: 4px;
+        color: var(--muted-fg);
+        font-size: 13.5px;
+      }
+      .big {
+        margin-left: auto;
+        color: var(--muted-fg);
+        font-size: 13px;
+        text-align: right;
+      }
+      .big b {
+        display: block;
+        color: var(--fg);
+        font: 650 30px/1 "Bricolage Grotesque", sans-serif;
+      }
+      .toggles {
+        display: inline-flex;
+        margin-top: 18px;
+        padding: 3px;
+        border: 1px solid var(--border);
+        border-radius: 9px;
+        background: var(--card);
+        font-size: 12.5px;
+      }
+      .toggles span {
+        padding: 4px 10px;
+        border-radius: 6px;
+        color: var(--muted-fg);
+      }
+      .toggles .on {
+        background: var(--accent);
+        color: var(--fg);
+        font-weight: 600;
+      }
+      .toggles em {
+        margin-left: 4px;
+        font: normal 11.5px "Geist Mono", monospace;
+      }
+      .rows {
+        margin-top: 14px;
+        overflow: hidden;
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        background: var(--card);
+      }
+      .tr {
+        display: grid;
+        grid-template-columns: 1fr 230px;
+        gap: 24px;
+        padding: 14px 18px;
+        border-bottom: 1px solid var(--border);
+      }
+      .tr-title {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 14.5px;
+        font-weight: 600;
+      }
+      .meta {
+        margin-top: 3px;
+        color: var(--muted-fg);
+        font-size: 12px;
+      }
+      .probs {
+        margin-top: 8px;
+        padding: 8px 10px;
+        border-radius: 9px;
+        background: var(--muted);
+        font-size: 12.5px;
+      }
+      .probs p + p {
+        margin-top: 4px;
+      }
+      .tag {
+        display: inline-block;
+        margin-right: 6px;
+        padding: 0 7px;
+        border-radius: 99px;
+        font-size: 11.5px;
+        font-weight: 600;
+      }
+      .t-rev {
+        background: #e5e7f8;
+        color: var(--primary);
+      }
+      .t-chg {
+        background: #fde8d7;
+        color: var(--heat-fg);
+      }
+      .t-ci {
+        background: #fbe0de;
+        color: var(--red);
+      }
+      .t-cfl {
+        background: var(--slack-bg);
+        color: var(--slack);
+      }
+      .t-old {
+        background: #ddf1f4;
+        color: #1d6f80;
+      }
+      .next {
+        color: var(--muted-fg);
+      }
+      .ball {
+        color: var(--muted-fg);
+        font-size: 10.5px;
+        font-weight: 600;
+        letter-spacing: 0.06em;
+      }
+      .who {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        margin: 4px 0 10px;
+        font-size: 12.5px;
+      }
+      .side-btns {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+      }
+      .healthy {
+        margin-top: 8px;
+        color: var(--green);
+        font-size: 12.5px;
+      }
+    </style>
+  </head>
+  <body data-page="team">
+    <div class="app">
+      <nav class="side" data-side></nav>
+      <main class="page">
+        <div class="ph">
+          <div>
+            <h1 class="h">⚇ Team</h1>
+            <p>Open PRs from the team in the watched repos, except yours and the bots’. For each blocked PR: what’s stuck, what to do, and who has to act.</p>
+          </div>
+          <p class="big"><b>5</b>blocked out of 18</p>
+        </div>
+        <div class="toggles">
+          <span class="on">To unblock<em>5</em></span><span>No reviewer<em>2</em></span><span>Changes pending<em>1</em></span><span>Failing CI<em>1</em></span><span>Conflicts<em>1</em></span><span>Open too long<em>2</em></span><span>All<em>18</em></span>
+        </div>
+
+        <div class="rows">
+          <div class="tr">
+            <div>
+              <p class="tr-title"><span class="av a6">P</span>Retry webhooks with backoff</p>
+              <p class="meta"><span class="mono">acme/api#231</span> <span class="ci-ok">✓</span> · by @pablo · opened 3 days ago · last activity 1 day ago <span class="chip">M</span></p>
+              <div class="probs">
+                <p><span class="tag t-rev">No reviewer</span>Nobody is assigned to review it. <span class="next">→ Take the review or assign someone with “Reviewers”.</span></p>
+                <p><span class="tag t-old">Open too long</span>Open for 3 days without a review. <span class="next">→ Review it or say when you will.</span></p>
+              </div>
+            </div>
+            <div>
+              <p class="ball">THE BALL IS WITH</p>
+              <p class="who" style="color: var(--heat-fg)">You or a reviewer</p>
+              <div class="side-btns"><span class="btn primary">⊕ Take the review</span><span class="btn">Reviewers</span><span class="btn">GitHub ↗</span></div>
+            </div>
+          </div>
+          <div class="tr">
+            <div>
+              <p class="tr-title"><span class="av a4">K</span>Dark mode for settings</p>
+              <p class="meta"><span class="mono">acme/web#398</span> <span class="ci-ok">✓</span> · by @kim · opened 2 days ago · last activity 5 hours ago <span class="chip xs">S</span></p>
+              <div class="probs">
+                <p><span class="tag t-cfl">Conflicts</span>The branch conflicts with its base. <span class="next">→ @kim has to rebase it or resolve the conflicts.</span></p>
+              </div>
+            </div>
+            <div>
+              <p class="ball">THE BALL IS WITH</p>
+              <p class="who"><span class="av a4">K</span>@kim (author)</p>
+              <div class="side-btns"><span class="btn">⊕ Take the review</span><span class="btn">Reviewers</span><span class="btn">GitHub ↗</span></div>
+            </div>
+          </div>
+          <div class="tr">
+            <div>
+              <p class="tr-title"><span class="av a3">O</span>Biometric login</p>
+              <p class="meta"><span class="mono">acme/mobile#84</span> <span class="ci-bad">✕</span> · by @otto · opened 6 hours ago · last activity 1 hour ago <span class="chip">L</span></p>
+              <div class="probs">
+                <p><span class="tag t-ci">Failing CI</span>The CI of the last commit fails. <span class="next">→ @otto has to fix it before any review.</span></p>
+              </div>
+            </div>
+            <div>
+              <p class="ball">THE BALL IS WITH</p>
+              <p class="who"><span class="av a3">O</span>@otto (author)</p>
+              <div class="side-btns"><span class="btn">⊕ Take the review</span><span class="btn">Reviewers</span><span class="btn">GitHub ↗</span></div>
+            </div>
+          </div>
+          <div class="tr">
+            <div>
+              <p class="tr-title"><span class="av a2">P</span>Split invoice export by month</p>
+              <p class="meta"><span class="mono">acme/api#226</span> <span class="ci-ok">✓</span> · by @priya · opened 4 days ago · last activity 2 days ago <span class="chip">M</span></p>
+              <div class="probs">
+                <p><span class="tag t-chg">Changes pending</span>@lena asked for changes 2 days ago. <span class="next">→ @priya has to address them or answer.</span></p>
+              </div>
+            </div>
+            <div>
+              <p class="ball">THE BALL IS WITH</p>
+              <p class="who"><span class="av a2">P</span>@priya (author)</p>
+              <div class="side-btns"><span class="btn">⊕ Take the review</span><span class="btn">Reviewers</span><span class="btn">GitHub ↗</span></div>
+            </div>
+          </div>
+          <div class="tr">
+            <div>
+              <p class="tr-title"><span class="av a5">L</span>API versioning guide</p>
+              <p class="meta"><span class="mono">acme/docs#74</span> <span class="ci-ok">✓</span> · by @lena · opened 9 days ago · last activity 6 days ago <span class="chip xs">S</span></p>
+              <div class="probs">
+                <p><span class="tag t-old">Open too long</span>Open for 9 days. <span class="next">→ @nadia (review) should look at it or hand it over.</span></p>
+              </div>
+            </div>
+            <div>
+              <p class="ball">THE BALL IS WITH</p>
+              <p class="who"><span class="av a1">N</span>@nadia (review)</p>
+              <div class="side-btns"><span class="btn">⊕ Take the review</span><span class="btn">Reviewers</span><span class="btn">GitHub ↗</span></div>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+    <script src="shell.js"></script>
+  </body>
+</html>

@@ -1,0 +1,297 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Overview</title>
+    <link rel="stylesheet" href="app.css" />
+    <style>
+      .page {
+        flex: 1;
+        overflow: hidden;
+        padding: 24px 36px;
+      }
+      .page h1 {
+        margin: 0;
+        font-size: 24px;
+      }
+      .sub {
+        margin-top: 3px;
+        color: var(--muted-fg);
+        font-size: 13.5px;
+      }
+      .card {
+        padding: 18px 20px;
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        background: var(--card);
+      }
+      .hero {
+        margin-top: 16px;
+      }
+      .hero-top {
+        display: flex;
+        align-items: flex-end;
+        gap: 24px;
+      }
+      .kicker {
+        color: var(--muted-fg);
+        font-size: 10.5px;
+        font-weight: 600;
+        letter-spacing: 0.07em;
+      }
+      .huge {
+        font: 650 46px/1 "Bricolage Grotesque", sans-serif;
+        font-stretch: 85%;
+        letter-spacing: -0.02em;
+      }
+      .legend {
+        display: flex;
+        gap: 18px;
+        margin-left: auto;
+        font-size: 12.5px;
+      }
+      .legend i {
+        display: inline-block;
+        width: 8px;
+        height: 8px;
+        margin-right: 6px;
+        border-radius: 50%;
+      }
+      .ruler {
+        display: flex;
+        gap: 3px;
+        height: 34px;
+        margin-top: 14px;
+      }
+      .ruler span {
+        border-radius: 6px;
+      }
+      .r-rev {
+        background: #6f68e0;
+      }
+      .r-ans {
+        background: var(--heat);
+      }
+      .r-mine {
+        background: #3f9b62;
+      }
+      .r-rest {
+        background: repeating-linear-gradient(45deg, #e3e6ee 0 6px, #eef0f5 6px 12px);
+      }
+      .ticks {
+        display: flex;
+        justify-content: space-between;
+        margin-top: 4px;
+        color: var(--muted-fg);
+        font-size: 11px;
+      }
+      .two {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 14px;
+        margin-top: 14px;
+      }
+      .ch {
+        display: flex;
+        justify-content: space-between;
+        font-weight: 650;
+      }
+      .ch a {
+        color: var(--primary);
+        font-size: 12.5px;
+        font-weight: 500;
+      }
+      .act {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 7px 0;
+        border-bottom: 1px solid var(--border);
+        font-size: 13px;
+      }
+      .act .n {
+        width: 14px;
+        color: var(--muted-fg);
+        font: 12px "Geist Mono", monospace;
+      }
+      .act .bar {
+        width: 4px;
+        height: 24px;
+        border-radius: 9px;
+      }
+      .act .t {
+        overflow: hidden;
+        flex: 1;
+        color: var(--muted-fg);
+        white-space: nowrap;
+        text-overflow: ellipsis;
+      }
+      .act .t b {
+        color: var(--fg);
+      }
+      .act .m {
+        color: var(--muted-fg);
+        font: 12px "Geist Mono", monospace;
+      }
+      .wx {
+        display: grid;
+        grid-template-columns: 1.6fr 1.3fr 0.9fr;
+        align-items: center;
+        gap: 8px;
+        padding: 7px 0;
+        border-bottom: 1px solid var(--border);
+        font-size: 13px;
+      }
+      .wx.head {
+        color: var(--muted-fg);
+        font-size: 11.5px;
+      }
+      .person {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .load {
+        display: flex;
+        align-items: center;
+        gap: 3px;
+      }
+      .load i {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: var(--strip);
+      }
+      .load i.f {
+        background: var(--fg);
+      }
+      .load b {
+        margin-left: 6px;
+        font: 500 12px "Geist Mono", monospace;
+      }
+      .trend {
+        display: grid;
+        grid-template-columns: 1.4fr 1fr;
+        gap: 24px;
+        margin-top: 14px;
+      }
+      .bars {
+        display: flex;
+        align-items: flex-end;
+        gap: 6px;
+        height: 100px;
+        margin-top: 12px;
+      }
+      .bars div {
+        display: flex;
+        flex: 1;
+        align-items: flex-end;
+        gap: 2px;
+        height: 100%;
+      }
+      .bars i {
+        flex: 1;
+        border-radius: 3px 3px 0 0;
+      }
+      .in {
+        background: #c9cddb;
+      }
+      .out {
+        background: #6f68e0;
+      }
+      .stats {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+      }
+      .stat {
+        padding: 12px 14px;
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        background: var(--muted);
+      }
+      .stat .v {
+        margin-top: 2px;
+        font: 650 28px/1.1 "Bricolage Grotesque", sans-serif;
+        font-stretch: 88%;
+      }
+      .stat small {
+        color: var(--muted-fg);
+        font-size: 11.5px;
+      }
+    </style>
+  </head>
+  <body data-page="overview">
+    <div class="app">
+      <nav class="side" data-side></nav>
+      <main class="page">
+        <h1 class="h">◔ Overview</h1>
+        <p class="sub">Monday, October 13 · your load, your next actions, the team’s weather and the trends.</p>
+
+        <div class="card hero">
+          <div class="hero-top">
+            <div>
+              <p class="kicker">YOUR WORK QUEUE</p>
+              <p class="huge">≈ 2 h 15</p>
+              <p class="muted" style="font-size: 13px; margin-top: 4px">of work waits on you, estimated from PR sizes and messages.</p>
+            </div>
+            <div class="legend">
+              <span><i class="r-rev"></i>Reviews <b>4</b> · 1 h 30</span>
+              <span><i class="r-ans"></i>Replies <b>3</b> · 15 min</span>
+              <span><i class="r-mine"></i>My PRs <b>2</b> · 30 min</span>
+            </div>
+          </div>
+          <div class="ruler"><span class="r-rev" style="flex: 30"></span><span class="r-rev" style="flex: 30"></span><span class="r-ans" style="flex: 5"></span><span class="r-rev" style="flex: 15"></span><span class="r-ans" style="flex: 5"></span><span class="r-mine" style="flex: 20"></span><span class="r-rev" style="flex: 15"></span><span class="r-ans" style="flex: 5"></span><span class="r-mine" style="flex: 10"></span><span class="r-rest" style="flex: 45"></span></div>
+          <p class="ticks"><span>now</span><span>+1 h</span><span>+2 h</span><span></span></p>
+        </div>
+
+        <div class="two">
+          <div class="card">
+            <p class="ch">Next actions <a>Open the inbox</a></p>
+            <p class="muted" style="font-size: 12.5px">In order of priority.</p>
+            <div class="act"><span class="n">1</span><span class="bar r-rev"></span><span class="t"><b>Review</b> · acme/api#233 · Add rate limiting to public endpoints</span><span class="m">30 min</span></div>
+            <div class="act"><span class="n">2</span><span class="bar r-ans"></span><span class="t"><b>Reply to @otto</b> · acme/web#409 · Move checkout to server components</span><span class="m">5 min</span></div>
+            <div class="act"><span class="n">3</span><span class="bar r-rev"></span><span class="t"><b>Check the fixes</b> · acme/web#415 · Fix flaky checkout test</span><span class="m">15 min</span></div>
+            <div class="act"><span class="n">4</span><span class="bar r-mine"></span><span class="t"><b>Fix the CI</b> · acme/mobile#87 · Cache avatars on device</span><span class="m">20 min</span></div>
+            <div class="act" style="border: 0"><span class="n">5</span><span class="bar r-mine"></span><span class="t"><b>Merge</b> · acme/api#229 · Paginate the audit log</span><span class="m">2 min</span></div>
+          </div>
+          <div class="card">
+            <p class="ch">Team weather <a>3 PRs to unblock</a></p>
+            <p class="muted" style="font-size: 12.5px">Reviews due and blocked PRs per person, from the watched repos.</p>
+            <div class="wx head"><span>Person</span><span>Reviews due</span><span>Blocked PRs</span></div>
+            <div class="wx"><span class="person"><span class="ok">☀</span><span class="av a6">S</span>@sam (you)</span><span class="load"><i class="f"></i><i class="f"></i><i></i><i></i><i></i><b>2</b></span><span><span class="chip mono">—</span></span></div>
+            <div class="wx"><span class="person"><span class="muted">☁</span><span class="av a1">N</span>@nadia</span><span class="load"><i class="f"></i><i class="f"></i><i class="f"></i><i class="f"></i><i></i><b>4</b></span><span><span class="chip mono">#74</span></span></div>
+            <div class="wx"><span class="person"><span style="color: var(--heat)">⛈</span><span class="av a3">O</span>@otto</span><span class="load"><i class="f"></i><i></i><i></i><i></i><i></i><b>1</b></span><span><span class="chip mono">#84</span> <span class="chip mono">#88</span></span></div>
+            <div class="wx" style="border: 0"><span class="person"><span class="ok">☀</span><span class="av a4">K</span>@kim</span><span class="load"><i class="f"></i><i></i><i></i><i></i><i></i><b>1</b></span><span><span class="chip mono">#398</span></span></div>
+          </div>
+        </div>
+
+        <div class="card trend">
+          <div>
+            <p class="ch">Trends</p>
+            <p class="muted" style="font-size: 12.5px">The last 14 days: what came into “To review” and “Waiting on you”, against what you handled. <b style="color: var(--fg)">In 42</b> · <b style="color: var(--primary)">Done 38</b></p>
+            <div class="bars">
+              <div><i class="in" style="height: 40%"></i><i class="out" style="height: 30%"></i></div>
+              <div><i class="in" style="height: 55%"></i><i class="out" style="height: 60%"></i></div>
+              <div><i class="in" style="height: 20%"></i><i class="out" style="height: 25%"></i></div>
+              <div><i class="in" style="height: 70%"></i><i class="out" style="height: 50%"></i></div>
+              <div><i class="in" style="height: 35%"></i><i class="out" style="height: 45%"></i></div>
+              <div><i class="in" style="height: 10%"></i><i class="out" style="height: 5%"></i></div>
+              <div><i class="in" style="height: 5%"></i><i class="out" style="height: 0%"></i></div>
+              <div><i class="in" style="height: 60%"></i><i class="out" style="height: 65%"></i></div>
+              <div><i class="in" style="height: 45%"></i><i class="out" style="height: 40%"></i></div>
+              <div><i class="in" style="height: 50%"></i><i class="out" style="height: 55%"></i></div>
+              <div><i class="in" style="height: 30%"></i><i class="out" style="height: 35%"></i></div>
+              <div><i class="in" style="height: 65%"></i><i class="out" style="height: 60%"></i></div>
+            </div>
+          </div>
+          <div class="stats">
+            <div class="stat"><small>◷ Review delay</small><p class="v">4.2 h</p><small>median over 12 reviews, 30 days</small></div>
+            <div class="stat"><small>⚑ Zéro Ping streak</small><p class="v">3 days</p><small>days in a row the inbox reached zero</small></div>
+          </div>
+        </div>
+      </main>
+    </div>
+    <script src="shell.js"></script>
+  </body>
+</html>

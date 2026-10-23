@@ -1,0 +1,582 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Zéro Ping, a quiet GitHub inbox for lead devs</title>
+    <meta
+      name="description"
+      content="Zéro Ping replaces GitHub notification emails with one sorted list of what waits on you, with its Slack threads. Open source, runs on your machine."
+    />
+    <meta name="theme-color" content="#08071c" />
+    <meta name="color-scheme" content="dark" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Zéro Ping" />
+    <meta property="og:description" content="A quiet GitHub inbox for lead devs. Open source, runs on your machine." />
+    <meta property="og:image" content="https://alexandredc.github.io/github-management/assets/og.jpg" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <link rel="icon" href="assets/logo.svg" type="image/svg+xml" />
+    <link rel="preload" href="fonts/bricolage-grotesque-latin-standard-normal.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href="fonts/geist-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="stylesheet" href="styles.css" />
+    <script src="i18n.js" defer></script>
+    <script src="main.js" defer></script>
+  </head>
+  <body>
+    <a class="skip" href="#main" data-i18n="skip">Skip to content</a>
+
+    <!-- Three star layers drift at different speeds behind everything. -->
+    <div class="sky" aria-hidden="true">
+      <div class="stars stars-far" data-speed="-0.04"></div>
+      <div class="stars stars-mid" data-speed="-0.09"></div>
+      <div class="stars stars-near" data-speed="-0.16"></div>
+    </div>
+
+    <header class="nav" id="top">
+      <nav class="nav-inner" aria-label="Main" data-i18n-label="nav.label">
+        <a class="brand" href="#top">
+          <img src="assets/logo.svg" alt="" width="28" height="28" />
+          <span>Zéro Ping</span>
+        </a>
+        <ul class="nav-links">
+          <li><a href="#sort" data-i18n="nav.how">How it sorts</a></li>
+          <li><a href="#jev" data-i18n="nav.jev">Jev KPIs</a></li>
+          <li><a href="#tour" data-i18n="nav.tour">Tour</a></li>
+          <li><a href="#features" data-i18n="nav.features">Features</a></li>
+          <li><a href="#start" data-i18n="nav.start">Quick start</a></li>
+        </ul>
+        <div class="nav-end">
+          <div class="lang" role="group" aria-label="Language" data-i18n-label="lang">
+            <button type="button" data-lang="en" aria-pressed="true">EN</button>
+            <button type="button" data-lang="fr" aria-pressed="false">FR</button>
+          </div>
+          <a class="gh" href="https://github.com/Alexandredc/github-management">
+            <svg aria-hidden="true" viewBox="0 0 16 16" width="16" height="16"><use href="#i-github" /></svg>
+            <span data-i18n="nav.star">Star</span>
+          </a>
+        </div>
+      </nav>
+    </header>
+
+    <main id="main">
+      <!-- Hero: the pings float around the app, then sink into it as you scroll. -->
+      <section class="hero" aria-labelledby="hero-title">
+        <div class="aurora" aria-hidden="true" data-speed="0.25"></div>
+        <div class="hero-copy wrap">
+          <a class="pill" href="https://github.com/Alexandredc/github-management">
+            <span class="pill-dot" aria-hidden="true"></span>
+            <span data-i18n="hero.pill">Open source · Runs on localhost · No account</span>
+            <span aria-hidden="true">→</span>
+          </a>
+          <h1 id="hero-title">
+            <span class="h1-a" data-i18n="hero.title1">Silence GitHub.</span>
+            <span class="h1-b" data-i18n="hero.title2">Keep what needs you.</span>
+          </h1>
+          <p class="lede" data-i18n="hero.lede">
+            Zéro Ping turns GitHub notifications into one sorted list of what waits on you: reviews,
+            replies, your pull requests and your team’s, each with its Slack threads and an AI summary.
+            It runs on your machine, with your own tokens.
+          </p>
+          <div class="cta">
+            <a class="btn btn-dawn" href="#start" data-i18n="hero.start">Get started</a>
+            <button type="button" class="cmd" data-copy="git clone https://github.com/Alexandredc/github-management.git">
+              <span class="cmd-prompt" aria-hidden="true">$</span>
+              <code>git clone …/github-management</code>
+              <span class="cmd-copy" data-i18n="copy">Copy</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="stage" aria-label="Interactive demo of the inbox" data-i18n-label="demo.label">
+          <div class="pings" aria-hidden="true">
+            <div class="ping" style="--x: 1%; --y: 30px; --z: 0.9; --r: -6deg"><i class="src bot">bot</i><b>dependabot[bot]</b> Bump vite from 7.1.2 to 7.1.4</div>
+            <div class="ping" style="--x: 6%; --y: 170px; --z: 0.5; --r: 3deg"><i class="src ci">CI</i><b>acme/api</b> All checks passed on main</div>
+            <div class="ping" style="--x: 0%; --y: 320px; --z: 1.3; --r: -2deg"><i class="src slack">#</i><b>#general</b> Lunch poll is open</div>
+            <div class="ping" style="--x: 8%; --y: 470px; --z: 0.7; --r: 4deg"><i class="src gh">GH</i><b>acme/docs</b> renovate[bot] commented on #77</div>
+            <div class="ping" style="--x: 73%; --y: 10px; --z: 1.1; --r: 5deg"><i class="src gh">GH</i><b>acme/api</b> Release v2.8.0 published</div>
+            <div class="ping" style="--x: 77%; --y: 150px; --z: 0.6; --r: -4deg"><i class="src slack">#</i><b>#deploys</b> Build 2291 finished</div>
+            <div class="ping" style="--x: 71%; --y: 300px; --z: 1.4; --r: 2deg"><i class="src gh">GH</i><b>acme/web</b> Merged #412 into main</div>
+            <div class="ping" style="--x: 75%; --y: 450px; --z: 0.8; --r: -3deg"><i class="src bot">bot</i><b>github-actions</b> Nightly build succeeded</div>
+          </div>
+
+          <div class="counter" aria-hidden="true">
+            <span class="counter-num" data-counter>47</span>
+            <span class="counter-label" data-i18n="hero.counter">notifications today</span>
+            <span class="counter-arrow">→</span>
+            <span class="counter-num counter-keep">3</span>
+            <span class="counter-label" data-i18n="hero.counterKeep">need you</span>
+          </div>
+
+          <div class="app-tilt">
+            <div class="app" id="demo">
+              <div class="chrome">
+                <span class="lights" aria-hidden="true"><i></i><i></i><i></i></span>
+                <span class="chrome-tab"><img src="assets/logo.svg" alt="" width="13" height="13" /><span data-tab-title>(3) Zéro Ping</span></span>
+                <span class="chrome-url" aria-hidden="true">inbox.localhost:4747</span>
+                <span class="chrome-hint" data-i18n="demo.hint">Try it: click a folder, press j / k / e</span>
+              </div>
+              <div class="panes">
+                <aside class="side">
+                  <div class="side-brand"><img src="assets/logo.svg" alt="" width="22" height="22" /><b>Zéro Ping</b><em data-side-count>3</em></div>
+                  <p class="side-label">Inbox</p>
+                  <ul class="folders" data-folders></ul>
+                  <p class="side-label">Pages</p>
+                  <ul class="pages" aria-hidden="true">
+                    <li>Vue d’ensemble</li>
+                    <li>Mes issues</li>
+                    <li>Récap du jour</li>
+                    <li>Réglages</li>
+                  </ul>
+                </aside>
+                <div class="list" data-list></div>
+                <div class="detail" data-detail aria-live="polite"></div>
+              </div>
+            </div>
+          </div>
+          <p class="stage-note" data-i18n="demo.note">Demo data. The app’s interface is in French.</p>
+        </div>
+      </section>
+
+      <!-- The tools Zéro Ping talks to, as plain wordmarks. -->
+      <section class="works wrap" aria-labelledby="works-title">
+        <h2 id="works-title" class="works-title" data-i18n="works.title">Plugs into the tools you already use</h2>
+        <ul>
+          <li><svg aria-hidden="true" viewBox="0 0 16 16"><use href="#i-github" /></svg>GitHub</li>
+          <li><span class="mark">#</span>Slack</li>
+          <li><span class="mark">✳</span>Claude Code</li>
+          <li><span class="mark">◎</span>Codex</li>
+          <li><span class="mark">◆</span>Jev</li>
+          <li><span class="mark">▲</span>GitHub Actions</li>
+        </ul>
+      </section>
+
+      <!-- Scrollytelling: one board, four steps of the triage. -->
+      <section class="sort" id="sort" aria-labelledby="sort-title">
+        <div class="wrap">
+          <p class="eyebrow" data-i18n="sort.eyebrow">How it sorts</p>
+          <h2 id="sort-title" data-i18n="sort.title">From forty pings to the three that matter.</h2>
+        </div>
+        <div class="sort-grid wrap">
+          <div class="board-wrap">
+            <div class="board" data-board data-step="0" aria-hidden="true">
+              <div class="board-head">
+                <span class="board-dot"></span>
+                <span data-board-title>9 new notifications</span>
+              </div>
+              <div class="board-body">
+                <div class="card noise n1" data-reason="bot"><i class="src bot">bot</i><span><b>dependabot[bot]</b> Bump vite from 7.1.2 to 7.1.4</span></div>
+                <div class="card keep k1"><i class="src gh">GH</i><span><b>acme/api #233</b> Review requested: Add rate limiting</span><em class="score">93</em><span class="tags"><i class="tag slack">#</i><i class="tag ai">✦</i></span></div>
+                <div class="card noise n2" data-reason="CI"><i class="src ci">CI</i><span><b>acme/api</b> All checks passed on main</span></div>
+                <div class="card keep k2"><i class="src gh">GH</i><span><b>acme/web #409</b> otto replied after you</span><em class="score">74</em><span class="tags"><i class="tag slack">#</i></span></div>
+                <div class="card noise n3" data-reason="release"><i class="src gh">GH</i><span><b>acme/api</b> Release v2.8.0 published</span></div>
+                <div class="card keep k4"><i class="src ci">CI</i><span><b>acme/mobile #87</b> Checks failed on your PR</span><em class="score">58</em></div>
+                <div class="card noise n4" data-reason="merged"><i class="src gh">GH</i><span><b>acme/web #412</b> Merged into main</span></div>
+                <div class="card keep k3"><i class="src gh">GH</i><span><b>acme/web #415</b> Review requested: Fix flaky test</span><em class="score">66</em><span class="tags"><i class="tag ai">✦</i></span></div>
+                <div class="card noise n5" data-reason="bot"><i class="src bot">bot</i><span><b>renovate[bot]</b> commented on acme/docs #77</span></div>
+                <div class="pile"><span>Traités</span></div>
+              </div>
+            </div>
+          </div>
+          <ol class="steps">
+            <li data-step-trigger="0">
+              <span class="step-n">1</span>
+              <h3 data-i18n="sort.s1.t">Everything arrives</h3>
+              <p data-i18n="sort.s1.d">The server polls GitHub at the pace GitHub asks for, with <code>If-Modified-Since</code>: unchanged checks cost no quota. A review-requested search runs every five minutes on top.</p>
+            </li>
+            <li data-step-trigger="1">
+              <span class="step-n">2</span>
+              <h3 data-i18n="sort.s2.t">The noise is filed</h3>
+              <p data-i18n="sort.s2.d">Merged or closed PRs, bots, CI activity, releases and the authors you choose go to <b>Traités</b>. The rules never touch what waits on you.</p>
+            </li>
+            <li data-step-trigger="2">
+              <span class="step-n">3</span>
+              <h3 data-i18n="sort.s3.t">What’s left is scored</h3>
+              <p data-i18n="sort.s3.d">Review asked of you, last missing reviewer, waiting time, size, CI, urgent labels, and the urgency Jev estimates. Every point is explained.</p>
+            </li>
+            <li data-step-trigger="3">
+              <span class="step-n">4</span>
+              <h3 data-i18n="sort.s4.t">Context is attached</h3>
+              <p data-i18n="sort.s4.d">An agent finds the Slack threads that cite each PR, and an AI summary tells you where things stand and what is expected from you.</p>
+            </li>
+          </ol>
+        </div>
+      </section>
+
+      <!-- Jev: the KPI card of a PR or an issue, with the scale of the tile in focus. -->
+      <section class="jev" id="jev" aria-labelledby="jev-title">
+        <div class="jev-glow" aria-hidden="true" data-speed="0.1"></div>
+        <div class="wrap">
+          <p class="eyebrow" data-i18n="jev.eyebrow">Jev KPIs</p>
+          <h2 id="jev-title" data-i18n="jev.title">Know what a PR will cost you before you open it.</h2>
+          <p class="section-lede" data-i18n="jev.lede">Jev, the app’s decision model, reads the description, the comments, the CI, the files and the start of the diff, and answers the same questions on every pull request and every issue. Each answer comes with its scale and its confidence.</p>
+
+          <div class="jev-switch" role="tablist" aria-label="Item type" data-i18n-label="jev.kind">
+            <button type="button" role="tab" aria-selected="true" data-kind="pr" data-i18n="jev.pr">Pull request</button>
+            <button type="button" role="tab" aria-selected="false" data-kind="issue" data-i18n="jev.issue">Issue</button>
+          </div>
+
+          <div class="jev-grid">
+            <div class="kpi-card" data-kpi-card>
+              <div class="kpi-head">
+                <span class="kpi-gauge-icon" aria-hidden="true"></span>
+                <b data-i18n="kpi.head">Jev KPIs</b>
+                <span class="kpi-when" data-kpi-when></span>
+                <span class="kpi-refresh" aria-hidden="true">↻</span>
+              </div>
+              <p class="kpi-subject" data-kpi-subject></p>
+              <ul class="kpi-tiles" data-kpi-tiles></ul>
+            </div>
+            <aside class="kpi-scale" data-kpi-scale aria-live="polite"></aside>
+          </div>
+
+          <ul class="kpi-legend">
+            <li><i class="dot ok"></i><span data-i18n="jev.ok">nothing to flag</span></li>
+            <li><i class="dot watch"></i><span data-i18n="jev.watch">keep an eye on it</span></li>
+            <li><i class="dot bad"></i><span data-i18n="jev.bad">look at it</span></li>
+            <li><i class="unsure-tag" data-i18n="kpi.unsure">uncertain</i><span data-i18n="jev.unsure">Jev is less than 50% sure: not counted</span></li>
+          </ul>
+
+          <div class="rank">
+            <div class="rank-copy">
+              <h3 data-i18n="jev.rank.t">A ranking for what nobody assigned to you</h3>
+              <p data-i18n="jev.rank.d">Teammates’ PRs and sprint tickets have no inbox rule, so Jev’s urgency ranks them on the same 0 to 100 gauge: can wait, normal, important, blocking or urgent.</p>
+              <p class="rank-note" data-i18n="jev.rank.note">Jev runs with your TypeSafe key, or any model through <code>AI_DECISION_MODEL</code>. It is only called when an item’s content changes. Without it, deterministic rules rank the list.</p>
+            </div>
+            <ol class="rank-list" aria-label="Example ranking" data-i18n-label="jev.rank.label">
+              <li style="--level: 1"><span class="rg hot"><b>100</b></span><span><em>acme/api #240</em>Payment webhook drops events after deploy</span><i class="lvl hot" data-i18n="jev.l3">Blocking or urgent</i></li>
+              <li style="--level: 0.67"><span class="rg hot"><b>67</b></span><span><em>acme/web #398</em>Dark mode for settings</span><i class="lvl" data-i18n="jev.l2">Important</i></li>
+              <li style="--level: 0.33"><span class="rg"><b>33</b></span><span><em>acme/docs #74</em>API versioning guide</span><i class="lvl" data-i18n="jev.l1">Normal</i></li>
+              <li style="--level: 0.06"><span class="rg"><b>0</b></span><span><em>acme/mobile #91</em>Rename analytics events</span><i class="lvl" data-i18n="jev.l0">Can wait</i></li>
+            </ol>
+          </div>
+        </div>
+      </section>
+
+      <!-- A tour of the app, as screenshots with demo data. -->
+      <section class="tour" id="tour" aria-labelledby="tour-title">
+        <div class="wrap">
+          <p class="eyebrow" data-i18n="tour.eyebrow">A tour of the app</p>
+          <h2 id="tour-title" data-i18n="tour.title">Every screen built around one question: what needs you now?</h2>
+          <div class="tour-tabs" role="tablist" aria-label="Screens" data-i18n-label="tour.label">
+            <button type="button" role="tab" id="tab-inbox" aria-controls="shot-inbox" aria-selected="true" tabindex="0" data-shot="inbox" data-i18n="tour.inbox.tab">Inbox</button>
+            <button type="button" role="tab" id="tab-diff" aria-controls="shot-diff" aria-selected="false" tabindex="-1" data-shot="diff" data-i18n="tour.diff.tab">Files changed</button>
+            <button type="button" role="tab" id="tab-team" aria-controls="shot-team" aria-selected="false" tabindex="-1" data-shot="team" data-i18n="tour.team.tab">Team</button>
+            <button type="button" role="tab" id="tab-issues" aria-controls="shot-issues" aria-selected="false" tabindex="-1" data-shot="issues" data-i18n="tour.issues.tab">My issues</button>
+            <button type="button" role="tab" id="tab-overview" aria-controls="shot-overview" aria-selected="false" tabindex="-1" data-shot="overview" data-i18n="tour.overview.tab">Overview</button>
+          </div>
+          <div class="tour-stage" data-tour>
+            <figure class="shot" role="tabpanel" id="shot-inbox" aria-labelledby="tab-inbox">
+              <div class="shot-frame">
+                <div class="shot-bar" aria-hidden="true"><span class="lights"><i></i><i></i><i></i></span><span class="shot-url">inbox.localhost:4747/review</span></div>
+                <a class="shot-link" href="assets/screens/inbox.jpg"><img src="assets/screens/inbox.jpg" width="1440" height="900" loading="lazy" decoding="async" alt="Zéro Ping inbox with the To review folder and a pull request open: Jev KPIs, AI summary and Slack thread" data-i18n-alt="tour.inbox.alt" /></a>
+              </div>
+              <figcaption data-i18n="tour.inbox.cap">The inbox: priority gauge on every row, Jev KPIs, AI summary and the Slack thread next to the PR.</figcaption>
+            </figure>
+            <figure class="shot" role="tabpanel" id="shot-diff" aria-labelledby="tab-diff" hidden>
+              <div class="shot-frame">
+                <div class="shot-bar" aria-hidden="true"><span class="lights"><i></i><i></i><i></i></span><span class="shot-url">inbox.localhost:4747/review</span></div>
+                <a class="shot-link" href="assets/screens/diff.jpg"><img src="assets/screens/diff.jpg" width="1440" height="900" loading="lazy" decoding="async" alt="Files changed tab with a file tree, Viewed boxes and the diff since the last review" data-i18n-alt="tour.diff.alt" /></a>
+              </div>
+              <figcaption data-i18n="tour.diff.cap">Files changed: only the commits since your review, a file tree and Viewed boxes synced with GitHub.</figcaption>
+            </figure>
+            <figure class="shot" role="tabpanel" id="shot-team" aria-labelledby="tab-team" hidden>
+              <div class="shot-frame">
+                <div class="shot-bar" aria-hidden="true"><span class="lights"><i></i><i></i><i></i></span><span class="shot-url">inbox.localhost:4747/team</span></div>
+                <a class="shot-link" href="assets/screens/team.jpg"><img src="assets/screens/team.jpg" width="1440" height="900" loading="lazy" decoding="async" alt="Team page listing blocked pull requests with the reason, the next step and who has the ball" data-i18n-alt="tour.team.alt" /></a>
+              </div>
+              <figcaption data-i18n="tour.team.cap">Team: every blocked PR, what’s stuck, the next step and who has the ball.</figcaption>
+            </figure>
+            <figure class="shot" role="tabpanel" id="shot-issues" aria-labelledby="tab-issues" hidden>
+              <div class="shot-frame">
+                <div class="shot-bar" aria-hidden="true"><span class="lights"><i></i><i></i><i></i></span><span class="shot-url">inbox.localhost:4747/issues</span></div>
+                <a class="shot-link" href="assets/screens/issues.jpg"><img src="assets/screens/issues.jpg" width="1440" height="900" loading="lazy" decoding="async" alt="My issues page with the sprint progress, board columns and the Jev KPIs of an issue" data-i18n-alt="tour.issues.alt" /></a>
+              </div>
+              <figcaption data-i18n="tour.issues.cap">My issues: the sprint board of your GitHub project, ranked by Jev urgency, with the issue’s KPIs.</figcaption>
+            </figure>
+            <figure class="shot" role="tabpanel" id="shot-overview" aria-labelledby="tab-overview" hidden>
+              <div class="shot-frame">
+                <div class="shot-bar" aria-hidden="true"><span class="lights"><i></i><i></i><i></i></span><span class="shot-url">inbox.localhost:4747/dashboard</span></div>
+                <a class="shot-link" href="assets/screens/overview.jpg"><img src="assets/screens/overview.jpg" width="1440" height="900" loading="lazy" decoding="async" alt="Overview page with the work queue estimate, next actions, team weather and trends" data-i18n-alt="tour.overview.alt" /></a>
+              </div>
+              <figcaption data-i18n="tour.overview.cap">Overview: your work queue in minutes, next actions, the team’s weather and your trends.</figcaption>
+            </figure>
+          </div>
+          <p class="tour-note" data-i18n="tour.note">Demo data. Labels shown in English; the app itself is in French for now.</p>
+        </div>
+      </section>
+
+      <!-- Bento: each tile shows the feature instead of describing it. -->
+      <section class="features wrap" id="features" aria-labelledby="features-title">
+        <p class="eyebrow" data-i18n="feat.eyebrow">Features</p>
+        <h2 id="features-title" data-i18n="feat.title">Everything a lead dev needs to clear the queue.</h2>
+
+        <div class="bento">
+          <article class="tile t-summary">
+            <div class="tile-copy">
+              <h3 data-i18n="feat.summary.t">AI summaries, at the length you want</h3>
+              <p data-i18n="feat.summary.d">From the GitHub conversation and the Slack threads found. Saved, and flagged when newer activity makes them stale.</p>
+            </div>
+            <div class="viz summary-viz">
+              <div class="seg" role="tablist" aria-label="Summary length" data-i18n-label="feat.summary.len">
+                <button type="button" role="tab" aria-selected="true" data-len="court">Court</button>
+                <button type="button" role="tab" aria-selected="false" data-len="standard">Standard</button>
+                <button type="button" role="tab" aria-selected="false" data-len="detaille">Détaillé</button>
+              </div>
+              <div class="summary-card" role="tabpanel">
+                <p class="summary-head"><span class="spark">✦</span> Résumé IA <span class="stale">Pas à jour</span></p>
+                <div class="summary-text" data-summary></div>
+              </div>
+            </div>
+          </article>
+
+          <article class="tile t-score">
+            <div class="tile-copy">
+              <h3 data-i18n="feat.score.t">A score you can open</h3>
+              <p data-i18n="feat.score.d">Hover any item in the app to see why it ranks where it does.</p>
+            </div>
+            <div class="viz score-viz" aria-hidden="true">
+              <div class="score-total"><span>93</span><em>/ 100</em></div>
+              <ul>
+                <li style="--w: 30"><span>Review demandée à toi</span><b>+30</b></li>
+                <li style="--w: 20"><span>IA : importante</span><b>+20</b></li>
+                <li style="--w: 20"><span>Label urgent</span><b>+20</b></li>
+                <li style="--w: 15"><span>Il ne manque que ta review</span><b>+15</b></li>
+                <li style="--w: 8"><span>En attente depuis 2 j</span><b>+8</b></li>
+              </ul>
+            </div>
+          </article>
+
+          <article class="tile t-slack">
+            <div class="tile-copy">
+              <h3 data-i18n="feat.slack.t">Slack, next to GitHub</h3>
+              <p data-i18n="feat.slack.d">Threads that cite the PR, found with your own Slack access. Reply in the thread from the app.</p>
+            </div>
+            <div class="viz chat-viz" aria-hidden="true">
+              <div class="bubble gh-b"><i class="src gh">GH</i><p><b>nadia</b> Internal keys are excluded, see <code>limits.ts</code>.</p></div>
+              <div class="bubble sl-b"><i class="src slack">#</i><p><b>#api-team · priya</b> Same limit for internal keys?</p></div>
+              <div class="bubble sl-b me"><i class="src slack">#</i><p><b>you</b> Answered in the PR, good to go.</p><span class="sent">Répondre dans l’app ✓</span></div>
+            </div>
+          </article>
+
+          <article class="tile t-counter">
+            <div class="tile-copy">
+              <h3 data-i18n="feat.counter.t">A counter that wants to be zero</h3>
+              <p data-i18n="feat.counter.d">On the sidebar logo, in the tab title and on the favicon. At zero, it all disappears.</p>
+            </div>
+            <div class="viz counter-viz" aria-hidden="true">
+              <div class="fake-tab"><span class="fav"><img src="assets/logo.svg" alt="" width="20" height="20" /><em data-count-badge>3</em></span><span data-count-title>(3) Zéro Ping</span></div>
+            </div>
+          </article>
+
+          <article class="tile t-recap">
+            <div class="tile-copy">
+              <h3 data-i18n="feat.recap.t">A daily recap at 9:05</h3>
+              <p data-i18n="feat.recap.d">Each working day at the time you choose, and <code>/standup:team</code> drafts the standup in Slack.</p>
+            </div>
+            <div class="viz recap-viz" aria-hidden="true">
+              <div class="toast">
+                <img src="assets/logo.svg" alt="" width="30" height="30" />
+                <div>
+                  <p class="toast-top"><b>Zéro Ping</b><span>09:05</span></p>
+                  <p><b>Récap du jour</b></p>
+                  <p>2 reviews, 1 réponse attendue, 1 PR en CI rouge.</p>
+                </div>
+              </div>
+              <div class="toast toast-2">
+                <span class="src slack">#</span>
+                <p>Brouillon de standup prêt dans Slack</p>
+              </div>
+            </div>
+          </article>
+
+          <article class="tile t-keys">
+            <div class="tile-copy">
+              <h3 data-i18n="feat.keys.t">Built for the keyboard</h3>
+              <p data-i18n="feat.keys.d">Move, select, reply, mark as done, switch to the diff. Try the keys on this page.</p>
+            </div>
+            <div class="viz keys-viz">
+              <ul class="keycaps" aria-label="Shortcuts" data-i18n-label="feat.keys.label">
+                <li><kbd data-key="j">j</kbd><span data-i18n="key.j">next</span></li>
+                <li><kbd data-key="k">k</kbd><span data-i18n="key.k">previous</span></li>
+                <li><kbd data-key="e">e</kbd><span data-i18n="key.e">done</span></li>
+                <li><kbd data-key="x">x</kbd><span data-i18n="key.x">select</span></li>
+                <li><kbd data-key="r">r</kbd><span data-i18n="key.r">reply</span></li>
+                <li><kbd data-key="o">o</kbd><span data-i18n="key.o">open</span></li>
+                <li><kbd data-key="d">d</kbd><span data-i18n="key.d">diff</span></li>
+                <li><kbd class="wide" data-key="Enter">⌘ ↵</kbd><span data-i18n="key.send">send</span></li>
+              </ul>
+            </div>
+          </article>
+
+          <article class="tile t-ci">
+            <div class="tile-copy">
+              <h3 data-i18n="feat.ci.t">Your PRs, unblocked</h3>
+              <p data-i18n="feat.ci.d">Read the failing jobs with their log, re-run the failed GitHub Actions jobs, merge with the method you pick.</p>
+            </div>
+            <div class="viz ci-viz" aria-hidden="true">
+              <div class="job"><span class="x">✕</span><b>test (ios)</b><em>2 échecs · 3 min 12 s</em></div>
+              <pre class="log"><span class="dim">› </span>AvatarCache › evicts oldest entry
+<span class="red">  Expected: 20  Received: 21</span>
+<span class="dim">› </span>AvatarCache › survives restart
+<span class="red">  Timeout after 5000 ms</span></pre>
+              <div class="ci-actions"><span class="ghost-btn">↻ Relancer les jobs ratés</span><span class="merge-btn">Squash and merge ▾</span></div>
+            </div>
+          </article>
+
+          <article class="tile t-team">
+            <div class="tile-copy">
+              <h3 data-i18n="feat.team.t">Nobody’s PR left behind</h3>
+              <p data-i18n="feat.team.d">The team view lists PRs with no reviewer, changes requested, red CI, conflicts or open too long. Take one in a click.</p>
+            </div>
+            <div class="viz team-viz" aria-hidden="true">
+              <div class="trow"><span class="av">p</span><span><b>acme/api #231</b> Retry webhooks with backoff</span><i class="flag">Sans reviewer · 3 j</i></div>
+              <div class="trow"><span class="av av2">k</span><span><b>acme/web #398</b> Dark mode for settings</span><i class="flag warn">Conflits</i></div>
+              <div class="take">Prendre la review</div>
+            </div>
+          </article>
+        </div>
+
+        <ul class="also">
+          <li data-i18n="also.issues"><b>Mes issues</b> your sprint board, with status, priority and Jev urgency</li>
+          <li data-i18n="also.overview"><b>Vue d’ensemble</b> review delay, Zéro Ping streak, in and out per day</li>
+          <li data-i18n="also.diff"><b>Diff</b> file tree and Viewed boxes synced with GitHub, or only the commits since your review</li>
+          <li data-i18n="also.review"><b>AI review</b> <code>@codex review</code>, <code>@claude review</code>, <code>/gemini review</code> in one click</li>
+          <li data-i18n="also.quiet"><b>Do not disturb</b> quiet hours for browser notifications</li>
+          <li data-i18n="also.batch"><b>Batches</b> mark as done or snooze a whole selection, synced with GitHub</li>
+        </ul>
+      </section>
+
+      <!-- Where the data goes, drawn as a small map. -->
+      <section class="local" id="local" aria-labelledby="local-title">
+        <div class="wrap">
+          <p class="eyebrow" data-i18n="local.eyebrow">Local and private</p>
+          <h2 id="local-title" data-i18n="local.title">Nothing to host. Nothing to sign up for.</h2>
+          <p class="section-lede" data-i18n="local.lede">Zéro Ping is a Node server on your laptop with an embedded database. It only talks to services you already use, with your own credentials.</p>
+
+          <div class="map">
+            <div class="node n-github">
+              <p class="node-t">GitHub API</p>
+              <p data-i18n="local.github">With <code>gh auth token</code>. Polls with <code>If-Modified-Since</code>, so a 304 costs no quota.</p>
+            </div>
+            <div class="node n-jev">
+              <p class="node-t" data-i18n="local.jev.t">Jev (optional)</p>
+              <p data-i18n="local.jev">With your TypeSafe key, only when an item’s content changes. Without it, deterministic rules.</p>
+            </div>
+            <div class="node n-machine">
+              <p class="machine-label" data-i18n="local.machine">Your machine</p>
+              <div class="machine-app">
+                <img src="assets/logo.svg" alt="" width="40" height="40" />
+                <div>
+                  <p class="node-t">Zéro Ping</p>
+                  <p><code>localhost:4747</code></p>
+                </div>
+              </div>
+              <div class="machine-db">
+                <span class="db-icon" aria-hidden="true"></span>
+                <p>PGlite · <code>.data/</code></p>
+              </div>
+            </div>
+            <div class="node n-agent">
+              <p class="node-t">Claude Code · Codex</p>
+              <p data-i18n="local.agent">Your CLI and your account, run non-interactively for summaries, questions and search.</p>
+            </div>
+            <div class="node n-slack">
+              <p class="node-t">Slack</p>
+              <p data-i18n="local.slack">Through your agent’s connector. Search is read-only; it posts only the replies you send.</p>
+            </div>
+            <svg class="wires" viewBox="0 0 1000 420" preserveAspectRatio="none" aria-hidden="true">
+              <path d="M300 105 C 400 105, 400 210, 420 210" />
+              <path d="M300 315 C 400 315, 400 210, 420 210" />
+              <path d="M700 105 C 600 105, 600 210, 580 210" />
+              <path d="M700 315 C 600 315, 600 210, 580 210" />
+            </svg>
+          </div>
+        </div>
+      </section>
+
+      <!-- Quick start: a terminal that types itself once visible. -->
+      <section class="start wrap" id="start" aria-labelledby="start-title">
+        <div class="start-copy">
+          <p class="eyebrow" data-i18n="start.eyebrow">Quick start</p>
+          <h2 id="start-title" data-i18n="start.title">Running in four commands.</h2>
+          <ul class="needs">
+            <li data-i18n="start.node">Node.js 22.12+ and pnpm</li>
+            <li data-i18n="start.gh">GitHub CLI signed in with <code>gh auth login</code>, or a <code>GITHUB_TOKEN</code></li>
+            <li data-i18n="start.agent">For AI and Slack: Claude Code with the Slack connector, or Codex with a Slack MCP server</li>
+            <li class="opt" data-i18n="start.jev">Optional: a TypeSafe API key for Jev scoring</li>
+            <li class="opt" data-i18n="start.mac">Optional: macOS, for the Dock app with a ping badge</li>
+          </ul>
+          <a class="readme" href="https://github.com/Alexandredc/github-management#readme" data-i18n="start.readme">Full setup in the README (French) →</a>
+        </div>
+        <div class="term">
+          <div class="term-bar">
+            <span class="lights" aria-hidden="true"><i></i><i></i><i></i></span>
+            <span>zsh · ~/code</span>
+            <button type="button" class="term-copy" data-copy-all data-i18n="copyAll">Copy all</button>
+          </div>
+          <pre class="term-body" data-term><code><span class="line"><span class="p">$</span> <span class="c" data-cmd>git clone https://github.com/Alexandredc/github-management.git</span></span>
+<span class="line"><span class="p">$</span> <span class="c" data-cmd>cd github-management &amp;&amp; pnpm install</span></span>
+<span class="line"><span class="p">$</span> <span class="c" data-cmd>cp .env.example .env</span>   <span class="cm" data-i18n="term.env"># add TYPESAFE_AI_API_KEY if you have one</span></span>
+<span class="line"><span class="p">$</span> <span class="c" data-cmd>pnpm dev</span></span>
+<span class="line out">  <span class="ok">➜</span>  Local:   <span class="url">http://localhost:3000/</span></span>
+<span class="line out cm" data-i18n="term.sync">  first sync: last 30 days of notifications</span></code></pre>
+        </div>
+      </section>
+
+      <!-- Closing: the bell, asleep. -->
+      <section class="oss" aria-labelledby="oss-title">
+        <div class="oss-glow" aria-hidden="true" data-speed="0.12"></div>
+        <div class="bell" aria-hidden="true" data-speed="-0.06">
+          <svg viewBox="0 0 32 32" width="200" height="200">
+            <path d="M16 6.5 A1.6 1.6 0 0 1 17.6 8.1 V8.6 A7 7 0 0 1 23 15.4 V19.5 L25 22.5 H7 L9 19.5 V15.4 A7 7 0 0 1 14.4 8.6 V8.1 A1.6 1.6 0 0 1 16 6.5 Z" fill="#fff" />
+            <path d="M13.5 24.5 A2.6 2.6 0 0 0 18.5 24.5" fill="#fff" />
+            <rect x="9.3" y="12.6" width="13.4" height="4.4" rx="2.2" fill="#F97316" />
+            <path d="M11.4 14.6 Q12.9 15.8 14.4 14.6 M17.6 14.6 Q19.1 15.8 20.6 14.6" fill="none" stroke="#fff" stroke-width="1.1" stroke-linecap="round" />
+            <circle cx="16" cy="19.6" r="1" fill="#1E1B4B" />
+          </svg>
+          <span class="z z1">z</span><span class="z z2">z</span><span class="z z3">z</span>
+        </div>
+        <div class="wrap oss-copy">
+          <h2 id="oss-title" data-i18n="oss.title">Zero pings left.</h2>
+          <p data-i18n="oss.body">Zéro Ping is open source. Read the code, run it on your machine, bend it to your team’s way of working, and send back what you improve.</p>
+          <div class="cta cta-center">
+            <a class="btn btn-dawn" href="https://github.com/Alexandredc/github-management">
+              <svg aria-hidden="true" viewBox="0 0 16 16" width="16" height="16"><use href="#i-github" /></svg>
+              <span data-i18n="oss.star">Star on GitHub</span>
+            </a>
+            <a class="btn btn-glass" href="https://github.com/Alexandredc/github-management/issues" data-i18n="oss.issue">Open an issue</a>
+          </div>
+          <ul class="stack" aria-label="Built with" data-i18n-label="oss.stack">
+            <li>TanStack Start</li>
+            <li>React 19</li>
+            <li>Tailwind CSS v4</li>
+            <li>shadcn/ui</li>
+            <li>PGlite</li>
+            <li>Drizzle ORM</li>
+            <li>AI SDK</li>
+            <li>Octokit</li>
+          </ul>
+        </div>
+      </section>
+    </main>
+
+    <footer class="foot">
+      <div class="wrap foot-inner">
+        <a class="brand" href="#top">
+          <img src="assets/logo.svg" alt="" width="24" height="24" />
+          <span>Zéro Ping</span>
+        </a>
+        <p data-i18n="foot.line">For lead devs who would rather review code than read notification emails.</p>
+        <ul>
+          <li><a href="https://github.com/Alexandredc/github-management" data-i18n="foot.source">Source</a></li>
+          <li><a href="https://github.com/Alexandredc/github-management#readme">README</a></li>
+          <li><a href="https://github.com/Alexandredc/github-management/issues">Issues</a></li>
+        </ul>
+      </div>
+    </footer>
+
+    <svg width="0" height="0" style="position: absolute" aria-hidden="true">
+      <symbol id="i-github" viewBox="0 0 16 16"><path fill="currentColor" d="M8 0a8 8 0 0 0-2.53 15.59c.4.07.55-.17.55-.38v-1.33c-2.23.48-2.7-1.07-2.7-1.07-.36-.92-.89-1.17-.89-1.17-.73-.5.06-.49.06-.49.8.06 1.23.83 1.23.83.72 1.23 1.88.87 2.34.67.07-.52.28-.87.5-1.07-1.78-.2-3.65-.89-3.65-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.6 7.6 0 0 1 4 0c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48v2.2c0 .21.15.46.55.38A8 8 0 0 0 8 0Z" /></symbol>
+    </svg>
+  </body>
+</html>
