@@ -28,7 +28,7 @@ const globalForGithub = globalThis as unknown as {
 export function getOctokit(): Promise<Octokit> {
   if (isDemo()) return Promise.reject(new DemoOfflineError())
   globalForGithub.__githubInboxOctokit ??= resolveToken().then(
-    (auth) => new Octokit({ auth, userAgent: "github-management" })
+    (auth) => new Octokit({ auth, userAgent: "zero-ping" })
   )
   return globalForGithub.__githubInboxOctokit
 }

@@ -83,11 +83,11 @@ describe("preferences", () => {
 
   it("lowercases the followed teams, and null follows them all", async () => {
     await updatePreferences(db, {
-      reviewTeams: ["acme/Developers", "acme/developers", "acme/web"],
+      reviewTeams: ["Acme/Developers", "acme/developers", "acme/web"],
     })
     expect((await getPreferences(db)).reviewTeams).toEqual([
-      "acme/web",
       "acme/developers",
+      "acme/web",
     ])
     await updatePreferences(db, { reviewTeams: null })
     expect((await getPreferences(db)).reviewTeams).toBeNull()

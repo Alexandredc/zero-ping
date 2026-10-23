@@ -1,6 +1,7 @@
 import { DEFAULT_LANGUAGE } from "@/lib/i18n/core"
 import { messagesFor } from "@/lib/i18n/messages"
 import type { Messages } from "@/lib/i18n/messages"
+import { localDate } from "./schedule"
 
 export type StandupState = {
   status: "idle" | "running" | "done" | "error"
@@ -27,6 +28,11 @@ export type StandupState = {
 export type StandupKind = "team" | "me"
 export const STANDUP_KINDS: StandupKind[] = ["team", "me"]
 
+/** The local day a Slack message was posted on, from its `ts` (seconds since the epoch). */
+export function slackDay(ts: string): string {
+  return localDate(new Date(Number(ts) * 1000))
+}
+
 /**
  * Why the standup cannot be published, or null when it can. Free of server
  * imports so the recap page can word it in the viewer's language.
@@ -34,12 +40,15 @@ export const STANDUP_KINDS: StandupKind[] = ["team", "me"]
 export function publishBlocker(
   state: StandupState,
   kind: StandupKind,
-  t: Messages = messagesFor(DEFAULT_LANGUAGE)
+  t: Messages = messagesFor(DEFAULT_LANGUAGE),
+  today: string = localDate(new Date())
 ): string | null {
   const { blockers, kinds } = t.recap.standup
   if (!state.slackMessage)
     return state.message ? blockers.outdated : blockers.nothing
   if (!state.channelId || !state.threadTs) return blockers.noThread
+  // The agent picks the thread: a reminder from another day is never today's.
+  if (slackDay(state.threadTs) !== today) return blockers.oldThread
   if (state.postedAt) return blockers.alreadyPublished
   if (state.alreadyPosted) return kinds[kind].alreadyPosted
   return null

@@ -108,7 +108,7 @@ Your assigned issues, your sprint and the whole team sprint from a GitHub Projec
 ## Quick start
 
 ```sh
-git clone https://github.com/Alexandredc/github-management.git zero-ping
+git clone https://github.com/Alexandredc/zero-ping.git
 cd zero-ping
 pnpm install
 cp .env.example .env   # optional: TYPESAFE_AI_API_KEY for Jev

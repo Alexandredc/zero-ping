@@ -80,6 +80,8 @@ export const recap = defineMessages({
         nothing: "Aucun standup à publier.",
         noThread:
           "Pas de « Daily standup reminder » aujourd'hui : rien où publier.",
+        oldThread:
+          "Ce standup vise le rappel d'un autre jour : relance-le pour publier dans celui d'aujourd'hui.",
         alreadyPublished: "Ce standup est déjà publié.",
       },
     },
@@ -184,6 +186,8 @@ export const recap = defineMessages({
           "This standup predates the button: run it again to prepare its Slack version.",
         nothing: "No standup to post.",
         noThread: "No “Daily standup reminder” today: nowhere to post.",
+        oldThread:
+          "This standup targets another day's reminder: run it again to post in today's.",
         alreadyPublished: "This standup is already posted.",
       },
     },

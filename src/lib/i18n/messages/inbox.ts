@@ -16,7 +16,7 @@ export const inbox = defineMessages({
         allIssues: "Aucune issue ouverte dans les repos suivis.",
       },
       allPullsHint:
-        "Toutes les PR ouvertes des repos suivis, classées par l'urgence qu'estime Jev.",
+        "Toutes les PR ouvertes des repos suivis, sauf celles des bots (Renovate, CI…), classées par l'urgence qu'estime Jev.",
       allPulls: "Toutes les PR",
       allIssuesHint:
         "Toutes les issues ouvertes des repos suivis, les plus récemment mises à jour d'abord.",
@@ -286,7 +286,7 @@ export const inbox = defineMessages({
         allIssues: "No open issue in the tracked repos.",
       },
       allPullsHint:
-        "Every open PR of the tracked repos, ranked by the urgency Jev estimates.",
+        "Every open PR of the tracked repos, except bots' (Renovate, CI…), ranked by the urgency Jev estimates.",
       allPulls: "All PRs",
       allIssuesHint:
         "Every open issue of the tracked repos, the most recently updated first.",

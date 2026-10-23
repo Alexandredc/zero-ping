@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import {
   commandInstructions,
   parseStandup,
@@ -54,7 +54,8 @@ describe("publishBlocker", () => {
     message: "**Point équipe**",
     slackMessage: "<@U1> : livré",
     channelId: "C1",
-    threadTs: "1.2",
+    // 2026-10-12 at 09:00 local time.
+    threadTs: String(new Date(2026, 9, 12, 9).getTime() / 1000),
     alreadyPosted: false,
     postedAt: null,
     postedLink: null,
@@ -62,8 +63,21 @@ describe("publishBlocker", () => {
     error: null,
   }
 
+  beforeEach(() => {
+    vi.useFakeTimers({ now: new Date(2026, 9, 12, 10) })
+  })
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
   it("allows a fresh standup with a thread", () => {
     expect(publishBlocker(ready, "team")).toBeNull()
+  })
+
+  it("refuses another day's reminder thread", () => {
+    vi.setSystemTime(new Date(2026, 9, 13, 10))
+    expect(publishBlocker(ready, "team")).toMatch(/autre jour/)
+    expect(publishBlocker(ready, "team", en, "2026-10-12")).toBeNull()
   })
 
   it("refuses without a thread, twice, or when the thread has one", () => {
@@ -121,10 +135,11 @@ describe("standup settings", () => {
   })
 
   it("points the agent at the configured channel and reminder", () => {
-    const prompt = standupSystemPrompt("me", settings)
+    const prompt = standupSystemPrompt("me", settings, "2026-10-16")
     expect(prompt).toContain(
       'today\'s "Daily standup reminder" message in #eng-daily'
     )
+    expect(prompt).toContain("Today is 2026-10-16")
   })
 
   it("asks for a channel before any run", () => {

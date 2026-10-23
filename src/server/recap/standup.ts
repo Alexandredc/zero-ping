@@ -134,11 +134,13 @@ export function standupCommand(
 /** What the agent must do around the command: find the reminder's thread, draft nothing. */
 export function standupSystemPrompt(
   kind: StandupKind,
-  settings: StandupSettings
+  settings: StandupSettings,
+  today: string
 ): string {
   const reminder = `today's ${JSON.stringify(settings.standupReminder)} message in #${settings.standupChannel}`
   return [
     UNATTENDED,
+    `Today is ${today} (local time). Today's reminder is the one posted on that date: a reminder from an earlier day is not today's, even when it is the latest one with replies. When there is no reminder dated ${today}, report the thread as null.`,
     `Do not create any Slack draft or post anything. Instead, find ${reminder} (look the channel up with the channel search tool when you need its id), read its thread, and tell whether ${kind === "team" ? "a team standup" : "the user's own standup"} is already there. Zéro Ping shows the standup to the user and posts it in that thread when they click to publish.`,
     kind === "team"
       ? "Your final structured answer reports the standup message in both forms, the reminder thread and any note for the user."
@@ -326,7 +328,7 @@ export function startStandup(
             standupCommand(kind, preferences),
             t
           ),
-          appendSystemPrompt: standupSystemPrompt(kind, preferences),
+          appendSystemPrompt: standupSystemPrompt(kind, preferences, date),
           schema: standupJsonSchema(kind, language),
           allowedTools: ["Bash", "Read", "Write", ...SLACK_READ_TOOLS],
           sandbox: "workspace-write",
