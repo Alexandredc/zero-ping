@@ -240,7 +240,7 @@ export function analyze(
   // The viewer's own PRs stay together in « Mes PR », even when someone
   // waits for an answer there: the awaiting message is kept and still pings.
   let view: View = "other"
-  if (reviewRequest || changesAddressed) view = "review"
+  if (!isAuthor && (reviewRequest || changesAddressed)) view = "review"
   else if (
     isAuthor &&
     details.kind === "PullRequest" &&
