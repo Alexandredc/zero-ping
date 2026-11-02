@@ -230,6 +230,14 @@ describe("analyze", () => {
   it("files the viewer's own open PR under mine", () => {
     expect(analyze(pr({ author: "lead" }), viewer).view).toBe("mine")
   })
+
+  it("keeps the viewer's own PR under mine when it requests one of their teams", () => {
+    const own = pr({
+      author: "lead",
+      reviewRequests: [{ team: "acme/backend" }],
+    })
+    expect(analyze(own, viewer).view).toBe("mine")
+  })
 })
 
 describe("re-review", () => {
