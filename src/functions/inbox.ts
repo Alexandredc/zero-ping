@@ -60,6 +60,7 @@ import {
   ensureSyncLoop,
   getSyncStatus,
   syncNow,
+  activitySnapshot,
 } from "@/server/inbox/api"
 import { preferencesPatchSchema } from "@/server/preferences"
 import { getLanguage } from "@/server/i18n"
@@ -96,7 +97,14 @@ export const getInbox = createServerFn({ method: "GET" })
       countFolders(),
       countTeamProblems(),
     ])
-    return { items, counts, team, sync: getSyncStatus() }
+    return {
+      items,
+      counts,
+      team,
+      sync: getSyncStatus(),
+      /** What runs on which item, for the list's rows. */
+      activity: activitySnapshot(),
+    }
   })
 
 export const getBrowseCounts = createServerFn({ method: "GET" }).handler(

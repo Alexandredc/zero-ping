@@ -12,6 +12,7 @@ import {
   parseDiscussions,
   slackTools,
 } from "@/server/slack/discussions"
+import { beginActivity } from "@/server/activity"
 
 /** Results stay valid this long before a background refresh. */
 export const LOOKUP_TTL_MS = 6 * 60 * 60 * 1000
@@ -146,10 +147,15 @@ export async function requestLookup(
     .returning()
 
   queued.add(item.key)
+  // Queued behind other searches, the item already shows it waits for one.
+  const end = beginActivity(item.key, "slackSearch")
   const runner = options.runner ?? runAgent
   queue = queue
     .then(() => runLookup(db, item, runner))
-    .finally(() => queued.delete(item.key))
+    .finally(() => {
+      queued.delete(item.key)
+      end()
+    })
   return row
 }
 

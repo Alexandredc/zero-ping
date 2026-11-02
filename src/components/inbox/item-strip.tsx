@@ -19,6 +19,9 @@ import type { PriorityReason } from "@/server/inbox/priority"
 import { hasNewCommitsSinceReview } from "@/server/inbox/priority"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Checkbox } from "@/components/ui/checkbox"
+import { Spinner } from "@/components/ui/spinner"
+import { describeActivity } from "@/lib/activity"
+import type { ItemActivity } from "@/lib/activity"
 import { cn } from "@/lib/utils"
 import { avatarUrl, pullSize, timeAgo } from "@/lib/format"
 import { useI18n } from "@/hooks/use-i18n"
@@ -150,8 +153,26 @@ function SizeChip({ item }: { item: Item }) {
   )
 }
 
+/** Something runs on the item: an action of the user, or the server's own work. */
+function ActivityIndicator({ activity }: { activity: ItemActivity[] }) {
+  const { t } = useI18n()
+  const { label, hint } = describeActivity(activity, t)
+  return (
+    <Hint instant className="flex min-w-0" content={hint}>
+      <span
+        role="status"
+        className="inline-flex min-w-0 items-center gap-1 text-[0.65rem] leading-none text-signal"
+      >
+        <Spinner className="size-3 shrink-0" aria-hidden />
+        <span className="max-w-40 truncate">{label}</span>
+      </span>
+    </Hint>
+  )
+}
+
 export function ItemStrip({
   item,
+  activity = [],
   selected,
   checked,
   onCheck,
@@ -159,6 +180,8 @@ export function ItemStrip({
   gauge = "priority",
 }: {
   item: InboxItem
+  /** What runs on the item right now, shown next to its repository. */
+  activity?: ItemActivity[]
   selected: boolean
   checked: boolean
   onCheck: () => void
@@ -217,6 +240,7 @@ export function ItemStrip({
               )}
             </span>
             {item.kind === "PullRequest" && <CiIcon ciState={item.ciState} />}
+            {activity.length > 0 && <ActivityIndicator activity={activity} />}
             {item.unread && (
               <Hint instant className="flex" content={t.inbox.strip.unreadHint}>
                 <span

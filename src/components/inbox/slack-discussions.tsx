@@ -14,6 +14,7 @@ import {
   slackQuery,
   useRefreshSlack,
   type SlackSubjectInput,
+  usePendingSlackReplies,
   useSlackRead,
   useSlackReply,
 } from "@/hooks/use-inbox"
@@ -45,9 +46,11 @@ function ReplyBox({
   const m = t.pull.slack
   const [message, setMessage] = useState("")
   const reply = useSlackReply(itemKey)
+  // The agent takes up to a minute: the box closes and the reply waits in the thread.
   const send = () => {
-    if (!message.trim() || reply.isPending) return
-    reply.mutate({ permalink, message }, { onSuccess: onDone })
+    if (!message.trim()) return
+    reply.mutate({ permalink, message })
+    onDone()
   }
   return (
     <div className="flex flex-col gap-2 border-t border-slack/20 pt-2">
@@ -64,30 +67,14 @@ function ReplyBox({
         }}
         placeholder={m.replyPlaceholder}
         className="min-h-16 bg-background"
-        disabled={reply.isPending}
       />
       <div className="flex items-center gap-2 text-xs text-muted-foreground">
-        <span className="flex-1">
-          {reply.isPending ? m.sending(agent) : m.sentAs(agent)}
-        </span>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={onDone}
-          disabled={reply.isPending}
-        >
+        <span className="flex-1">{m.sentAs(agent)}</span>
+        <Button variant="ghost" size="sm" onClick={onDone}>
           {t.common.cancel}
         </Button>
-        <Button
-          size="sm"
-          onClick={send}
-          disabled={!message.trim() || reply.isPending}
-        >
-          {reply.isPending ? (
-            <Spinner data-icon="inline-start" />
-          ) : (
-            <SlackIcon data-icon="inline-start" />
-          )}
+        <Button size="sm" onClick={send} disabled={!message.trim()}>
+          <SlackIcon data-icon="inline-start" />
           {m.sendToSlack}
           <Kbd>{m.sendShortcut}</Kbd>
         </Button>
@@ -121,6 +108,7 @@ function Thread({
   const m = t.pull.slack
   const [replying, setReplying] = useState(false)
   const markRead = useSlackRead(itemKey)
+  const pending = usePendingSlackReplies(itemKey, discussion.permalink)
   const latest = latestPostedAt(discussion)
   const isRead = readThrough !== undefined && readThrough >= latest
   const hasNew = readThrough !== undefined && !isRead
@@ -194,6 +182,19 @@ function Thread({
                   <span>{timeAgo(message.postedAt, language)}</span>
                 </p>
                 <Markdown>{slackToMarkdown(message.text)}</Markdown>
+              </li>
+            ))}
+            {pending.map((reply, index) => (
+              <li
+                key={`pending-${index}`}
+                className="flex flex-col gap-0.5 opacity-60"
+                aria-busy
+              >
+                <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                  <Spinner className="size-3" />
+                  {m.sending(agent)}
+                </p>
+                <Markdown>{reply.message}</Markdown>
               </li>
             ))}
           </ol>

@@ -7,6 +7,7 @@ import type { Database } from "@/server/db/client"
 import { items, slackLookups } from "@/server/db/schema"
 import type { Item } from "@/server/db/schema"
 import { updatePreferences } from "@/server/preferences"
+import { activitySnapshot } from "@/server/activity"
 
 const thread = {
   channel: "#pull-requests",
@@ -68,6 +69,18 @@ describe("requestLookup", () => {
 
     await requestLookup(db, item, { runner })
     expect(runner).toHaveBeenCalledTimes(1)
+  })
+
+  it("shows the search on the item from queued to finished", async () => {
+    const item = await insertPull(db)
+    const runner = vi
+      .fn<AgentRunner>()
+      .mockResolvedValue({ searched: true, discussions: [] })
+
+    await requestLookup(db, item, { runner })
+    expect(activitySnapshot()[item.key]).toEqual(["slackSearch"])
+    await drainLookups()
+    expect(activitySnapshot()[item.key]).toBeUndefined()
   })
 
   it("records agent failures and retries when forced", async () => {

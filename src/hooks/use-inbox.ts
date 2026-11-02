@@ -1,7 +1,9 @@
 import {
   infiniteQueryOptions,
   queryOptions,
+  useIsMutating,
   useMutation,
+  useMutationState,
   useQueryClient,
 } from "@tanstack/react-query"
 import {
@@ -65,6 +67,9 @@ import type { Folder, SortOrder } from "@/server/inbox/actions"
 import type { Scope } from "@/components/inbox/folders"
 import type { StandupKind } from "@/server/recap/standup"
 import { toast } from "@/components/ui/toast"
+import { slackSendToasts } from "@/hooks/slack-send"
+import { activityMeta, mergeActivity, readActivityMeta } from "@/lib/activity"
+import type { ActivitySnapshot, ItemActivity } from "@/lib/activity"
 import { languageQuery, useI18n } from "@/hooks/use-i18n"
 import { messagesFor } from "@/lib/i18n/messages"
 
@@ -123,6 +128,7 @@ export function useRefreshSlack(key: string, subject?: SlackSubjectInput) {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: () => refreshSlack({ data: { key, subject } }),
+    meta: activityMeta("slackSearch", [key]),
     onSuccess: (data) => queryClient.setQueryData(["slack", key], data),
   })
 }
@@ -157,23 +163,63 @@ export function useSlackRead(key: string) {
   })
 }
 
+export type SlackReplyInput = { permalink: string; message: string }
+
+const slackReplyKey = (key: string) => ["slack-reply", key]
+
+/**
+ * Sends a reply in the background: the box closes at once, the reply waits in
+ * its thread (`usePendingSlackReplies`) and a toast reports the outcome.
+ */
 export function useSlackReply(key: string) {
   const queryClient = useQueryClient()
   const { t } = useI18n()
-  return useMutation({
-    mutationFn: (input: { permalink: string; message: string }) =>
-      postSlackReply({ data: { key, ...input } }),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ["slack", key] })
-      toast.add({ title: t.inbox.toasts.slackReplySent, type: "success" })
-    },
-    onError: (error) =>
-      toast.add({
-        title: t.inbox.toasts.slackReplyFailed,
-        description: error.message,
-        type: "error",
-      }),
+  const toasts = slackSendToasts(toast, {
+    sent: t.inbox.toasts.slackReplySent,
+    failed: t.inbox.toasts.slackReplyFailed,
+    openInSlack: t.inbox.toasts.openInSlack,
+    retry: t.common.retry,
+    unknownError: t.inbox.toasts.unknownError,
   })
+  const reply = useMutation({
+    mutationKey: slackReplyKey(key),
+    mutationFn: (input: SlackReplyInput) =>
+      postSlackReply({ data: { key, ...input } }),
+    meta: activityMeta("slackReply", [key]),
+    onSuccess: async ({ permalink }) => {
+      toasts.sent(permalink)
+      // The pending reply stays until the thread shows the sent one.
+      await queryClient.invalidateQueries({ queryKey: ["slack", key] })
+    },
+    onError: (error, input) => toasts.failed(error, () => reply.mutate(input)),
+  })
+  return reply
+}
+
+/** The replies of a thread still on their way to Slack, oldest first. */
+export function usePendingSlackReplies(key: string, permalink: string) {
+  return useMutationState({
+    filters: { mutationKey: slackReplyKey(key), status: "pending" },
+    select: (mutation) => mutation.state.variables as SlackReplyInput,
+  }).filter((input) => input.permalink === permalink)
+}
+
+/**
+ * What runs on each item: the server's background work, from the inbox query,
+ * and this tab's pending mutations on items.
+ */
+export function useItemActivity(
+  server: ActivitySnapshot | undefined
+): Map<string, ItemActivity[]> {
+  const client = useMutationState({
+    filters: { status: "pending" },
+    select: (mutation) =>
+      readActivityMeta(mutation.options.meta, mutation.state.variables),
+  })
+  return mergeActivity(
+    server,
+    client.filter((entry) => entry !== null)
+  )
 }
 
 export const reposQuery = () =>
@@ -202,9 +248,13 @@ export function useInboxActions() {
       type: "error",
     })
 
+  type DoneInput = { keys: string[]; done: boolean }
   const done = useMutation({
-    mutationFn: (input: { keys: string[]; done: boolean }) =>
-      setDone({ data: input }),
+    mutationFn: (input: DoneInput) => setDone({ data: input }),
+    meta: activityMeta(
+      (input: DoneInput) => (input.done ? "done" : "undone"),
+      (input: DoneInput) => input.keys
+    ),
     onSuccess: (_, input) => {
       void refresh()
       if (input.done) {
@@ -224,6 +274,7 @@ export function useInboxActions() {
   const ignoreTeam = useMutation({
     mutationFn: (input: { keys: string[]; ignore: boolean }) =>
       setTeamReviewIgnored({ data: input }),
+    meta: activityMeta("ignoreTeam", (input: { keys: string[] }) => input.keys),
     onSuccess: (_, input) => {
       void refresh()
       if (input.ignore)
@@ -245,6 +296,7 @@ export function useInboxActions() {
       setSnooze({
         data: { keys: input.keys, until: input.until?.toISOString() ?? null },
       }),
+    meta: activityMeta("snooze", (input: { keys: string[] }) => input.keys),
     onSuccess: (_, input) => {
       void refresh()
       if (input.until) {
@@ -266,6 +318,7 @@ export function useInboxActions() {
   const reply = useMutation({
     mutationFn: (input: Parameters<typeof postReply>[0]["data"]) =>
       postReply({ data: input }),
+    meta: activityMeta("reply", (input: { key: string }) => [input.key]),
     onSuccess: (_, input) => {
       void refresh()
       void queryClient.invalidateQueries({
@@ -279,6 +332,7 @@ export function useInboxActions() {
   const review = useMutation({
     mutationFn: (input: Parameters<typeof postReview>[0]["data"]) =>
       postReview({ data: input }),
+    meta: activityMeta("review", (input: { key: string }) => [input.key]),
     onSuccess: (_, input) => {
       void refresh()
       void queryClient.invalidateQueries({
@@ -354,6 +408,7 @@ export function useSummarize(key: string) {
   return useMutation({
     mutationFn: (length: "short" | "standard" | "detailed") =>
       summarizeItem({ data: { key, length } }),
+    meta: activityMeta("summary", [key]),
     onSuccess: (data) => queryClient.setQueryData(["summary", key], data),
     onError: (error) =>
       toast.add({
@@ -459,6 +514,7 @@ export function useMerge(key: string) {
       method: "SQUASH" | "MERGE" | "REBASE"
       deleteBranch: boolean
     }) => postMerge({ data: { key, ...input } }),
+    meta: activityMeta("merge", [key]),
     onSuccess: (result) => {
       void queryClient.invalidateQueries({ queryKey: ["inbox"] })
       void queryClient.invalidateQueries({ queryKey: ["merge-info", key] })
@@ -491,6 +547,7 @@ export function useRerunChecks(key: string) {
   const { t } = useI18n()
   return useMutation({
     mutationFn: () => postRerunChecks({ data: { key } }),
+    meta: activityMeta("rerunChecks", [key]),
     onSuccess: ({ runs }) => {
       setTimeout(
         () => void queryClient.invalidateQueries({ queryKey: ["checks", key] }),
@@ -523,6 +580,7 @@ export function useTakeReview() {
   const { t } = useI18n()
   return useMutation({
     mutationFn: (key: string) => postTakeReview({ data: { key } }),
+    meta: activityMeta("takeReview", (key: string) => [key]),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["inbox"] })
       toast.add({
@@ -553,6 +611,7 @@ export function useSetReviewers(key: string) {
   return useMutation({
     mutationFn: (reviewers: string[]) =>
       postReviewers({ data: { key, reviewers } }),
+    meta: activityMeta("reviewers", [key]),
     onSuccess: ({ add, remove }) => {
       void queryClient.invalidateQueries({ queryKey: ["team"] })
       void queryClient.invalidateQueries({ queryKey: ["inbox"] })
@@ -647,6 +706,7 @@ export function useSetProjectField(key: string) {
           optionId: input.optionId,
         },
       }),
+    meta: activityMeta("projectField", [key]),
     onMutate: async (input) => {
       await queryClient.cancelQueries({ queryKey })
       const previous = queryClient.getQueryData(queryKey)
@@ -760,24 +820,29 @@ export const reviewNoticeQuery = (
     staleTime: Infinity,
   })
 
-export function useSendReviewNotice() {
+/** Sends the review notice in the background: the dialog closes without waiting. */
+export function useSendReviewNotice(key: string) {
   const { t } = useI18n()
-  return useMutation({
+  const toasts = slackSendToasts(toast, {
+    // The dialog is gone by then: the toast is the only sign of the sending.
+    sending: t.inbox.toasts.slackPosting,
+    sent: t.inbox.toasts.slackPosted,
+    failed: t.inbox.toasts.slackPostFailed,
+    openInSlack: t.inbox.toasts.openInSlack,
+    retry: t.common.retry,
+    unknownError: t.inbox.toasts.unknownError,
+  })
+  const send = useMutation({
     mutationFn: (input: Parameters<typeof postReviewNotice>[0]["data"]) =>
       postReviewNotice({ data: input }),
-    onSuccess: ({ permalink }) =>
-      toast.add({
-        title: t.inbox.toasts.slackPosted,
-        description: permalink ?? undefined,
-        type: "success",
-      }),
-    onError: (error) =>
-      toast.add({
-        title: t.inbox.toasts.slackPostFailed,
-        description: error.message,
-        type: "error",
-      }),
+    meta: activityMeta("reviewNotice", [key]),
+    onMutate: () => ({ pending: toasts.started() }),
+    onSuccess: ({ permalink }, _, context) =>
+      toasts.sent(permalink, context.pending),
+    onError: (error, input, context) =>
+      toasts.failed(error, () => send.mutate(input), context?.pending),
   })
+  return send
 }
 
 export const insightsQuery = (key: string, subject?: SlackSubjectInput) =>
@@ -793,6 +858,7 @@ export function useRefreshInsights(key: string, subject?: SlackSubjectInput) {
   const { t } = useI18n()
   return useMutation({
     mutationFn: () => refreshInsights({ data: { key, subject } }),
+    meta: activityMeta("insights", [key]),
     onSuccess: (data) =>
       queryClient.setQueryData(insightsQuery(key).queryKey, data),
     onError: (error) =>
@@ -837,6 +903,7 @@ export function useAskAi(key: string) {
   const { t } = useI18n()
   return useMutation({
     mutationFn: (question: string) => postQuestion({ data: { key, question } }),
+    meta: activityMeta("question", [key]),
     onSuccess: (chat) =>
       queryClient.setQueryData(chatQuery(key).queryKey, chat),
     onError: (error) =>
@@ -911,20 +978,33 @@ export const dashboardQuery = () =>
     refetchOnWindowFocus: true,
   })
 
+const publishStandupKey = (kind: StandupKind) => ["standup-publish", kind]
+
+/** Posts the standup in the background: the dialog closes without waiting. */
 export function usePublishStandup(kind: StandupKind) {
   const queryClient = useQueryClient()
   const { t } = useI18n()
-  return useMutation({
-    mutationFn: () => postStandupToSlack({ data: { kind } }),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ["recap"] })
-      toast.add({ title: t.inbox.toasts.standupPublished, type: "success" })
-    },
-    onError: (error) =>
-      toast.add({
-        title: t.inbox.toasts.standupPublishFailed,
-        description: error.message,
-        type: "error",
-      }),
+  const toasts = slackSendToasts(toast, {
+    sent: t.inbox.toasts.standupPublished,
+    failed: t.inbox.toasts.standupPublishFailed,
+    openInSlack: t.inbox.toasts.openInSlack,
+    retry: t.common.retry,
+    unknownError: t.inbox.toasts.unknownError,
   })
+  const publish = useMutation({
+    mutationKey: publishStandupKey(kind),
+    mutationFn: () => postStandupToSlack({ data: { kind } }),
+    onSuccess: async ({ postedLink }) => {
+      toasts.sent(postedLink)
+      // The button stays busy until the card shows the standup as posted.
+      await queryClient.invalidateQueries({ queryKey: ["recap"] })
+    },
+    onError: (error) => toasts.failed(error, () => publish.mutate()),
+  })
+  return publish
+}
+
+/** Whether the standup is on its way to Slack, even from a page left and reopened. */
+export function useStandupPublishing(kind: StandupKind) {
+  return useIsMutating({ mutationKey: publishStandupKey(kind) }) > 0
 }

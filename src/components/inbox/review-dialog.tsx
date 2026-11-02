@@ -43,7 +43,8 @@ export type PendingReview = {
 /**
  * Confirms a review before it leaves, and offers in the same step the Slack
  * message that pings the author. The page owns it: an approved PR leaves its
- * folder and closes the panel, which must not cut the sending short.
+ * folder and closes the panel, which must not cut the sending short. Only the
+ * review holds the dialog: the Slack message leaves in the background.
  */
 export function ReviewDialog({
   review,
@@ -54,7 +55,7 @@ export function ReviewDialog({
 }) {
   const { t } = useI18n()
   const actions = useInboxActions()
-  const send = useSendReviewNotice()
+  const send = useSendReviewNotice(review.key)
   const { data: notice } = useQuery(reviewNoticeQuery(review.key, review.event))
   // An approval rarely needs a ping: the message is offered, not sent by default.
   const [notify, setNotify] = useState(review.event !== "APPROVE")
@@ -71,7 +72,7 @@ export function ReviewDialog({
     if (notice?.enabled) setMessage(notice.message)
   }, [notice])
 
-  const busy = actions.review.isPending || send.isPending
+  const busy = actions.review.isPending
   const willNotify = Boolean(ready && notify && message.trim())
 
   const confirm = async () => {
@@ -82,7 +83,7 @@ export function ReviewDialog({
     })
     review.onSent()
     if (ready && willNotify)
-      await send.mutateAsync({
+      send.mutate({
         message,
         threadPermalink: ready.threadPermalink,
         broadcast,
@@ -192,13 +193,11 @@ export function ReviewDialog({
             ) : (
               <MessageSquareWarningIcon data-icon="inline-start" />
             )}
-            {actions.review.isPending
+            {busy
               ? t.detail.review.sendingReview
-              : send.isPending
-                ? t.detail.review.sendingSlack
-                : willNotify
-                  ? t.detail.review.actionAndNotify(copy.action)
-                  : copy.action}
+              : willNotify
+                ? t.detail.review.actionAndNotify(copy.action)
+                : copy.action}
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -98,3 +98,6 @@ export const {
 } = actions
 
 export const { ensureSyncLoop, getSyncStatus, syncNow } = sync
+
+/** In memory, the demo's as well as the live server's. */
+export { activitySnapshot } from "@/server/activity"
