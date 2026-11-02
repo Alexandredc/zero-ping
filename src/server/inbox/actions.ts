@@ -163,6 +163,7 @@ import {
   parseReply,
   slackSendTools,
 } from "@/server/slack/reply"
+import { trackActivity } from "@/server/activity"
 
 export type Folder = View | "snoozed" | "done"
 
@@ -1249,7 +1250,9 @@ export async function getPullInsights(
   // Two panels opening the same PR share one Jev call.
   const run =
     insightRuns.get(key) ??
-    computeInsights(model, state, specs).then(async (insights) => {
+    trackActivity(key, "insights", () =>
+      computeInsights(model, state, specs)
+    ).then(async (insights) => {
       const row = { itemKey: key, hash, insights, createdAt: new Date() }
       await db
         .insert(pullInsights)
@@ -1376,7 +1379,7 @@ export async function generateSummary(key: string, length: SummaryLength) {
     await running
     return readSummary(key)
   }
-  const run = (async () => {
+  const run = trackActivity(key, "summary", async () => {
     const db = await getDb()
     const { item, viewer, input, config, language } = await summaryContext(key)
     const answer = await runAgent(
@@ -1404,7 +1407,7 @@ export async function generateSummary(key: string, length: SummaryLength) {
         target: [summaries.itemKey, summaries.length],
         set: row,
       })
-  })()
+  })
   summarising.set(runKey(key, length), run)
   try {
     await run

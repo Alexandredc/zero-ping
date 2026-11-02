@@ -23,6 +23,7 @@ import { assessReadiness } from "@/server/readiness/rules"
 import type { Readiness } from "@/server/readiness/rules"
 import { checkWait } from "@/server/readiness/wait"
 import type { Experimental_DecisionModel } from "ai"
+import { trackActivity } from "@/server/activity"
 
 const INITIAL_LOOKBACK_MS = 30 * 24 * 60 * 60 * 1000
 const MAX_NOTIFICATION_PAGES = 10
@@ -320,7 +321,9 @@ export async function enrichItems(
         const hash = triageHash(input)
         if (hash !== item.aiHash) {
           try {
-            const result = await triage(model, input)
+            const result = await trackActivity(item.key, "triage", () =>
+              triage(model, input)
+            )
             ai = {
               aiUrgency: result.urgency,
               aiConfidence: result.confidence,
@@ -335,7 +338,9 @@ export async function enrichItems(
 
       const readiness =
         isActive && analysis.view === "mine" && details.kind === "PullRequest"
-          ? await pullReadiness(model, item, details)
+          ? await trackActivity(item.key, "readiness", () =>
+              pullReadiness(model, item, details)
+            )
           : null
 
       const enriched = {

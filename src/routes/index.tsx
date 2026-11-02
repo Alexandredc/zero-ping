@@ -67,6 +67,7 @@ import {
   conversationQuery,
   allIssuesQuery,
   inboxQuery,
+  useItemActivity,
   projectFieldsQuery,
   useInboxActions,
 } from "@/hooks/use-inbox"
@@ -141,6 +142,7 @@ function InboxPage() {
     enabled: allIssues,
   })
   const listPending = allIssues ? issuePages.isPending : isPending
+  const activity = useItemActivity(data?.activity)
   const actions = useInboxActions()
   const composerRef = useRef<HTMLTextAreaElement>(null)
   const viewportRef = useRef<HTMLDivElement>(null)
@@ -504,6 +506,7 @@ function InboxPage() {
                     <div className="flex">
                       <ItemStrip
                         item={item}
+                        activity={activity.get(item.key)}
                         selected={item.key === selected?.key}
                         checked={checked.has(item.key)}
                         onCheck={() => toggleChecked(item.key)}
