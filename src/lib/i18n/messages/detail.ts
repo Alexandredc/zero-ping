@@ -153,7 +153,6 @@ export const detail = defineMessages({
       willBeMentioned: (who: string) =>
         `${who} sera mentionné : l'agent retrouve son compte Slack, sinon il écrit son nom en clair.`,
       sendingReview: "Envoi de la review…",
-      sendingSlack: "Message Slack… (20 à 40 s)",
       actionAndNotify: (action: string) => `${action} et prévenir`,
     },
     /** GitHub review states, as a note after the reviewer's name. */
@@ -413,7 +412,6 @@ export const detail = defineMessages({
       willBeMentioned: (who: string) =>
         `${who} will be mentioned: the agent finds their Slack account, otherwise it writes their name in plain text.`,
       sendingReview: "Sending the review…",
-      sendingSlack: "Slack message… (20–40 s)",
       actionAndNotify: (action: string) => `${action} and notify`,
     },
     /** GitHub review states, as a note after the reviewer's name. */

@@ -1,7 +1,9 @@
 import {
   infiniteQueryOptions,
   queryOptions,
+  useIsMutating,
   useMutation,
+  useMutationState,
   useQueryClient,
 } from "@tanstack/react-query"
 import {
@@ -65,6 +67,7 @@ import type { Folder, SortOrder } from "@/server/inbox/actions"
 import type { Scope } from "@/components/inbox/folders"
 import type { StandupKind } from "@/server/recap/standup"
 import { toast } from "@/components/ui/toast"
+import { slackSendToasts } from "@/hooks/slack-send"
 import { languageQuery, useI18n } from "@/hooks/use-i18n"
 import { messagesFor } from "@/lib/i18n/messages"
 
@@ -157,23 +160,44 @@ export function useSlackRead(key: string) {
   })
 }
 
+export type SlackReplyInput = { permalink: string; message: string }
+
+const slackReplyKey = (key: string) => ["slack-reply", key]
+
+/**
+ * Sends a reply in the background: the box closes at once, the reply waits in
+ * its thread (`usePendingSlackReplies`) and a toast reports the outcome.
+ */
 export function useSlackReply(key: string) {
   const queryClient = useQueryClient()
   const { t } = useI18n()
-  return useMutation({
-    mutationFn: (input: { permalink: string; message: string }) =>
-      postSlackReply({ data: { key, ...input } }),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ["slack", key] })
-      toast.add({ title: t.inbox.toasts.slackReplySent, type: "success" })
-    },
-    onError: (error) =>
-      toast.add({
-        title: t.inbox.toasts.slackReplyFailed,
-        description: error.message,
-        type: "error",
-      }),
+  const toasts = slackSendToasts(toast, {
+    sent: t.inbox.toasts.slackReplySent,
+    failed: t.inbox.toasts.slackReplyFailed,
+    openInSlack: t.inbox.toasts.openInSlack,
+    retry: t.common.retry,
+    unknownError: t.inbox.toasts.unknownError,
   })
+  const reply = useMutation({
+    mutationKey: slackReplyKey(key),
+    mutationFn: (input: SlackReplyInput) =>
+      postSlackReply({ data: { key, ...input } }),
+    onSuccess: async ({ permalink }) => {
+      toasts.sent(permalink)
+      // The pending reply stays until the thread shows the sent one.
+      await queryClient.invalidateQueries({ queryKey: ["slack", key] })
+    },
+    onError: (error, input) => toasts.failed(error, () => reply.mutate(input)),
+  })
+  return reply
+}
+
+/** The replies of a thread still on their way to Slack, oldest first. */
+export function usePendingSlackReplies(key: string, permalink: string) {
+  return useMutationState({
+    filters: { mutationKey: slackReplyKey(key), status: "pending" },
+    select: (mutation) => mutation.state.variables as SlackReplyInput,
+  }).filter((input) => input.permalink === permalink)
 }
 
 export const reposQuery = () =>
@@ -760,24 +784,28 @@ export const reviewNoticeQuery = (
     staleTime: Infinity,
   })
 
+/** Sends the review notice in the background: the dialog closes without waiting. */
 export function useSendReviewNotice() {
   const { t } = useI18n()
-  return useMutation({
+  const toasts = slackSendToasts(toast, {
+    // The dialog is gone by then: the toast is the only sign of the sending.
+    sending: t.inbox.toasts.slackPosting,
+    sent: t.inbox.toasts.slackPosted,
+    failed: t.inbox.toasts.slackPostFailed,
+    openInSlack: t.inbox.toasts.openInSlack,
+    retry: t.common.retry,
+    unknownError: t.inbox.toasts.unknownError,
+  })
+  const send = useMutation({
     mutationFn: (input: Parameters<typeof postReviewNotice>[0]["data"]) =>
       postReviewNotice({ data: input }),
-    onSuccess: ({ permalink }) =>
-      toast.add({
-        title: t.inbox.toasts.slackPosted,
-        description: permalink ?? undefined,
-        type: "success",
-      }),
-    onError: (error) =>
-      toast.add({
-        title: t.inbox.toasts.slackPostFailed,
-        description: error.message,
-        type: "error",
-      }),
+    onMutate: () => ({ pending: toasts.started() }),
+    onSuccess: ({ permalink }, _, context) =>
+      toasts.sent(permalink, context.pending),
+    onError: (error, input, context) =>
+      toasts.failed(error, () => send.mutate(input), context?.pending),
   })
+  return send
 }
 
 export const insightsQuery = (key: string, subject?: SlackSubjectInput) =>
@@ -911,20 +939,33 @@ export const dashboardQuery = () =>
     refetchOnWindowFocus: true,
   })
 
+const publishStandupKey = (kind: StandupKind) => ["standup-publish", kind]
+
+/** Posts the standup in the background: the dialog closes without waiting. */
 export function usePublishStandup(kind: StandupKind) {
   const queryClient = useQueryClient()
   const { t } = useI18n()
-  return useMutation({
-    mutationFn: () => postStandupToSlack({ data: { kind } }),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ["recap"] })
-      toast.add({ title: t.inbox.toasts.standupPublished, type: "success" })
-    },
-    onError: (error) =>
-      toast.add({
-        title: t.inbox.toasts.standupPublishFailed,
-        description: error.message,
-        type: "error",
-      }),
+  const toasts = slackSendToasts(toast, {
+    sent: t.inbox.toasts.standupPublished,
+    failed: t.inbox.toasts.standupPublishFailed,
+    openInSlack: t.inbox.toasts.openInSlack,
+    retry: t.common.retry,
+    unknownError: t.inbox.toasts.unknownError,
   })
+  const publish = useMutation({
+    mutationKey: publishStandupKey(kind),
+    mutationFn: () => postStandupToSlack({ data: { kind } }),
+    onSuccess: async ({ postedLink }) => {
+      toasts.sent(postedLink)
+      // The button stays busy until the card shows the standup as posted.
+      await queryClient.invalidateQueries({ queryKey: ["recap"] })
+    },
+    onError: (error) => toasts.failed(error, () => publish.mutate()),
+  })
+  return publish
+}
+
+/** Whether the standup is on its way to Slack, even from a page left and reopened. */
+export function useStandupPublishing(kind: StandupKind) {
+  return useIsMutating({ mutationKey: publishStandupKey(kind) }) > 0
 }

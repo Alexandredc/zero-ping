@@ -213,6 +213,7 @@ export const inbox = defineMessages({
       slackThreadFailed: "Fil non modifié",
       slackReplySent: "Réponse envoyée sur Slack",
       slackReplyFailed: "Réponse Slack non envoyée",
+      openInSlack: "Ouvrir dans Slack",
       markedDone: (count: number) =>
         count > 1
           ? `${count} éléments marqués comme traités`
@@ -262,6 +263,7 @@ export const inbox = defineMessages({
       movedTo: (status: string) => `Déplacée dans « ${status} »`,
       prioritySet: (priority: string) => `Priorité passée à ${priority}`,
       statusFailed: "Statut non modifié",
+      slackPosting: "Envoi du message Slack… (20 à 40 s)",
       slackPosted: "Message posté sur Slack",
       slackPostFailed: "Message Slack non envoyé",
       insightsFailed: "KPI Jev indisponibles",
@@ -479,6 +481,7 @@ export const inbox = defineMessages({
       slackThreadFailed: "Thread not updated",
       slackReplySent: "Reply sent on Slack",
       slackReplyFailed: "Slack reply not sent",
+      openInSlack: "Open in Slack",
       markedDone: (count: number) =>
         count > 1 ? `${count} items marked as done` : "Marked as done",
       markedDoneDescription:
@@ -523,6 +526,7 @@ export const inbox = defineMessages({
       movedTo: (status: string) => `Moved to “${status}”`,
       prioritySet: (priority: string) => `Priority set to ${priority}`,
       statusFailed: "Status not updated",
+      slackPosting: "Sending the Slack message… (20–40 s)",
       slackPosted: "Message posted on Slack",
       slackPostFailed: "Slack message not sent",
       insightsFailed: "Jev KPIs unavailable",

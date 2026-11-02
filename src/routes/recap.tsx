@@ -42,6 +42,7 @@ import { toast } from "@/components/ui/toast"
 import {
   recapQuery,
   usePublishStandup,
+  useStandupPublishing,
   useRunStandup,
   weekQuery,
 } from "@/hooks/use-inbox"
@@ -142,6 +143,8 @@ function PublishStandup({
   const { t } = useI18n()
   const [open, setOpen] = useState(false)
   const publish = usePublishStandup(kind)
+  // Survives the dialog and the page: the agent takes up to a minute and a half.
+  const publishing = useStandupPublishing(kind)
   const copy = t.recap.standup
   const { subject } = copy.kinds[kind]
 
@@ -151,10 +154,16 @@ function PublishStandup({
         {/* The span keeps the hint on a disabled button. */}
         <span className="inline-flex">
           <DialogTrigger
-            render={<Button size="sm" disabled={blocker !== null} />}
+            render={
+              <Button size="sm" disabled={blocker !== null || publishing} />
+            }
           >
-            <SlackIcon data-icon="inline-start" aria-hidden />
-            {copy.publishOnSlack}
+            {publishing ? (
+              <Spinner data-icon="inline-start" />
+            ) : (
+              <SlackIcon data-icon="inline-start" aria-hidden />
+            )}
+            {publishing ? copy.publishing : copy.publishOnSlack}
           </DialogTrigger>
         </span>
       </ActionHint>
@@ -171,16 +180,13 @@ function PublishStandup({
             {t.common.cancel}
           </DialogClose>
           <Button
-            onClick={() =>
-              publish.mutate(undefined, { onSuccess: () => setOpen(false) })
-            }
-            disabled={publish.isPending}
+            onClick={() => {
+              publish.mutate()
+              setOpen(false)
+            }}
+            disabled={publishing}
           >
-            {publish.isPending ? (
-              <Spinner data-icon="inline-start" />
-            ) : (
-              <SendIcon data-icon="inline-start" />
-            )}
+            <SendIcon data-icon="inline-start" />
             {copy.publish}
           </Button>
         </DialogFooter>

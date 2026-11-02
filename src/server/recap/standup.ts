@@ -158,8 +158,12 @@ export function standupSetupBlocker(
 
 const globalForStandup = globalThis as unknown as {
   __zeroPingStandups?: Partial<Record<StandupKind, Promise<void>>>
+  __zeroPingStandupPublishes?: Partial<
+    Record<StandupKind, Promise<StandupState>>
+  >
 }
 const runs = (globalForStandup.__zeroPingStandups ??= {})
+const publishes = (globalForStandup.__zeroPingStandupPublishes ??= {})
 
 export async function readStandup(
   db: Database,
@@ -246,8 +250,21 @@ async function standupPrompt(agent: AgentConfig, command: string, t: Messages) {
   }
 }
 
-/** Posts the standup in today's reminder thread, as the user. */
-export async function publishStandup(
+/**
+ * Posts the standup in today's reminder thread, as the user. A second request
+ * while the agent sends (another tab, a reloaded page) joins the first one
+ * instead of posting the standup twice.
+ */
+export function publishStandup(
+  db: Database,
+  kind: StandupKind
+): Promise<StandupState> {
+  return (publishes[kind] ??= postInReminderThread(db, kind).finally(() => {
+    delete publishes[kind]
+  }))
+}
+
+async function postInReminderThread(
   db: Database,
   kind: StandupKind
 ): Promise<StandupState> {

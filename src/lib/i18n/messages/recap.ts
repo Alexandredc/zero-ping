@@ -63,6 +63,7 @@ export const recap = defineMessages({
       publishHint: (subject: string, where: string) =>
         `Publie ${subject} en ton nom ${where}. Une confirmation est demandée avant l'envoi.`,
       publishOnSlack: "Publier sur Slack",
+      publishing: "Publication sur Slack…",
       publishTitle: (subject: string) => `Publier ${subject} ?`,
       publishDescription: (where: string) =>
         `Le message part en ton nom ${where}.`,
@@ -170,6 +171,7 @@ export const recap = defineMessages({
       publishHint: (subject: string, where: string) =>
         `Posts ${subject} as you ${where}. You confirm before it is sent.`,
       publishOnSlack: "Post on Slack",
+      publishing: "Posting on Slack…",
       publishTitle: (subject: string) => `Post ${subject}?`,
       publishDescription: (where: string) =>
         `The message goes out as you ${where}.`,
