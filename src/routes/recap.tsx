@@ -48,7 +48,7 @@ import {
 } from "@/hooks/use-inbox"
 import { clip, weekSummaryText } from "@/server/recap/week"
 import type { WeekEntry } from "@/server/recap/week"
-import { publishBlocker } from "@/server/recap/standup-state"
+import { publishBlocker, standupMarkdown } from "@/server/recap/standup-state"
 import type { StandupKind } from "@/server/recap/standup-state"
 import { useI18n } from "@/hooks/use-i18n"
 import { timeAgo } from "@/lib/format"
@@ -263,7 +263,7 @@ function StandupCard({ kind }: { kind: StandupKind }) {
           </Alert>
         )}
         {standup.message ? (
-          <Markdown>{standup.message}</Markdown>
+          <Markdown>{standupMarkdown(standup.message)}</Markdown>
         ) : (
           !running && (
             <p className="text-sm text-muted-foreground">{copy.none}</p>

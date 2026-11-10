@@ -8,6 +8,7 @@ import {
   standupSetupBlocker,
   standupSystemPrompt,
 } from "./standup"
+import { standupMarkdown } from "./standup-state"
 import type { StandupState } from "./standup"
 import { messagesFor } from "@/lib/i18n/messages"
 
@@ -159,5 +160,24 @@ describe("standup settings", () => {
     expect(standupJsonSchema("team", "fr").properties.note.description).toMatch(
       /^In French, one sentence/
     )
+  })
+})
+
+describe("standupMarkdown", () => {
+  it("turns Slack bullets at the start of a line into a Markdown list", () => {
+    expect(standupMarkdown("done:\n• Shipped #1\n  ◦ detail\nwip:\n• #2")).toBe(
+      "done:\n- Shipped #1\n  - detail\nwip:\n- #2"
+    )
+  })
+
+  it("splits bullets written on the same line as their heading", () => {
+    expect(standupMarkdown("done: • Shipped #1 • Reviewed #2")).toBe(
+      "done:\n- Shipped #1\n- Reviewed #2"
+    )
+  })
+
+  it("leaves a Markdown message untouched", () => {
+    const message = "**done:**\n- Shipped #1\n- Reviewed #2"
+    expect(standupMarkdown(message)).toBe(message)
   })
 })

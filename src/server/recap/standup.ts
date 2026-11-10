@@ -61,7 +61,7 @@ export const standupJsonSchema = (kind: StandupKind, language: Language) => ({
     message: {
       type: "string",
       description:
-        "The standup message exactly as shown in the chat (Markdown, first names in bold), or an empty string if none was written.",
+        "The standup message exactly as shown in the chat (Markdown, first names in bold, one `- ` list item per line, never Slack `•` bullets), or an empty string if none was written.",
     },
     slackMessage: nullableText(
       "The same message as it would go to Slack, with the <@SlackID> mentions, or null."

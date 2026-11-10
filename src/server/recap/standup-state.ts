@@ -53,3 +53,19 @@ export function publishBlocker(
   if (state.alreadyPosted) return kinds[kind].alreadyPosted
   return null
 }
+
+const BULLETS = "[•◦▪‣]"
+const LEADING_BULLET = new RegExp(`^(\\s*)${BULLETS}\\s+`)
+const INLINE_BULLET = new RegExp(`(\\S)[ \\t]+${BULLETS}[ \\t]+`, "g")
+
+/**
+ * The standup's chat message as Markdown. Agents sometimes keep Slack's `•`
+ * bullets, which Markdown reads as plain text and folds into one paragraph.
+ */
+export function standupMarkdown(message: string): string {
+  return message
+    .replace(INLINE_BULLET, "$1\n• ")
+    .split("\n")
+    .map((line) => line.replace(LEADING_BULLET, "$1- "))
+    .join("\n")
+}
