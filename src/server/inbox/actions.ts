@@ -1887,7 +1887,7 @@ export async function getMentionCandidates(repo: string) {
   return people
 }
 
-/** What the viewer did since Monday, in the repos of the tracked owners. */
+/** What the viewer did since Monday, in the tracked repos. */
 export async function getWeekSummary() {
   const db = await getDb()
   const [octokit, viewer, tracked] = await Promise.all([
@@ -1895,10 +1895,11 @@ export async function getWeekSummary() {
     getViewer(),
     db.select().from(repos).where(eq(repos.tracked, true)),
   ])
-  const owners = [
-    ...new Set(tracked.map((repo) => repo.fullName.split("/")[0])),
-  ]
-  return fetchWeekSummary(octokit, viewer.login, owners)
+  return fetchWeekSummary(
+    octokit,
+    viewer.login,
+    tracked.map((repo) => repo.fullName)
+  )
 }
 
 export async function getRecap() {

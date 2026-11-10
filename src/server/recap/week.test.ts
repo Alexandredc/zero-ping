@@ -1,5 +1,7 @@
+import type { Octokit } from "octokit"
 import { describe, expect, it } from "vitest"
 import {
+  fetchWeekSummary,
   groupSimilar,
   isReleaseTitle,
   shortLabel,
@@ -108,5 +110,55 @@ describe("groupSimilar", () => {
       ["Apply … to GCP?", 2],
       ["Fix the login page", 1],
     ])
+  })
+})
+
+describe("fetchWeekSummary", () => {
+  it("scopes the search to the owners and keeps only the tracked repos", async () => {
+    const node = (repo: string, number: number, title: string) => ({
+      number,
+      title,
+      url: `https://github.com/${repo}/pull/${number}`,
+      repository: { nameWithOwner: repo },
+      createdAt: "2026-10-13T09:00:00Z",
+      mergedAt: "2026-10-13T10:00:00Z",
+      closedAt: "2026-10-13T11:00:00Z",
+      reviews: { nodes: [{ submittedAt: "2026-10-13T12:00:00Z" }] },
+    })
+    const mixed = (title: string) => ({
+      nodes: [
+        node("Acme/App", 1, `${title} in a tracked repo`),
+        node("acme/side-project", 2, `${title} in an untracked repo`),
+      ],
+    })
+    let query = ""
+    const octokit = {
+      graphql: (sent: string) => {
+        query = sent
+        return Promise.resolve({
+          shipped: mixed("Ship"),
+          started: mixed("Start"),
+          reviewed: mixed("Review"),
+          closed: mixed("Close"),
+        })
+      },
+    } as unknown as Octokit
+    const summary = await fetchWeekSummary(
+      octokit,
+      "me",
+      ["acme/app", "acme/api"],
+      new Date("2026-10-14T15:00:00")
+    )
+    expect(query).toContain("user:acme")
+    expect(query).not.toContain("repo:")
+    expect(query.match(/user:acme/g)).toHaveLength(4)
+    for (const entries of [
+      summary.shipped,
+      summary.started,
+      summary.reviewed,
+      summary.closed,
+    ]) {
+      expect(entries.map((entry) => entry.repo)).toEqual(["Acme/App"])
+    }
   })
 })

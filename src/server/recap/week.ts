@@ -103,15 +103,29 @@ const FIELDS = `
   ... on Issue { number title url createdAt closedAt author { login } repository { nameWithOwner } }
 `
 
-/** Only the owners of the tracked repos: side projects stay out of the daily. */
+/**
+ * Only the tracked repos: side projects and repos turned off in the settings
+ * stay out of the daily. The search is scoped to their owners, since one
+ * `repo:` qualifier per repo would outgrow GitHub's query length limit, and
+ * the results are then narrowed to the tracked repos themselves.
+ */
 export async function fetchWeekSummary(
   octokit: Octokit,
   viewerLogin: string,
-  owners: string[],
+  trackedRepos: string[],
   now: Date = new Date()
 ): Promise<WeekSummary> {
   const since = weekStart(now)
   const day = localDay(since)
+  const tracked = new Set(trackedRepos.map((repo) => repo.toLowerCase()))
+  const owners = [...new Set(trackedRepos.map((repo) => repo.split("/")[0]))]
+  const entries = (
+    nodes: RawNode[],
+    at: (node: RawNode) => string | null | undefined
+  ) =>
+    toEntries(nodes, at).filter((entry) =>
+      tracked.has(entry.repo.toLowerCase())
+    )
   const scope = owners.map((owner) => `user:${owner}`).join(" ")
   const search = (query: string, extra = "") =>
     `search(type: ISSUE, first: 50, query: ${JSON.stringify(`${query} ${scope}`.trim())}) { nodes { ${FIELDS} ${extra} } }`
@@ -129,13 +143,13 @@ export async function fetchWeekSummary(
   const reviewedAt = (node: RawNode) => node.reviews?.nodes.at(-1)?.submittedAt
   return {
     since: since.toISOString(),
-    shipped: toEntries(data.shipped.nodes, (node) => node.mergedAt),
-    started: toEntries(data.started.nodes, (node) => node.createdAt),
+    shipped: entries(data.shipped.nodes, (node) => node.mergedAt),
+    started: entries(data.started.nodes, (node) => node.createdAt),
     // `updated:` also catches PRs touched after an older review.
-    reviewed: toEntries(data.reviewed.nodes, reviewedAt).filter(
+    reviewed: entries(data.reviewed.nodes, reviewedAt).filter(
       (entry) => entry.at >= since.toISOString()
     ),
-    closed: groupSimilar(toEntries(data.closed.nodes, (node) => node.closedAt)),
+    closed: groupSimilar(entries(data.closed.nodes, (node) => node.closedAt)),
   }
 }
 
